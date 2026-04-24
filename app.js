@@ -668,8 +668,12 @@ function updateNoticeBadge(){
 
 // ★ 공지 탭 진입 시 모두 읽음 처리 (clearNoticeBadge 개선)
 function clearNoticeBadge(){
-  const unread = notices.filter(n => n.is_unread);
-  if (!unread.length) return;
+  const unread=notices.filter(n=>n.is_unread);
+  if(!unread.length)return;
+  unread.forEach(n=>{n.is_unread=false;$(`nc-${n.id}`)?.classList.remove('unread');$(`nc-${n.id}`)?.querySelector('.new-badge')?.remove();});
+  updateNoticeBadge();
+  if(!OFFLINE&&cu?.id){unread.forEach(n=>{sb.from('notice_reads').upsert({notice_id:n.id,user_id:cu.id},{onConflict:'notice_id,user_id'}).then(({error})=>{if(error)console.warn('notice_reads error:',error.message);});});}
+}
 
   // 로컬 상태 즉시 업데이트
   unread.forEach(n => {
