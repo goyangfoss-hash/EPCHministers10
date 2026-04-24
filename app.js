@@ -646,17 +646,11 @@ function renderNotices(){
 }
 
 function toggleNotice(id){
-  const el=$(`nc-${id}`); if(!el) return;
+  const el=$(`nc-${id}`);if(!el)return;
   el.classList.toggle('open');
   const n=notices.find(x=>x.id===id);
-  if(n && n.is_unread){
-    n.is_unread=false;
-    el.querySelector('.new-badge')?.remove();
-    el.classList.remove('unread');
-    updateNoticeBadge();
-    // ★ DB에 읽음 기록 저장
-    if(!OFFLINE) sb.from('notice_reads').upsert({notice_id:id, user_id:cu.id});
-  }
+  if(n&&n.is_unread){n.is_unread=false;el.querySelector('.new-badge')?.remove();el.classList.remove('unread');updateNoticeBadge();if(!OFFLINE&&cu?.id)sb.from('notice_reads').upsert({notice_id:id,user_id:cu.id},{onConflict:'notice_id,user_id'});}
+}
 }
 
 function updateNoticeBadge(){
