@@ -220,43 +220,77 @@ function pushNotify(title,body){if(!('Notification'in window)||Notification.perm
 
 // ── 기기 알림 권한 배너 ───────────────────────────
 function checkNotifPermission(){
-  if(!('Notification'in window))return;
-  if(Notification.permission==='granted')return;
-  if(localStorage.getItem('ws_notif_dismissed')==='1')return;
-  // 로그인 후 2초 뒤 배너 표시 (너무 즉각적이면 거부율 높음)
+  // 이미 배너를 닫은 경우 → 건너뜀
+  if(localStorage.getItem('ws_notif_dismissed')==='1') return;
+  // 이미 허용된 경우 → 건너뜀
+  if('Notification' in window && Notification.permission==='granted') return;
+  // 그 외 모든 경우(미결정·거부·미지원) → 배너 표시
+  // denied 상태도 표시 (브라우저 설정 안내 목적)
   setTimeout(showNotifBanner, 2000);
 }
+
 function showNotifBanner(){
-  if($('notif-banner'))return;
-  const b=document.createElement('div');
-  b.id='notif-banner';
-  b.style.cssText='position:fixed;bottom:75px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:452px;background:#1c1c1a;color:#fff;border-radius:16px;padding:14px 16px;z-index:40;display:flex;align-items:center;gap:12px;box-shadow:0 6px 24px rgba(0,0,0,.35);animation:slideUp .3s ease';
-  b.innerHTML=`<style>@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}</style>
-    <span style="font-size:24px;flex-shrink:0">🔔</span>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;margin-bottom:3px">기기 알림 허용</div>
-      <div style="font-size:11px;color:#999;line-height:1.5">근무 전날 알림·공지·댓글을<br>기기에서 바로 받을 수 있습니다.</div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+  if($('notif-banner')) return;
+  const denied = 'Notification' in window && Notification.permission==='denied';
+  const unsupported = !('Notification' in window);
+
+  const b = document.createElement('div');
+  b.id = 'notif-banner';
+  b.style.cssText = 'position:fixed;bottom:75px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:452px;background:#1c1c1a;color:#fff;border-radius:16px;padding:14px 16px;z-index:40;display:flex;align-items:center;gap:12px;box-shadow:0 6px 24px rgba(0,0,0,.35);animation:slideUp .3s ease';
+
+  let actionHtml;
+  if (unsupported) {
+    // Safari 등 미지원 브라우저
+    actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+      <div style="font-size:10px;color:#aaa;text-align:center;line-height:1.4">홈 화면에 추가 후<br>앱으로 실행하면<br>알림을 받을 수 있습니다</div>
+      <button onclick="dismissNotifBanner()" style="padding:6px 14px;background:transparent;color:#777;border:1px solid #444;border-radius:9px;font-size:11px;cursor:pointer">확인</button>
+    </div>`;
+  } else if (denied) {
+    // 이미 거부된 경우 → 브라우저 설정 안내
+    actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+      <div style="font-size:10px;color:#aaa;text-align:center;line-height:1.4">브라우저 설정에서<br>알림을 허용해주세요</div>
+      <button onclick="dismissNotifBanner()" style="padding:6px 14px;background:transparent;color:#777;border:1px solid #444;border-radius:9px;font-size:11px;cursor:pointer">닫기</button>
+    </div>`;
+  } else {
+    // 미결정 → 허용 요청
+    actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
       <button onclick="requestNotifPermission()" style="padding:8px 14px;background:#185FA5;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">허용하기</button>
       <button onclick="dismissNotifBanner()" style="padding:6px 14px;background:transparent;color:#777;border:1px solid #444;border-radius:9px;font-size:11px;cursor:pointer">다음에</button>
     </div>`;
+  }
+
+  b.innerHTML = `
+    <style>@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}</style>
+    <span style="font-size:24px;flex-shrink:0">🔔</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;margin-bottom:3px">기기 알림 ${denied?'설정 안내':unsupported?'안내':'허용'}</div>
+      <div style="font-size:11px;color:#999;line-height:1.6">
+        ${denied?'알림이 차단되어 있습니다.<br>브라우저 주소창 자물쇠 아이콘을 눌러<br>알림을 허용으로 변경해주세요.':unsupported?'이 브라우저는 알림을 지원하지 않습니다.<br>Chrome 앱으로 접속하면 알림을 받을 수 있습니다.':'근무 전날 알림·공지·댓글을<br>기기에서 바로 받을 수 있습니다.'}
+      </div>
+    </div>
+    ${actionHtml}`;
+
   document.body.appendChild(b);
 }
+
 async function requestNotifPermission(){
   $('notif-banner')?.remove();
-  if(!('Notification'in window))return showToastMsg('이 브라우저는 알림을 지원하지 않습니다.');
-  const perm=await Notification.requestPermission();
-  if(perm==='granted'){
-    showToastMsg('✅ 기기 알림이 허용되었습니다!');
-    updateAlarmBadge(); scheduleLocalAlarms();
-    setTimeout(()=>pushNotify('근무표 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.'),800);
-  } else {
-    showToastMsg('알림이 거부되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
-    localStorage.setItem('ws_notif_dismissed','1');
+  if(!('Notification'in window)) return showToastMsg('이 브라우저는 알림을 지원하지 않습니다.');
+  try {
+    const perm = await Notification.requestPermission();
+    if(perm==='granted'){
+      showToastMsg('✅ 기기 알림이 허용되었습니다!');
+      updateAlarmBadge(); scheduleLocalAlarms();
+      setTimeout(()=>pushNotify('근무표 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.'),800);
+    } else {
+      showToastMsg('알림이 거부되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
+      localStorage.setItem('ws_notif_dismissed','1');
+    }
+  } catch(e) {
+    showToastMsg('알림 설정 중 오류가 발생했습니다: '+e.message);
   }
 }
-function dismissNotifBanner(){$('notif-banner')?.remove();localStorage.setItem('ws_notif_dismissed','1');}
+function dismissNotifBanner(){ $('notif-banner')?.remove(); localStorage.setItem('ws_notif_dismissed','1'); }
 
 // ── 알림 기능 ─────────────────────────────────────
 function updateAlarmBadge(){
@@ -634,12 +668,25 @@ function updateNoticeBadge(){
 
 // ★ 공지 탭 진입 시 모두 읽음 처리 (clearNoticeBadge 개선)
 function clearNoticeBadge(){
-  const unread=notices.filter(n=>n.is_unread);
-  if(!unread.length) return;
-  unread.forEach(n=>{ n.is_unread=false; $(`nc-${n.id}`)?.classList.remove('unread'); $(`nc-${n.id}`)?.querySelector('.new-badge')?.remove(); });
+  const unread = notices.filter(n => n.is_unread);
+  if (!unread.length) return;
+
+  // 로컬 상태 즉시 업데이트
+  unread.forEach(n => {
+    n.is_unread = false;
+    const el = $(`nc-${n.id}`);
+    if (el) { el.classList.remove('unread'); el.querySelector('.new-badge')?.remove(); }
+  });
   updateNoticeBadge();
-  // DB에 일괄 읽음 처리
-  if(!OFFLINE) unread.forEach(n=>sb.from('notice_reads').upsert({notice_id:n.id,user_id:cu.id}));
+
+  // DB에 일괄 읽음 저장 (각각 개별 upsert → 하나라도 실패해도 나머지 저장)
+  if (!OFFLINE && cu?.id) {
+    unread.forEach(n => {
+      sb.from('notice_reads')
+        .upsert({ notice_id: n.id, user_id: cu.id }, { onConflict: 'notice_id,user_id' })
+        .then(({ error }) => { if (error) console.warn('notice_reads upsert error:', error.message); });
+    });
+  }
 }
 
 // ★ 관리자: 공지 수정
