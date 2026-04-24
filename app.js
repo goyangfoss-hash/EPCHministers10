@@ -163,8 +163,8 @@ function enterApp() {
   startRealtime();
   if(!OFFLINE){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>refreshSchedules(),5*60*1000);}
   scheduleLocalAlarms();
+  checkNotifPermission(); // ★ 기기 알림 권한 배너
   if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-  if('Notification'in window&&Notification.permission==='default') Notification.requestPermission().then(()=>updateAlarmBadge());
 }
 
 // ══════════════════════════════════════════════════
@@ -217,6 +217,46 @@ function startRealtime() {
     .subscribe(s=>console.log('[RT]',s));
 }
 function pushNotify(title,body){if(!('Notification'in window)||Notification.permission!=='granted')return;try{new Notification(title,{body,icon:'icon-192.png'});}catch{}}
+
+// ── 기기 알림 권한 배너 ───────────────────────────
+function checkNotifPermission(){
+  if(!('Notification'in window))return;
+  if(Notification.permission==='granted')return;
+  if(localStorage.getItem('ws_notif_dismissed')==='1')return;
+  // 로그인 후 2초 뒤 배너 표시 (너무 즉각적이면 거부율 높음)
+  setTimeout(showNotifBanner, 2000);
+}
+function showNotifBanner(){
+  if($('notif-banner'))return;
+  const b=document.createElement('div');
+  b.id='notif-banner';
+  b.style.cssText='position:fixed;bottom:75px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:452px;background:#1c1c1a;color:#fff;border-radius:16px;padding:14px 16px;z-index:40;display:flex;align-items:center;gap:12px;box-shadow:0 6px 24px rgba(0,0,0,.35);animation:slideUp .3s ease';
+  b.innerHTML=`<style>@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}</style>
+    <span style="font-size:24px;flex-shrink:0">🔔</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;margin-bottom:3px">기기 알림 허용</div>
+      <div style="font-size:11px;color:#999;line-height:1.5">근무 전날 알림·공지·댓글을<br>기기에서 바로 받을 수 있습니다.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+      <button onclick="requestNotifPermission()" style="padding:8px 14px;background:#185FA5;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">허용하기</button>
+      <button onclick="dismissNotifBanner()" style="padding:6px 14px;background:transparent;color:#777;border:1px solid #444;border-radius:9px;font-size:11px;cursor:pointer">다음에</button>
+    </div>`;
+  document.body.appendChild(b);
+}
+async function requestNotifPermission(){
+  $('notif-banner')?.remove();
+  if(!('Notification'in window))return showToastMsg('이 브라우저는 알림을 지원하지 않습니다.');
+  const perm=await Notification.requestPermission();
+  if(perm==='granted'){
+    showToastMsg('✅ 기기 알림이 허용되었습니다!');
+    updateAlarmBadge(); scheduleLocalAlarms();
+    setTimeout(()=>pushNotify('근무표 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.'),800);
+  } else {
+    showToastMsg('알림이 거부되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
+    localStorage.setItem('ws_notif_dismissed','1');
+  }
+}
+function dismissNotifBanner(){$('notif-banner')?.remove();localStorage.setItem('ws_notif_dismissed','1');}
 
 // ── 알림 기능 ─────────────────────────────────────
 function updateAlarmBadge(){
@@ -288,19 +328,23 @@ function saveShiftMemo(y,m,d){
 //  DB 전체 로드
 // ══════════════════════════════════════════════════
 async function loadAll(){
-  const[uR,sR,nR,fR,cR]=await Promise.all([
+  const[uR,sR,nR,fR,cR,rR]=await Promise.all([
     sb.from('app_users').select('*'),
     sb.from('schedules').select('year,month,data').order('year').order('month'),
     sb.from('notices').select('*').order('created_at',{ascending:false}),
     sb.from('feed_posts').select('*,app_users(name)').order('created_at',{ascending:false}),
     sb.from('shift_comments').select('*,app_users(name)').gte('year',new Date().getFullYear()-1),
+    // ★ 내가 읽은 공지 ID 목록 조회
+    sb.from('notice_reads').select('notice_id').eq('user_id', cu?.id || 0),
   ]);
   const all=uR.data||[];
   allMembers=all.filter(u=>u.status==='approved'); window._pending=all.filter(u=>u.status==='pending');
   allSchedules={};
   (sR.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};});
   assignColors(collectAllTypes());
-  notices=(nR.data||[]).map(n=>({...n,is_unread:true}));
+  // ★ 읽은 공지 ID 세트 생성 → 읽지 않은 것만 is_unread:true
+  const readIds = new Set((rR.data||[]).map(r=>r.notice_id));
+  notices=(nR.data||[]).map(n=>({...n, is_unread: !readIds.has(n.id)}));
   feedPosts=(fR.data||[]).map(p=>({...p,author_name:p.app_users?.name}));
   shiftComments={};
   (cR.data||[]).forEach(c=>{const k=`${c.year}-${c.month}-${c.day}`;if(!shiftComments[k])shiftComments[k]=[];if(!shiftComments[k].find(x=>x.id===c.id))shiftComments[k].push({...c,author_name:c.app_users?.name});if(!commentLikes[c.id])commentLikes[c.id]=new Set();});
