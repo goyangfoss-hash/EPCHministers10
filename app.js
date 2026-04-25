@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════
 //  ⚙️  Supabase 설정
 // ════════════════════════════════════════════════════
-const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
+const SUPABASE_URL      = 'hhttps://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
@@ -163,8 +163,8 @@ function enterApp() {
   startRealtime();
   if(!OFFLINE){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>refreshSchedules(),5*60*1000);}
   scheduleLocalAlarms();
-  checkNotifPermission(); // ★ 기기 알림 권한 배너
   if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if('Notification'in window&&Notification.permission==='default') Notification.requestPermission().then(()=>updateAlarmBadge());
 }
 
 // ══════════════════════════════════════════════════
@@ -217,80 +217,6 @@ function startRealtime() {
     .subscribe(s=>console.log('[RT]',s));
 }
 function pushNotify(title,body){if(!('Notification'in window)||Notification.permission!=='granted')return;try{new Notification(title,{body,icon:'icon-192.png'});}catch{}}
-
-// ── 기기 알림 권한 배너 ───────────────────────────
-function checkNotifPermission(){
-  // 이미 배너를 닫은 경우 → 건너뜀
-  if(localStorage.getItem('ws_notif_dismissed')==='1') return;
-  // 이미 허용된 경우 → 건너뜀
-  if('Notification' in window && Notification.permission==='granted') return;
-  // 그 외 모든 경우(미결정·거부·미지원) → 배너 표시
-  // denied 상태도 표시 (브라우저 설정 안내 목적)
-  setTimeout(showNotifBanner, 2000);
-}
-
-function showNotifBanner(){
-  if($('notif-banner')) return;
-  const denied = 'Notification' in window && Notification.permission==='denied';
-  const unsupported = !('Notification' in window);
-
-  const b = document.createElement('div');
-  b.id = 'notif-banner';
-  b.style.cssText = 'position:fixed;bottom:75px;left:50%;transform:translateX(-50%);width:calc(100% - 28px);max-width:452px;background:#1c1c1a;color:#fff;border-radius:16px;padding:14px 16px;z-index:40;display:flex;align-items:center;gap:12px;box-shadow:0 6px 24px rgba(0,0,0,.35);animation:slideUp .3s ease';
-
-  let actionHtml;
-  if (unsupported) {
-    // Safari 등 미지원 브라우저
-    actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-      <div style="font-size:10px;color:#aaa;text-align:center;line-height:1.4">홈 화면에 추가 후<br>앱으로 실행하면<br>알림을 받을 수 있습니다</div>
-      <button onclick="dismissNotifBanner()" style="padding:6px 14px;background:transparent;color:#777;border:1px solid #444;border-radius:9px;font-size:11px;cursor:pointer">확인</button>
-    </div>`;
-  } else if (denied) {
-    // 이미 거부된 경우 → 브라우저 설정 안내
-    actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-      <div style="font-size:10px;color:#aaa;text-align:center;line-height:1.4">브라우저 설정에서<br>알림을 허용해주세요</div>
-      <button onclick="dismissNotifBanner()" style="padding:6px 14px;background:transparent;color:#777;border:1px solid #444;border-radius:9px;font-size:11px;cursor:pointer">닫기</button>
-    </div>`;
-  } else {
-    // 미결정 → 허용 요청
-    actionHtml = `<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-      <button onclick="requestNotifPermission()" style="padding:8px 14px;background:#185FA5;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">허용하기</button>
-      <button onclick="dismissNotifBanner()" style="padding:6px 14px;background:transparent;color:#777;border:1px solid #444;border-radius:9px;font-size:11px;cursor:pointer">다음에</button>
-    </div>`;
-  }
-
-  b.innerHTML = `
-    <style>@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}</style>
-    <span style="font-size:24px;flex-shrink:0">🔔</span>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;margin-bottom:3px">기기 알림 ${denied?'설정 안내':unsupported?'안내':'허용'}</div>
-      <div style="font-size:11px;color:#999;line-height:1.6">
-        ${denied?'알림이 차단되어 있습니다.<br>브라우저 주소창 자물쇠 아이콘을 눌러<br>알림을 허용으로 변경해주세요.':unsupported?'이 브라우저는 알림을 지원하지 않습니다.<br>Chrome 앱으로 접속하면 알림을 받을 수 있습니다.':'근무 전날 알림·공지·댓글을<br>기기에서 바로 받을 수 있습니다.'}
-      </div>
-    </div>
-    ${actionHtml}`;
-
-  document.body.appendChild(b);
-}
-
-async function requestNotifPermission(){
-  $('notif-banner')?.remove();
-  if(!('Notification'in window)) return showToastMsg('이 브라우저는 알림을 지원하지 않습니다.');
-  try {
-    const perm = await Notification.requestPermission();
-    if(perm==='granted'){
-      showToastMsg('✅ 기기 알림이 허용되었습니다!');
-      updateAlarmBadge(); scheduleLocalAlarms();
-      setTimeout(()=>pushNotify('근무표 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.'),800);
-    } else {
-      showToastMsg('알림이 거부되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
-      localStorage.setItem('ws_notif_dismissed','1');
-    }
-  } catch(e) {
-    showToastMsg('알림 설정 중 오류가 발생했습니다: '+e.message);
-  }
-}
-function dismissNotifBanner(){ $('notif-banner')?.remove(); localStorage.setItem('ws_notif_dismissed','1'); }
 
 // ── 알림 기능 ─────────────────────────────────────
 function updateAlarmBadge(){
@@ -362,23 +288,19 @@ function saveShiftMemo(y,m,d){
 //  DB 전체 로드
 // ══════════════════════════════════════════════════
 async function loadAll(){
-  const[uR,sR,nR,fR,cR,rR]=await Promise.all([
+  const[uR,sR,nR,fR,cR]=await Promise.all([
     sb.from('app_users').select('*'),
     sb.from('schedules').select('year,month,data').order('year').order('month'),
     sb.from('notices').select('*').order('created_at',{ascending:false}),
     sb.from('feed_posts').select('*,app_users(name)').order('created_at',{ascending:false}),
     sb.from('shift_comments').select('*,app_users(name)').gte('year',new Date().getFullYear()-1),
-    // ★ 내가 읽은 공지 ID 목록 조회
-    sb.from('notice_reads').select('notice_id').eq('user_id', cu?.id || 0),
   ]);
   const all=uR.data||[];
   allMembers=all.filter(u=>u.status==='approved'); window._pending=all.filter(u=>u.status==='pending');
   allSchedules={};
   (sR.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};});
   assignColors(collectAllTypes());
-  // ★ 읽은 공지 ID 세트 생성 → 읽지 않은 것만 is_unread:true
-  const readIds = new Set((rR.data||[]).map(r=>r.notice_id));
-  notices=(nR.data||[]).map(n=>({...n, is_unread: !readIds.has(n.id)}));
+  notices=(nR.data||[]).map(n=>({...n,is_unread:true}));
   feedPosts=(fR.data||[]).map(p=>({...p,author_name:p.app_users?.name}));
   shiftComments={};
   (cR.data||[]).forEach(c=>{const k=`${c.year}-${c.month}-${c.day}`;if(!shiftComments[k])shiftComments[k]=[];if(!shiftComments[k].find(x=>x.id===c.id))shiftComments[k].push({...c,author_name:c.app_users?.name});if(!commentLikes[c.id])commentLikes[c.id]=new Set();});
@@ -501,7 +423,7 @@ function renderDayModal(){
   // 댓글
   const cmts=shiftComments[key]||[];
   let cHtml=`<div class="modal-section"><div class="modal-section-title">댓글 (${cmts.length})</div>`;
-  cHtml+=cmts.length?cmts.map(c=>{const lk=commentLikes[c.id]||new Set(),liked=lk.has(cu.id);return`<div class="comment-item"><div class="comment-header"><span class="comment-author">${c.author_name}</span><span class="comment-time">${fmtDate(c.created_at)}</span></div><div class="comment-text">${esc(c.content)}</div><div class="comment-actions"><button class="like-btn${liked?' liked':''}" onclick="toggleLike(${c.id})"><svg width="12" height="12" viewBox="0 0 12 12" fill="${liked?'#e74c3c':'none'}"><path d="M6 10.5C6 10.5 1 7.5 1 4a2.5 2.5 0 015 0 2.5 2.5 0 015 0c0 3.5-5 6.5-5 6.5z" stroke="${liked?'#e74c3c':'#bbb'}" stroke-width="1.2"/></svg>${lk.size||''}</button>${isAdmin()?`<button class="del-btn" style="color:#185FA5" onclick="editComment('${key}',${c.id})">수정</button>`:''} ${isAdmin()||c.user_id===cu.id?`<button class="del-btn" onclick="deleteComment('${key}',${c.id})">삭제</button>`:''}</div></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">첫 댓글을 남겨보세요</p>`;
+  cHtml+=cmts.length?cmts.map(c=>{const lk=commentLikes[c.id]||new Set(),liked=lk.has(cu.id);return`<div class="comment-item"><div class="comment-header"><span class="comment-author">${c.author_name}</span><span class="comment-time">${fmtDate(c.created_at)}</span></div><div class="comment-text">${esc(c.content)}</div><div class="comment-actions"><button class="like-btn${liked?' liked':''}" onclick="toggleLike(${c.id})"><svg width="12" height="12" viewBox="0 0 12 12" fill="${liked?'#e74c3c':'none'}"><path d="M6 10.5C6 10.5 1 7.5 1 4a2.5 2.5 0 015 0 2.5 2.5 0 015 0c0 3.5-5 6.5-5 6.5z" stroke="${liked?'#e74c3c':'#bbb'}" stroke-width="1.2"/></svg>${lk.size||''}</button>${isAdmin()||c.user_id===cu.id?`<button class="del-btn" onclick="deleteComment('${key}',${c.id})">삭제</button>`:''}</div></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">첫 댓글을 남겨보세요</p>`;
   cHtml+='</div>';
   $('modal-body').innerHTML=wHtml+alarmHtml+cHtml;
 }
@@ -515,17 +437,7 @@ async function submitComment(){
   $('comment-input').value='';
 }
 function toggleLike(cid){if(!commentLikes[cid])commentLikes[cid]=new Set();const s=commentLikes[cid];s.has(cu.id)?s.delete(cu.id):s.add(cu.id);if(!OFFLINE)s.has(cu.id)?sb.from('comment_likes').upsert({comment_id:cid,user_id:cu.id}):sb.from('comment_likes').delete().eq('comment_id',cid).eq('user_id',cu.id);renderDayModal();}
-function deleteComment(key,cid){if(!confirm('댓글을 삭제하시겠습니까?'))return;shiftComments[key]=(shiftComments[key]||[]).filter(c=>c.id!==cid);if(!OFFLINE)sb.from('shift_comments').delete().eq('id',cid);renderDayModal();renderCalendar();}
-// ★ 관리자: 댓글 수정
-async function editComment(key,cid){
-  const cmts=shiftComments[key]||[];
-  const c=cmts.find(x=>x.id===cid); if(!c) return;
-  const newTxt=prompt('댓글 수정:',c.content); if(newTxt===null||!newTxt.trim()) return;
-  c.content=newTxt.trim();
-  if(!OFFLINE) await sb.from('shift_comments').update({content:c.content}).eq('id',cid);
-  renderDayModal();
-  showToastMsg('댓글이 수정되었습니다.');
-}
+function deleteComment(key,cid){if(!confirm('삭제?'))return;shiftComments[key]=(shiftComments[key]||[]).filter(c=>c.id!==cid);if(!OFFLINE)sb.from('shift_comments').delete().eq('id',cid);renderDayModal();renderCalendar();}
 
 // ══════════════════════════════════════════════════
 //  내 근무 탭 (관리자도 본인 이름으로 조회)
@@ -624,89 +536,10 @@ function renderSearchResult(){
 // ══════════════════════════════════════════════════
 //  공지
 // ══════════════════════════════════════════════════
-function renderNotices(){
-  const el=$('notice-list');
-  if(!notices.length){el.innerHTML='<p class="empty-state">등록된 공지가 없습니다.</p>';return;}
-  el.innerHTML=notices.map(n=>`
-    <div class="notice-card${n.is_unread?' unread':''}" id="nc-${n.id}">
-      <div onclick="toggleNotice(${n.id})">
-        ${n.is_unread?`<span class="new-badge">NEW</span>`:''}
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
-          <div class="n-title">${esc(n.title)}</div>
-          ${isAdmin()?`<div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px" onclick="event.stopPropagation()">
-            <button class="n-action-btn" onclick="editNotice(${n.id})">수정</button>
-            <button class="n-action-btn del" onclick="deleteNotice(${n.id})">삭제</button>
-          </div>`:''}
-        </div>
-        <div class="n-meta">${fmtDate(n.created_at)}</div>
-        <div class="n-body">${esc(n.body)}</div>
-      </div>
-    </div>`).join('');
-  updateNoticeBadge();
-}
-
-function toggleNotice(id){
-  const el=$(`nc-${id}`);if(!el)return;
-  el.classList.toggle('open');
-  const n=notices.find(x=>x.id===id);
-  if(n&&n.is_unread){n.is_unread=false;el.querySelector('.new-badge')?.remove();el.classList.remove('unread');updateNoticeBadge();if(!OFFLINE&&cu?.id)sb.from('notice_reads').upsert({notice_id:id,user_id:cu.id},{onConflict:'notice_id,user_id'});}
-}
-}
-
-function updateNoticeBadge(){
-  const cnt=notices.filter(n=>n.is_unread).length;
-  let b=$('btn-notice').querySelector('.nav-badge');
-  if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-notice').appendChild(b);}b.textContent=cnt;}
-  else b?.remove();
-}
-
-// ★ 공지 탭 진입 시 모두 읽음 처리 (clearNoticeBadge 개선)
-function clearNoticeBadge(){
-  const unread=notices.filter(n=>n.is_unread);
-  if(!unread.length)return;
-  unread.forEach(n=>{n.is_unread=false;$(`nc-${n.id}`)?.classList.remove('unread');$(`nc-${n.id}`)?.querySelector('.new-badge')?.remove();});
-  updateNoticeBadge();
-  if(!OFFLINE&&cu?.id){unread.forEach(n=>{sb.from('notice_reads').upsert({notice_id:n.id,user_id:cu.id},{onConflict:'notice_id,user_id'}).then(({error})=>{if(error)console.warn('notice_reads error:',error.message);});});}
-}
-
-  // 로컬 상태 즉시 업데이트
-  unread.forEach(n => {
-    n.is_unread = false;
-    const el = $(`nc-${n.id}`);
-    if (el) { el.classList.remove('unread'); el.querySelector('.new-badge')?.remove(); }
-  });
-  updateNoticeBadge();
-
-  // DB에 일괄 읽음 저장 (각각 개별 upsert → 하나라도 실패해도 나머지 저장)
-  if (!OFFLINE && cu?.id) {
-    unread.forEach(n => {
-      sb.from('notice_reads')
-        .upsert({ notice_id: n.id, user_id: cu.id }, { onConflict: 'notice_id,user_id' })
-        .then(({ error }) => { if (error) console.warn('notice_reads upsert error:', error.message); });
-    });
-  }
-}
-
-// ★ 관리자: 공지 수정
-function editNotice(id){
-  const n=notices.find(x=>x.id===id); if(!n) return;
-  const newTitle=prompt('제목 수정:', n.title); if(newTitle===null) return;
-  const newBody=prompt('내용 수정:', n.body); if(newBody===null) return;
-  if(!newTitle.trim()||!newBody.trim()) return showToastMsg('제목과 내용을 입력해주세요.');
-  n.title=newTitle.trim(); n.body=newBody.trim();
-  if(!OFFLINE) sb.from('notices').update({title:n.title,body:n.body}).eq('id',id);
-  renderNotices();
-  showToastMsg('공지가 수정되었습니다.');
-}
-
-// ★ 관리자: 공지 삭제
-async function deleteNotice(id){
-  if(!confirm('이 공지를 삭제하시겠습니까?')) return;
-  notices=notices.filter(n=>n.id!==id);
-  if(!OFFLINE) await sb.from('notices').delete().eq('id',id);
-  renderNotices();
-  showToastMsg('공지가 삭제되었습니다.');
-}
+function renderNotices(){const el=$('notice-list');if(!notices.length){el.innerHTML='<p class="empty-state">등록된 공지가 없습니다.</p>';return;}el.innerHTML=notices.map(n=>`<div class="notice-card${n.is_unread?' unread':''}" onclick="toggleNotice(${n.id},this)">${n.is_unread?`<span class="new-badge">NEW</span>`:''}<div class="n-title">${esc(n.title)}</div><div class="n-meta">${fmtDate(n.created_at)}</div><div class="n-body">${esc(n.body)}</div></div>`).join('');updateNoticeBadge();}
+function toggleNotice(id,el){el.classList.toggle('open');const n=notices.find(x=>x.id===id);if(n)n.is_unread=false;el.querySelector('.new-badge')?.remove();el.querySelector('.n-title').style.fontWeight='';el.classList.remove('unread');updateNoticeBadge();if(!OFFLINE)sb.from('notice_reads').upsert({notice_id:id,user_id:cu.id});}
+function updateNoticeBadge(){const cnt=notices.filter(n=>n.is_unread).length;let b=$('btn-notice').querySelector('.nav-badge');if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-notice').appendChild(b);}b.textContent=cnt;}else b?.remove();}
+function clearNoticeBadge(){notices.forEach(n=>n.is_unread=false);$('btn-notice').querySelector('.nav-badge')?.remove();}
 
 // ══════════════════════════════════════════════════
 //  피드
@@ -721,109 +554,15 @@ function renderAdmin(){renderPending();renderMembers();buildSchedPreview();rende
 function updatePendingBadge(){const cnt=(window._pending||[]).length;let b=$('btn-admin').querySelector('.nav-badge');if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-admin').appendChild(b);}b.textContent=cnt;}else b?.remove();}
 function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">근무표 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
 function renderMembers(){const el=$('member-list');if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}el.innerHTML=allMembers.map((u,i)=>{const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);const c=PALETTE[i%PALETTE.length];return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av" style="background:${c.bg};color:${c.text}">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name} <span class="role-tag">${rl}</span></div><div class="m-sub">연락처: ${u.phone} · 전체 ${total}건</div></div><svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;}).join('');}
-function openMemberModal(id){
-  const u=allMembers.find(x=>x.id===id)||(window._pending||[]).find(x=>x.id===id);if(!u)return;
-  const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';
-  const sl=u.status==='approved'?'승인됨':u.status==='pending'?'가입 대기':'거절됨';
-  const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));
-  let act='';
-  if(isAdmin()&&u.id!==cu.id){
-    if(u.status==='pending'){act=`<button class="detail-btn promote" onclick="approveUser(${u.id});closeModalById('member-modal')">승인</button><button class="detail-btn reject-btn" onclick="rejectUser(${u.id});closeModalById('member-modal')">거절</button>`;}
-    else{if(u.role==='employee')act+=`<button class="detail-btn promote" onclick="changeRole(${u.id},'admin');openMemberModal(${u.id})">관리자 지정</button>`;if(u.role==='admin')act+=`<button class="detail-btn demote" onclick="changeRole(${u.id},'employee');openMemberModal(${u.id})">직원으로 변경</button>`;if(u.role!=='superadmin')act+=`<button class="detail-btn reject-btn" onclick="if(confirm('삭제?')){removeUser(${u.id});closeModalById('member-modal')}">삭제</button>`;}
-  }
-  // ★ 메모 섹션: 관리자만 열람 가능
-  const memoSection = isAdmin()
-    ? `<div style="margin-top:10px">
-        <div style="font-size:12px;font-weight:600;color:#888;margin-bottom:5px">
-          관리자 메모 <span style="font-size:10px;color:#bbb;font-weight:400;background:#f5f5f0;padding:2px 6px;border-radius:4px;margin-left:4px">관리자만 열람</span>
-        </div>
-        <textarea class="memo-area" id="memo-${u.id}">${u.memo||''}</textarea>
-        <button class="save-memo-btn" onclick="saveMemo(${u.id})">메모 저장</button>
-      </div>
-      <div class="detail-actions">${act}</div>`
-    : (act ? `<div class="detail-actions">${act}</div>` : '');
-
-  $('member-modal-body').innerHTML=`
-    <div class="member-detail-top">
-      <div class="member-av-lg">${u.name[0]}</div>
-      <div><div style="font-size:19px;font-weight:700">${u.name}</div>
-        <div style="font-size:13px;color:#888;margin-top:2px">${rl} · ${sl}</div>
-        ${inS?'<span class="sched-match-tag" style="margin-top:4px;display:inline-block">근무표 등록됨</span>':''}
-      </div>
-    </div>
-    <div class="detail-table">
-      <div class="detail-row"><span>연락처 뒷자리</span><span>${u.phone}</span></div>
-      <div class="detail-row"><span>생년월일</span><span>${u.birth}</span></div>
-      <div class="detail-row"><span>가입일</span><span>${fmtDate(u.created_at)}</span></div>
-    </div>
-    ${memoSection}`;
-  $('member-modal').style.display='flex';
-}
+function openMemberModal(id){const u=allMembers.find(x=>x.id===id)||(window._pending||[]).find(x=>x.id===id);if(!u)return;const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';const sl=u.status==='approved'?'승인됨':u.status==='pending'?'가입 대기':'거절됨';const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));let act='';if(isAdmin()&&u.id!==cu.id){if(u.status==='pending'){act=`<button class="detail-btn promote" onclick="approveUser(${u.id});closeModalById('member-modal')">승인</button><button class="detail-btn reject-btn" onclick="rejectUser(${u.id});closeModalById('member-modal')">거절</button>`;}else{if(u.role==='employee')act+=`<button class="detail-btn promote" onclick="changeRole(${u.id},'admin');openMemberModal(${u.id})">관리자 지정</button>`;if(u.role==='admin')act+=`<button class="detail-btn demote" onclick="changeRole(${u.id},'employee');openMemberModal(${u.id})">직원으로 변경</button>`;if(u.role!=='superadmin')act+=`<button class="detail-btn reject-btn" onclick="if(confirm('삭제?')){removeUser(${u.id});closeModalById('member-modal')}">삭제</button>`;}}$('member-modal-body').innerHTML=`<div class="member-detail-top"><div class="member-av-lg">${u.name[0]}</div><div><div style="font-size:19px;font-weight:700">${u.name}</div><div style="font-size:13px;color:#888;margin-top:2px">${rl} · ${sl}</div>${inS?'<span class="sched-match-tag" style="margin-top:4px;display:inline-block">근무표 등록됨</span>':''}</div></div><div class="detail-table"><div class="detail-row"><span>연락처 뒷자리</span><span>${u.phone}</span></div><div class="detail-row"><span>생년월일</span><span>${u.birth}</span></div><div class="detail-row"><span>가입일</span><span>${fmtDate(u.created_at)}</span></div></div>${isAdmin()?`<div style="margin-top:10px"><div style="font-size:12px;font-weight:600;color:#888;margin-bottom:5px">관리자 메모</div><textarea class="memo-area" id="memo-${u.id}">${u.memo||''}</textarea><button class="save-memo-btn" onclick="saveMemo(${u.id})">메모 저장</button></div><div class="detail-actions">${act}</div>`:''}`;$('member-modal').style.display='flex';}
 async function saveMemo(uid){const memo=$(`memo-${uid}`)?.value||'';const u=allMembers.find(x=>x.id===uid);if(!u)return;u.memo=memo;if(!OFFLINE)await sb.from('app_users').update({memo}).eq('id',uid);showToastMsg('저장되었습니다.');}
 async function approveUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'approved'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);const{data}=await sb.from('app_users').select('*');if(data){allMembers=data.filter(u=>u.status==='approved');window._pending=data.filter(u=>u.status==='pending');}renderAdmin();}
 async function rejectUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'rejected'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);renderPending();}
 async function changeRole(id,role){const u=allMembers.find(x=>x.id===id);if(!u)return;u.role=role;if(!OFFLINE)await sb.from('app_users').update({role}).eq('id',id);renderMembers();}
 async function removeUser(id){allMembers=allMembers.filter(x=>x.id!==id);if(!OFFLINE)await sb.from('app_users').delete().eq('id',id);renderAdmin();}
-function renderAdminFeed(){
-  const el=$('admin-feed-list');
-  if(!feedPosts.length){el.innerHTML='<p class="empty-state">피드가 없습니다.</p>';return;}
-  el.innerHTML=feedPosts.map(p=>`
-    <div class="feed-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-        <div class="feed-author">${esc(p.author_name||'직원')}</div>
-        <div style="display:flex;gap:6px">
-          <button class="n-action-btn del" onclick="deleteFeedPost(${p.id})">삭제</button>
-        </div>
-      </div>
-      <div class="feed-content">${esc(p.content)}</div>
-      <div class="feed-time">${fmtDate(p.created_at)}</div>
-      ${p.admin_reply
-        ? `<div class="feed-reply">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-              <div class="feed-reply-label">답변 완료</div>
-              <button class="n-action-btn del" onclick="deleteReply(${p.id})">답변 삭제</button>
-            </div>
-            ${esc(p.admin_reply)}
-           </div>`
-        : `<div class="reply-wrap">
-            <input id="ar-${p.id}" class="reply-input" placeholder="답변 입력...">
-            <button class="reply-btn" onclick="sendReply(${p.id})">답변 전송</button>
-           </div>`}
-    </div>`).join('');
-}
+function renderAdminFeed(){const el=$('admin-feed-list');if(!feedPosts.length){el.innerHTML='<p class="empty-state">피드가 없습니다.</p>';return;}el.innerHTML=feedPosts.map(p=>`<div class="feed-card"><div class="feed-author">${p.author_name||'직원'}</div><div class="feed-content">${esc(p.content)}</div><div class="feed-time">${fmtDate(p.created_at)}</div>${p.admin_reply?`<div class="feed-reply"><div class="feed-reply-label">답변 완료</div>${esc(p.admin_reply)}</div>`:`<div class="reply-wrap"><input id="ar-${p.id}" class="reply-input" placeholder="답변 입력..."><button class="reply-btn" onclick="sendReply(${p.id})">답변 전송</button></div>`}</div>`).join('');}
 async function sendReply(postId){const input=$(`ar-${postId}`);const txt=input?.value.trim();if(!txt)return showToastMsg('답변 내용을 입력해주세요.');const p=feedPosts.find(x=>x.id===postId);if(!p)return;p.admin_reply=txt;if(!OFFLINE)await sb.from('feed_posts').update({admin_reply:txt,replied_at:new Date().toISOString()}).eq('id',postId);renderAdminFeed();}
-// ★ 관리자: 피드 삭제
-async function deleteFeedPost(id){
-  if(!confirm('이 피드를 삭제하시겠습니까?')) return;
-  feedPosts=feedPosts.filter(p=>p.id!==id);
-  if(!OFFLINE) await sb.from('feed_posts').delete().eq('id',id);
-  renderAdminFeed();
-}
-// ★ 관리자: 답변 삭제
-async function deleteReply(postId){
-  if(!confirm('답변을 삭제하시겠습니까?')) return;
-  const p=feedPosts.find(x=>x.id===postId); if(!p) return;
-  p.admin_reply=null;
-  if(!OFFLINE) await sb.from('feed_posts').update({admin_reply:null,replied_at:null}).eq('id',postId);
-  renderAdminFeed();
-}
-async function postNotice(){
-  const title=val('n-title'),body=val('n-body');
-  if(!title||!body) return;
-  const n={id:Date.now(),title,body,created_at:new Date().toISOString(),is_unread:false}; // 관리자 본인은 읽음
-  if(!OFFLINE){
-    const{data}=await sb.from('notices').insert({title,body,created_by:cu.id}).select('*').single();
-    if(data){
-      n.id=data.id; n.created_at=data.created_at;
-      // 관리자 본인 읽음 처리
-      await sb.from('notice_reads').upsert({notice_id:n.id, user_id:cu.id});
-    }
-  }
-  notices.unshift(n);
-  renderNotices();
-  $('n-title').value=''; $('n-body').value='';
-  toast('notice-toast');
-}
+async function postNotice(){const title=val('n-title'),body=val('n-body');if(!title||!body)return;const n={id:Date.now(),title,body,created_at:new Date().toISOString(),is_unread:true};if(!OFFLINE){const{data}=await sb.from('notices').insert({title,body,created_by:cu.id}).select('*').single();if(data){n.id=data.id;n.created_at=data.created_at;}}else{notices.unshift(n);renderNotices();}$('n-title').value='';$('n-body').value='';toast('notice-toast');}
 
 // ══════════════════════════════════════════════════
 //  엑셀 업로드
