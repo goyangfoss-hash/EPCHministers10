@@ -23,6 +23,11 @@ let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
 let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth() + 1;
 let srchYear = 0, srchMonth = 0, srchName = '';
 
+// 채팅 상태
+let chatMessages = {};   // { userId: [messages] }
+let chatTarget = null;   // 현재 채팅 상대
+let dmUnreadCount = 0;
+
 // ── 알림 & 메모 (localStorage 저장) ──────────────
 let shiftAlarms = {};
 function loadAlarms()  { try { shiftAlarms = JSON.parse(localStorage.getItem('ws_alarms') || '{}'); } catch { shiftAlarms = {}; } }
@@ -219,6 +224,24 @@ function startRealtime() {
       if(payload.new.admin_reply&&payload.new.user_id===cu.id)pushNotify('관리자 답변 도착',payload.new.admin_reply);
     })
     .subscribe(s=>console.log('[RT]',s));
+
+  // ★ DM 실시간 구독
+  sb.channel('ws_dm')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'direct_messages'},payload=>{
+      const m=payload.new;
+      if(m.from_id!==cu.id&&m.to_id!==cu.id) return;
+      const otherId=m.from_id===cu.id?m.to_id:m.from_id;
+      if(!chatMessages[otherId])chatMessages[otherId]=[];
+      if(!chatMessages[otherId].find(x=>x.id===m.id)) chatMessages[otherId].push(m);
+      // 채팅창 열려있으면 즉시 렌더
+      if(chatTarget?.id===otherId) renderChatMessages();
+      // 내가 받은 메시지면 뱃지
+      if(m.to_id===cu.id){
+        updateDmBadge();
+        const sender=allMembers.find(u=>u.id===m.from_id);
+        pushNotify(`${sender?.name||'누군가'}님의 메시지`,m.content);
+      }
+    }).subscribe();
 }
 function pushNotify(title,body){if(!('Notification'in window)||Notification.permission!=='granted')return;try{new Notification(title,{body,icon:'icon-192.png'});}catch{}}
 
@@ -380,12 +403,16 @@ async function loadAll(){
   allSchedules={};
   (sR.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};});
   assignColors(collectAllTypes());
-  // ★ 읽은 공지 ID 세트 생성 → 읽지 않은 것만 is_unread:true
   const readIds = new Set((rR.data||[]).map(r=>r.notice_id));
   notices=(nR.data||[]).map(n=>({...n, is_unread: !readIds.has(n.id)}));
   feedPosts=(fR.data||[]).map(p=>({...p,author_name:p.app_users?.name}));
   shiftComments={};
   (cR.data||[]).forEach(c=>{const k=`${c.year}-${c.month}-${c.day}`;if(!shiftComments[k])shiftComments[k]=[];if(!shiftComments[k].find(x=>x.id===c.id))shiftComments[k].push({...c,author_name:c.app_users?.name});if(!commentLikes[c.id])commentLikes[c.id]=new Set();});
+  // ★ DM 로드
+  chatMessages={};
+  const{data:dmData}=await sb.from('direct_messages').select('*').or(`from_id.eq.${cu.id},to_id.eq.${cu.id}`).order('created_at',{ascending:true});
+  (dmData||[]).forEach(m=>{const otherId=m.from_id===cu.id?m.to_id:m.from_id;if(!chatMessages[otherId])chatMessages[otherId]=[];chatMessages[otherId].push(m);});
+  updateDmBadge();
 }
 function initOfflineSample(){allSchedules={2026:{5:{'김동권':{'6':'[오전]자막','17':'[새벽]설교','24':'[저녁]기도'},'이미영':{'2':'[금요]기도','10':'[수요]설교','25':'[오전]사회'},'박지훈':{'5':'[새벽]설교','13':'[금요]영상'},'최수연':{'4':'[오전]사회','16':'[금요]자막'}}}};assignColors(collectAllTypes());}
 
@@ -721,6 +748,72 @@ async function submitFeed(){const txt=$('feed-input').value.trim();const errEl=$
 function renderMyFeed(){const mp=feedPosts.filter(p=>p.user_id===cu.id),el=$('feed-list');if(!mp.length){el.innerHTML='<p class="empty-state">전송된 피드가 없습니다.</p>';return;}el.innerHTML=mp.map(p=>`<div class="feed-card"><div class="feed-content">${esc(p.content)}</div><div class="feed-time">${fmtDate(p.created_at)}</div>${p.admin_reply?`<div class="feed-reply"><div class="feed-reply-label">관리자 답변</div>${esc(p.admin_reply)}</div>`:`<div class="feed-pending">답변 대기 중...</div>`}</div>`).join('');}
 
 // ══════════════════════════════════════════════════
+//  1:1 채팅 (DM)
+// ══════════════════════════════════════════════════
+function updateDmBadge(){
+  const cnt=Object.values(chatMessages).flat().filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  dmUnreadCount=cnt;
+  // 소통 탭 뱃지 (관리자), 또는 별도 뱃지
+  const btn=$('btn-feed');
+  let b=btn?.querySelector('.dm-badge');
+  if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge dm-badge';btn?.appendChild(b);}b.textContent=cnt;}
+  else b?.remove();
+}
+
+function openChat(userId){
+  const user=allMembers.find(u=>u.id===userId);
+  if(!user) return;
+  chatTarget=user;
+  // 읽음 처리
+  const msgs=chatMessages[userId]||[];
+  msgs.filter(m=>m.to_id===cu.id&&!m.is_read).forEach(m=>{
+    m.is_read=true;
+    if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
+  });
+  updateDmBadge();
+  $('chat-target-name').textContent=user.name;
+  $('chat-modal').style.display='flex';
+  renderChatMessages();
+  setTimeout(()=>{const el=$('chat-messages');if(el)el.scrollTop=el.scrollHeight;},50);
+}
+
+function renderChatMessages(){
+  const el=$('chat-messages'); if(!el||!chatTarget) return;
+  const msgs=chatMessages[chatTarget.id]||[];
+  if(!msgs.length){el.innerHTML='<p style="text-align:center;color:#ccc;font-size:13px;padding:20px">첫 메시지를 보내보세요</p>';return;}
+  el.innerHTML=msgs.map(m=>{
+    const isMine=m.from_id===cu.id;
+    return`<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:10px">
+      <div style="max-width:75%;padding:10px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.1)">${esc(m.content)}</div>
+      <div style="font-size:10px;color:#bbb;margin-top:3px">${fmtTime(m.created_at)}</div>
+    </div>`;
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+async function sendDm(){
+  const input=$('chat-input');
+  const txt=input?.value.trim();
+  if(!txt||!chatTarget) return;
+  const msg={id:Date.now(),from_id:cu.id,to_id:chatTarget.id,content:txt,is_read:false,created_at:new Date().toISOString()};
+  if(!chatMessages[chatTarget.id])chatMessages[chatTarget.id]=[];
+  chatMessages[chatTarget.id].push(msg);
+  input.value='';
+  renderChatMessages();
+  if(!OFFLINE){
+    const{data}=await sb.from('direct_messages').insert({from_id:cu.id,to_id:chatTarget.id,content:txt}).select('*').single();
+    if(data){const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===msg.id);if(idx>=0)chatMessages[chatTarget.id][idx]=data;}
+  }
+}
+
+function closeChatModal(){$('chat-modal').style.display='none';chatTarget=null;}
+
+function fmtTime(s){
+  if(!s)return'';
+  try{const d=new Date(s);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}catch{return'';}
+}
+
+// ══════════════════════════════════════════════════
 //  관리자
 // ══════════════════════════════════════════════════
 function renderAdmin(){renderPending();renderMembers();buildSchedPreview();renderAdminFeed();renderUploadSettings();updatePendingBadge();}
@@ -769,6 +862,11 @@ function openMemberModal(id){
     if(u.status==='pending'){act=`<button class="detail-btn promote" onclick="approveUser(${u.id});closeModalById('member-modal')">승인</button><button class="detail-btn reject-btn" onclick="rejectUser(${u.id});closeModalById('member-modal')">거절</button>`;}
     else{if(u.role==='employee')act+=`<button class="detail-btn promote" onclick="changeRole(${u.id},'admin');openMemberModal(${u.id})">관리자 지정</button>`;if(u.role==='admin')act+=`<button class="detail-btn demote" onclick="changeRole(${u.id},'employee');openMemberModal(${u.id})">직원으로 변경</button>`;if(u.role!=='superadmin')act+=`<button class="detail-btn reject-btn" onclick="if(confirm('삭제?')){removeUser(${u.id});closeModalById('member-modal')}">삭제</button>`;}
   }
+  // ★ 채팅 버튼 (자기 자신 제외)
+  const chatBtn = u.id!==cu.id
+    ? `<button class="detail-btn promote" style="background:#f0f5fd;color:#185FA5" onclick="closeModalById('member-modal');openChat(${u.id})">💬 메시지 보내기</button>`
+    : '';
+
   // ★ 메모 섹션: 관리자만 열람 가능
   const memoSection = isAdmin()
     ? `<div style="margin-top:10px">
@@ -794,6 +892,7 @@ function openMemberModal(id){
       <div class="detail-row"><span>생년월일</span><span>${u.birth}</span></div>
       <div class="detail-row"><span>가입일</span><span>${fmtDate(u.created_at)}</span></div>
     </div>
+    ${chatBtn}
     ${memoSection}`;
   $('member-modal').style.display='flex';
 }
