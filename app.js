@@ -99,7 +99,11 @@ async function doLoginWith(name, phone, birth, silent=false) {
     } else {
       const {data:ud}=await sb.from('app_users').select('*').eq('name',name).eq('phone',phone).eq('birth',birth).maybeSingle();
       user=ud;
-      if (user?.status==='approved') {cu = user; await loadAll();}
+      if (user?.status==='approved') {
+        // ★ cu를 먼저 설정한 후 loadAll() 호출 (notice_reads 조회 시 cu.id 필요)
+        cu = user;
+        await loadAll();
+      }
       else if (user?.status==='pending') await refreshSchedules();
     }
     if (!user){if(!silent)showErr($('l-err'),'이름, 연락처, 생년월일을 다시 확인해주세요.');return false;}

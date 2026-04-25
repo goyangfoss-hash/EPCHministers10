@@ -1,7 +1,13 @@
-const CACHE = 'ws-v10';
-const ASSETS = ['/', '/index.html', '/app.js', '/manifest.json'];
-self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
-self.addEventListener('fetch', e => { if (e.request.method !== 'GET') return; e.respondWith(caches.match(e.request).then(c => c || fetch(e.request))); });
-self.addEventListener('push', e => { const d = e.data?.json() || {}; e.waitUntil(self.registration.showNotification(d.title || '근무표 알림', { body: d.body || '새 알림', icon: '/icon-192.png', badge: '/icon-192.png', vibrate: [200, 100, 200], tag: d.tag || 'ws', renotify: true })); });
-self.addEventListener('notificationclick', e => { e.notification.close(); e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => { const c = cs.find(x => x.url.includes(self.location.origin)); return c ? c.focus() : clients.openWindow('/'); })); });
+// sw.js - 캐시 비활성화 버전
+// 서비스워커가 구버전을 캐시하는 문제를 방지하기 위해 캐시를 사용하지 않습니다.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+// 모든 요청을 네트워크에서 직접 가져옴 (캐시 사용 안 함)
+self.addEventListener('fetch', e => {
+  e.respondWith(fetch(e.request));
+});
