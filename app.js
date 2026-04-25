@@ -987,31 +987,37 @@ function clearExcel(){parsedExcel=null;$('upload-zone').style.display='block';$(
 async function applyExcelSchedule(){
   if(!parsedExcel)return;
   const{year,month,data}=parsedExcel;
+  const isMerge=$('merge-mode')?.checked;
 
-  // ★ 기존 데이터와 병합 (같은 달 두 파일 지원)
   if(!allSchedules[year]) allSchedules[year]={};
-  const existing=allSchedules[year][month]||{};
-  const merged={...existing};
 
-  Object.entries(data).forEach(([name,days])=>{
-    if(!merged[name]) merged[name]={};
-    Object.entries(days).forEach(([day,type])=>{
-      if(merged[name][day]){
-        // 같은 날 이미 근무 있으면 /로 합치기 (중복 제외)
-        if(!merged[name][day].includes(type))
-          merged[name][day]+='/'+type;
-      } else {
-        merged[name][day]=type;
-      }
+  let finalData;
+  if(isMerge){
+    // 병합 모드: 기존 데이터와 합치기
+    const existing=allSchedules[year][month]||{};
+    finalData={...existing};
+    Object.entries(data).forEach(([name,days])=>{
+      if(!finalData[name]) finalData[name]={};
+      Object.entries(days).forEach(([day,type])=>{
+        if(finalData[name][day]){
+          if(!finalData[name][day].includes(type))
+            finalData[name][day]+='/'+type;
+        } else {
+          finalData[name][day]=type;
+        }
+      });
     });
-  });
+  } else {
+    // 덮어쓰기 모드: 새 데이터로 완전 교체
+    finalData=data;
+  }
 
-  allSchedules[year][month]=merged;
+  allSchedules[year][month]=finalData;
   assignColors(collectAllTypes());filterType='';curY=year;curM=month-1;
 
   if(!OFFLINE){
     const{error}=await sb.from('schedules').upsert(
-      {year,month,data:merged,updated_by:cu.id,updated_at:new Date().toISOString()},
+      {year,month,data:finalData,updated_by:cu.id,updated_at:new Date().toISOString()},
       {onConflict:'year,month'}
     );
     if(error){showExcelErr('저장 오류: '+error.message);return;}
