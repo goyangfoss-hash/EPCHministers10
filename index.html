@@ -450,16 +450,6 @@
         <div style="margin-top:10px;padding:10px 13px;background:#f0f5fd;border-radius:10px;font-size:12px;color:#185FA5;line-height:1.7" id="parse-summary"></div>
         <button class="btn-admin" style="margin-top:10px" onclick="applyExcelSchedule()">이 근무표 저장 (전체 반영)</button>
         <button class="btn-admin secondary" style="margin-top:7px" onclick="clearExcel()">다시 선택</button>
-        <!-- 병합/덮어쓰기 선택 -->
-        <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 13px;background:#f8f8f4;border-radius:10px;border:1.5px solid #e8e8e0">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
-            <input type="checkbox" id="merge-mode" style="width:16px;height:16px;accent-color:#185FA5;cursor:pointer">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#1a1a18">기존 데이터와 병합</div>
-              <div style="font-size:11px;color:#aaa;margin-top:2px">체크: 두 번째 파일 추가 시 사용 (기존 근무 유지)<br>미체크: 수정본 업로드 시 사용 (기존 근무 완전 교체)</div>
-            </div>
-          </label>
-        </div>
         <div class="toast" id="excel-toast">근무표가 저장되었습니다. 모든 회원에게 즉시 반영됩니다.</div>
         <div class="toast err" id="excel-err-toast"></div>
       </div>
@@ -467,6 +457,10 @@
         <div class="list-section-title">저장된 월별 근무표</div>
         <div id="sched-form"><p class="empty-state">업로드된 근무표가 없습니다.</p></div>
       </div>
+    </div>
+    <div class="section-card">
+      <h3>근무표 업로드 안전장치 설정</h3>
+      <div id="upload-settings-ui"></div>
     </div>
     <div class="section-card">
       <h3>공지 등록</h3>

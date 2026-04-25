@@ -723,7 +723,39 @@ function renderMyFeed(){const mp=feedPosts.filter(p=>p.user_id===cu.id),el=$('fe
 // ══════════════════════════════════════════════════
 //  관리자
 // ══════════════════════════════════════════════════
-function renderAdmin(){renderPending();renderMembers();buildSchedPreview();renderAdminFeed();updatePendingBadge();}
+function renderAdmin(){renderPending();renderMembers();buildSchedPreview();renderAdminFeed();renderUploadSettings();updatePendingBadge();}
+
+function renderUploadSettings(){
+  const el=$('upload-settings-ui'); if(!el) return;
+  const s=getUploadSettings();
+  const confirmOn=s.confirmUpload!==false;
+  const undoOn=s.enableUndo!==false;
+  el.innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="alarm-setting-row">
+        <div>
+          <div style="font-size:13px;font-weight:600">저장 전 확인 팝업</div>
+          <div style="font-size:11px;color:#aaa;margin-top:2px">업로드 시 병합/덮어쓰기 내용을 확인창으로 보여줍니다</div>
+        </div>
+        <div class="toggle${confirmOn?' on':''}" onclick="toggleUploadSetting('confirmUpload')"></div>
+      </div>
+      <div class="alarm-setting-row" style="border-bottom:none">
+        <div>
+          <div style="font-size:13px;font-weight:600">저장 후 되돌리기 (30초)</div>
+          <div style="font-size:11px;color:#aaa;margin-top:2px">저장 완료 후 30초 내에 이전 상태로 복원할 수 있습니다</div>
+        </div>
+        <div class="toggle${undoOn?' on':''}" onclick="toggleUploadSetting('enableUndo')"></div>
+      </div>
+    </div>`;
+}
+
+function toggleUploadSetting(key){
+  const s=getUploadSettings();
+  s[key]=s[key]===false?true:false;
+  saveUploadSettings(s);
+  renderUploadSettings();
+  showToastMsg('설정이 저장되었습니다.');
+}
 function updatePendingBadge(){const cnt=(window._pending||[]).length;let b=$('btn-admin').querySelector('.nav-badge');if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-admin').appendChild(b);}b.textContent=cnt;}else b?.remove();}
 function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">근무표 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
 function renderMembers(){const el=$('member-list');if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}el.innerHTML=allMembers.map((u,i)=>{const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);const c=PALETTE[i%PALETTE.length];return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av" style="background:${c.bg};color:${c.text}">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name} <span class="role-tag">${rl}</span></div><div class="m-sub">연락처: ${u.phone} · 전체 ${total}건</div></div><svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;}).join('');}
@@ -951,7 +983,7 @@ function processExcelRows2(rows, fileName, sheetName){
   const names=Object.keys(result);
   if(!names.length){showExcelErr('근무자 데이터를 찾을 수 없습니다. 파일 형식을 확인해주세요.');return;}
 
-  parsedExcel={year,month,data:result};
+  parsedExcel={year,month,data:result,fileName};
   assignColors([...types]);
 
   // 미리보기
@@ -974,7 +1006,7 @@ function processExcelRows(rows,fileName,sheetName){
   const result={},types=new Set();
   rows.slice(1).forEach(row=>{if(!row||row.every(v=>v==null))return;const name=String(row[nameCol]||'').trim();if(!name)return;result[name]={};dateCols.forEach(({i,d})=>{const v=row[i];if(v==null||v==='')return;const t=String(v).trim();if(t){result[name][String(d)]=t;types.add(t);}});});
   const names=Object.keys(result);if(!names.length){showExcelErr('근무자 데이터를 찾을 수 없습니다.');return;}
-  parsedExcel={year,month,data:result};assignColors([...types]);
+  parsedExcel={year,month,data:result,fileName:fileName};assignColors([...types]);
   $('upload-zone').style.display='none';$('excel-preview').style.display='block';
   $('excel-info').textContent=`${year}년 ${month}월 · 근무자 ${names.length}명 · 유형 ${types.size}종`;
   let th='<tr><th>이름</th>';dateCols.forEach(({d})=>th+=`<th>${d}</th>`);th+='</tr>';
@@ -984,34 +1016,69 @@ function processExcelRows(rows,fileName,sheetName){
 }
 function showExcelErr(msg){clearExcel();const t=$('excel-err-toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',5000);}
 function clearExcel(){parsedExcel=null;$('upload-zone').style.display='block';$('excel-preview').style.display='none';$('excel-err-toast').style.display='none';}
+
+// 월별 업로드된 파일명 기록 (메모리)
+const uploadedFiles = {};
+// 되돌리기용 이전 데이터 저장
+let undoData = null;
+let undoTimer = null;
+
+// ★ 안전장치 설정 (localStorage 저장)
+function getUploadSettings(){
+  try { return JSON.parse(localStorage.getItem('ws_upload_settings')||'{}'); } catch { return {}; }
+}
+function saveUploadSettings(s){ localStorage.setItem('ws_upload_settings', JSON.stringify(s)); }
+
 async function applyExcelSchedule(){
   if(!parsedExcel)return;
-  const{year,month,data}=parsedExcel;
-  const isMerge=$('merge-mode')?.checked;
+  const{year,month,data,fileName}=parsedExcel;
+  const settings=getUploadSettings();
 
   if(!allSchedules[year]) allSchedules[year]={};
+  if(!uploadedFiles[year]) uploadedFiles[year]={};
+  if(!uploadedFiles[year][month]) uploadedFiles[year][month]=new Set();
+
+  const prevFiles=uploadedFiles[year][month];
+  const isFirstUpload=prevFiles.size===0;
+  const isSameFile=prevFiles.has(fileName);
+  const isMerge=!isFirstUpload&&!isSameFile;
+
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const existingNames=Object.keys(allSchedules[year]?.[month]||{});
+
+  // ★ 안전장치 1: 확인 팝업
+  if(settings.confirmUpload!==false){
+    const actionLabel=isMerge?'병합':'덮어쓰기';
+    const actionDesc=isMerge
+      ? `기존 ${MN[month]} 근무표에 추가됩니다.\n현재 등록된 근무자: ${existingNames.join(', ')||'없음'}`
+      : isSameFile
+        ? `기존 ${MN[month]} 근무표가 수정본으로 교체됩니다.`
+        : `${year}년 ${MN[month]} 근무표로 저장됩니다.`;
+    const confirmed=confirm(`[${actionLabel}] ${fileName}\n\n${actionDesc}\n\n계속하시겠습니까?`);
+    if(!confirmed) return;
+  }
+
+  // ★ 안전장치 2: 되돌리기용 이전 상태 저장
+  if(settings.enableUndo!==false){
+    undoData={year,month,data:JSON.parse(JSON.stringify(allSchedules[year]?.[month]||{})),files:new Set(prevFiles)};
+  }
 
   let finalData;
   if(isMerge){
-    // 병합 모드: 기존 데이터와 합치기
     const existing=allSchedules[year][month]||{};
     finalData={...existing};
     Object.entries(data).forEach(([name,days])=>{
       if(!finalData[name]) finalData[name]={};
       Object.entries(days).forEach(([day,type])=>{
-        if(finalData[name][day]){
-          if(!finalData[name][day].includes(type))
-            finalData[name][day]+='/'+type;
-        } else {
-          finalData[name][day]=type;
-        }
+        if(finalData[name][day]){if(!finalData[name][day].includes(type))finalData[name][day]+='/'+type;}
+        else{finalData[name][day]=type;}
       });
     });
   } else {
-    // 덮어쓰기 모드: 새 데이터로 완전 교체
     finalData=data;
   }
 
+  prevFiles.add(fileName);
   allSchedules[year][month]=finalData;
   assignColors(collectAllTypes());filterType='';curY=year;curM=month-1;
 
@@ -1023,7 +1090,49 @@ async function applyExcelSchedule(){
     if(error){showExcelErr('저장 오류: '+error.message);return;}
     await refreshSchedules();
   }
-  clearExcel();switchTab('cal',$('btn-cal'));renderCalendar();buildSchedPreview();toast('excel-toast');
+
+  clearExcel();switchTab('cal',$('btn-cal'));renderCalendar();buildSchedPreview();
+
+  // ★ 안전장치 2: 되돌리기 토스트
+  if(settings.enableUndo!==false && undoData){
+    showUndoToast(isMerge?`'${fileName}' 병합 완료`:isSameFile?`'${fileName}' 수정본 적용`:`${year}년 ${MN[month]} 근무표 저장 완료`);
+  } else {
+    toast('excel-toast');
+  }
+}
+
+function showUndoToast(msg){
+  if(undoTimer){clearTimeout(undoTimer);undoTimer=null;}
+  let el=$('undo-toast');
+  if(!el){
+    el=document.createElement('div');el.id='undo-toast';
+    el.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1c1c1a;color:#fff;padding:12px 16px;border-radius:14px;z-index:99;display:flex;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.3);white-space:nowrap;font-size:13px';
+    document.body.appendChild(el);
+  }
+  el.innerHTML=`<span>✅ ${esc(msg)}</span><button onclick="doUndo()" style="padding:5px 12px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">되돌리기</button><span id="undo-countdown" style="color:#aaa;font-size:11px">30</span>`;
+  el.style.display='flex';
+  let sec=30;
+  const tick=setInterval(()=>{sec--;const cd=$('undo-countdown');if(cd)cd.textContent=sec;if(sec<=0){clearInterval(tick);el.style.display='none';undoData=null;}},1000);
+  undoTimer=setTimeout(()=>{clearInterval(tick);el.style.display='none';undoData=null;},30000);
+}
+
+async function doUndo(){
+  if(!undoData){showToastMsg('되돌릴 데이터가 없습니다.');return;}
+  const{year,month,data,files}=undoData;
+  if(!confirm('이전 근무표로 되돌리시겠습니까?'))return;
+  if(!allSchedules[year])allSchedules[year]={};
+  allSchedules[year][month]=data;
+  if(uploadedFiles[year]?.[month]) uploadedFiles[year][month]=files;
+  assignColors(collectAllTypes());filterType='';
+  if(!OFFLINE){
+    await sb.from('schedules').upsert({year,month,data,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month'});
+    await refreshSchedules();
+  }
+  $('undo-toast').style.display='none';
+  if(undoTimer){clearTimeout(undoTimer);undoTimer=null;}
+  undoData=null;
+  renderCalendar();buildSchedPreview();
+  showToastMsg('이전 근무표로 되돌렸습니다.');
 }
 function buildSchedPreview(){
   const el=$('sched-form'),allMonths=[];Object.entries(allSchedules).forEach(([y,ym])=>Object.keys(ym).forEach(m=>allMonths.push({y:parseInt(y),m:parseInt(m)})));
