@@ -838,7 +838,110 @@ function dragOver(e){e.preventDefault();$('upload-zone').classList.add('drag');}
 function dragLeave(){$('upload-zone').classList.remove('drag');}
 function dropFile(e){e.preventDefault();$('upload-zone').classList.remove('drag');parseExcelFile(e.dataTransfer.files[0]);}
 function handleExcelFile(inp){const f=inp.files[0];if(f)parseExcelFile(f);inp.value='';}
-function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];processExcelRows(XLSX.utils.sheet_to_json(ws,{header:1,defval:null}),file.name,wb.SheetNames[0]);}catch(err){showExcelErr('파일 읽기 오류: '+err.message);}};reader.readAsArrayBuffer(file);}
+function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
+    const header=rows[0]||[];const hasNameCol=header.some(h=>h&&String(h).trim()==='이름');
+    if(hasNameCol){processExcelRows(rows,file.name,wb.SheetNames[0]);}
+    else{processExcelRows2(rows,file.name,wb.SheetNames[0]);}
+  }catch(err){showExcelErr('파일 읽기 오류: '+err.message);}};reader.readAsArrayBuffer(file);}
+
+// ★ 새 형식 파서: 날짜가 열, 이름이 셀값인 형식
+// 구조: 날짜행(5월 4일...) + 근무행(설교: 이름, 방송실: 이름...)
+function processExcelRows2(rows, fileName, sheetName){
+  // 연월 파싱
+  let year=curY, month=curM+1;
+  const ymM=(sheetName+' '+fileName).match(/(\d{4})[년\s_-]*(\d{1,2})[월]/);
+  if(ymM){year=parseInt(ymM[1]);month=parseInt(ymM[2]);}
+
+  // 날짜 파싱 헬퍼: "5월 4일" → 4
+  function parseDay(str){
+    if(!str) return null;
+    const m=String(str).match(/(\d{1,2})[월]\s*(\d{1,2})[일]/);
+    if(m) return parseInt(m[2]);
+    const m2=String(str).match(/(\d{1,2})[일]/);
+    if(m2) return parseInt(m2[1]);
+    return null;
+  }
+
+  // 이름 파싱: "안종훈\n(김동권)" → ["안종훈", "김동권"]
+  // 괄호 안은 부담당으로 포함
+  function parseNames(str){
+    if(!str) return [];
+    return String(str).split(/[\n,]+/).map(s=>{
+      // 괄호 제거: "(김동권)" → "김동권"
+      return s.replace(/[()（）]/g,'').trim();
+    }).filter(s=>s.length>0);
+  }
+
+  const result={};
+  const types=new Set();
+  let i=0;
+
+  while(i<rows.length){
+    const row=rows[i];
+    if(!row||row.every(v=>v==null)){i++;continue;}
+
+    // 날짜행 감지: 셀 중에 "X월 X일" 패턴이 있으면
+    const dateCols=[];
+    row.forEach((cell,colIdx)=>{
+      const day=parseDay(cell);
+      if(day) dateCols.push({colIdx,day});
+    });
+
+    if(dateCols.length>0){
+      // 날짜행 발견 → 다음 행들이 근무행
+      let j=i+1;
+      while(j<rows.length){
+        const shiftRow=rows[j];
+        if(!shiftRow||shiftRow.every(v=>v==null)){j++;break;}
+        // 첫 셀이 근무유형인지 확인
+        const shiftType=shiftRow[0]?String(shiftRow[0]).trim():'';
+        if(!shiftType){j++;break;}
+        // 날짜행이 다시 나오면 중단
+        const isDateRow=shiftRow.some(cell=>parseDay(cell)!==null);
+        if(isDateRow) break;
+
+        // 각 날짜 열에서 이름 추출
+        dateCols.forEach(({colIdx,day})=>{
+          const cell=shiftRow[colIdx];
+          const names=parseNames(cell);
+          names.forEach(name=>{
+            if(!name||name.length<2) return;
+            if(!result[name]) result[name]={};
+            const dayStr=String(day);
+            const typeLabel=`[새벽]${shiftType}`;
+            // 기존 값 있으면 /로 합치기
+            if(result[name][dayStr]){
+              if(!result[name][dayStr].includes(typeLabel))
+                result[name][dayStr]+='/'+typeLabel;
+            } else {
+              result[name][dayStr]=typeLabel;
+            }
+            types.add(typeLabel);
+          });
+        });
+        j++;
+      }
+      i=j;
+    } else {
+      i++;
+    }
+  }
+
+  const names=Object.keys(result);
+  if(!names.length){showExcelErr('근무자 데이터를 찾을 수 없습니다. 파일 형식을 확인해주세요.');return;}
+
+  parsedExcel={year,month,data:result};
+  assignColors([...types]);
+
+  // 미리보기
+  $('upload-zone').style.display='none';$('excel-preview').style.display='block';
+  $('excel-info').textContent=`${year}년 ${month}월 · 근무자 ${names.length}명 · 유형 ${types.size}종`;
+  const days=[...new Set(names.flatMap(n=>Object.keys(result[n]).map(Number)))].sort((a,b)=>a-b);
+  let th='<tr><th>이름</th>';days.forEach(d=>th+=`<th>${d}</th>`);th+='</tr>';
+  const tb=names.map(name=>{const dd=result[name];let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap">${name}</td>`;days.forEach(d=>{const v=dd[String(d)]||'';const c=v?tc(v.split('/')[0]):null;r+=`<td ${c?`style="background:${c.bg};color:${c.text};font-weight:600"`:''} title="${v}">${v?v.replace(/[\[\]]/g,'').slice(0,6):''}</td>`;});return r+'</tr>';}).join('');
+  $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
+  $('parse-summary').innerHTML=`<b>근무자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...types].map(t=>{const c=tc(t);return`<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
+}
 function processExcelRows(rows,fileName,sheetName){
   if(!rows||rows.length<2){showExcelErr('데이터가 없습니다.');return;}
   let year=curY,month=curM+1;
@@ -861,10 +964,38 @@ function processExcelRows(rows,fileName,sheetName){
 function showExcelErr(msg){clearExcel();const t=$('excel-err-toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',5000);}
 function clearExcel(){parsedExcel=null;$('upload-zone').style.display='block';$('excel-preview').style.display='none';$('excel-err-toast').style.display='none';}
 async function applyExcelSchedule(){
-  if(!parsedExcel)return;const{year,month,data}=parsedExcel;
-  if(!allSchedules[year])allSchedules[year]={};allSchedules[year][month]=data;
+  if(!parsedExcel)return;
+  const{year,month,data}=parsedExcel;
+
+  // ★ 기존 데이터와 병합 (같은 달 두 파일 지원)
+  if(!allSchedules[year]) allSchedules[year]={};
+  const existing=allSchedules[year][month]||{};
+  const merged={...existing};
+
+  Object.entries(data).forEach(([name,days])=>{
+    if(!merged[name]) merged[name]={};
+    Object.entries(days).forEach(([day,type])=>{
+      if(merged[name][day]){
+        // 같은 날 이미 근무 있으면 /로 합치기 (중복 제외)
+        if(!merged[name][day].includes(type))
+          merged[name][day]+='/'+type;
+      } else {
+        merged[name][day]=type;
+      }
+    });
+  });
+
+  allSchedules[year][month]=merged;
   assignColors(collectAllTypes());filterType='';curY=year;curM=month-1;
-  if(!OFFLINE){const{error}=await sb.from('schedules').upsert({year,month,data,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month'});if(error){showExcelErr('저장 오류: '+error.message);return;}await refreshSchedules();}
+
+  if(!OFFLINE){
+    const{error}=await sb.from('schedules').upsert(
+      {year,month,data:merged,updated_by:cu.id,updated_at:new Date().toISOString()},
+      {onConflict:'year,month'}
+    );
+    if(error){showExcelErr('저장 오류: '+error.message);return;}
+    await refreshSchedules();
+  }
   clearExcel();switchTab('cal',$('btn-cal'));renderCalendar();buildSchedPreview();toast('excel-toast');
 }
 function buildSchedPreview(){
