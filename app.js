@@ -169,6 +169,7 @@ function enterApp() {
   $('btn-admin').style.display=isAdmin()?'flex':'none';
   assignColors(collectAllTypes()); renderCalendar(); renderNotices(); updateAlarmBadge();
   if(isAdmin()) renderAdmin();
+  updateFeedBadge();
   startRealtime();
   if(!OFFLINE){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>refreshSchedules(),5*60*1000);}
   scheduleLocalAlarms();
@@ -218,10 +219,21 @@ function startRealtime() {
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'feed_posts'},payload=>{
       const idx=feedPosts.findIndex(p=>p.id===payload.new.id);
-      if(idx>=0)feedPosts[idx]={...feedPosts[idx],...payload.new};
-      if($('tab-feed')?.style.display!=='none')renderMyFeed();
-      if(isAdmin()&&$('tab-admin')?.style.display!=='none')renderAdminFeed();
-      if(payload.new.admin_reply&&payload.new.user_id===cu.id)pushNotify('관리자 답변 도착',payload.new.admin_reply);
+      if(idx>=0){
+        const wasReplied=feedPosts[idx].admin_reply;
+        feedPosts[idx]={...feedPosts[idx],...payload.new};
+        // ★ 새 답변이 달렸으면 reply_read=false로 설정 (이용자에게 배지 표시)
+        if(!wasReplied&&payload.new.admin_reply&&payload.new.user_id===cu.id){
+          feedPosts[idx].reply_read=false;
+        }
+      }
+      if($('tab-feed')?.style.display!=='none') renderMyFeed();
+      if(isAdmin()&&$('tab-admin')?.style.display!=='none') renderAdminFeed();
+      // ★ 이용자에게 배지 업데이트
+      if(payload.new.admin_reply&&payload.new.user_id===cu.id){
+        updateFeedBadge();
+        pushNotify('관리자 답변 도착',payload.new.admin_reply);
+      }
     })
     .subscribe(s=>console.log('[RT]',s));
 
@@ -426,7 +438,7 @@ function switchTab(tab,btn){
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
-  if(tab==='feed')renderMyFeed();
+  if(tab==='feed'){renderMyFeed();updateFeedBadge();}
   if(tab==='admin')renderAdmin();
   $('alarm-panel').style.display='none';
 }
@@ -745,15 +757,43 @@ async function deleteNotice(id){
 //  피드
 // ══════════════════════════════════════════════════
 async function submitFeed(){const txt=$('feed-input').value.trim();const errEl=$('feed-err'),okEl=$('feed-ok');errEl.style.display='none';okEl.style.display='none';if(!txt)return showErr(errEl,'내용을 입력해주세요.');const post={id:Date.now(),user_id:cu.id,author_name:cu.name,content:txt,admin_reply:null,created_at:new Date().toISOString()};if(!OFFLINE){const{data}=await sb.from('feed_posts').insert({user_id:cu.id,content:txt,is_private:true}).select('*').single();if(data){post.id=data.id;post.created_at=data.created_at;}}feedPosts.unshift(post);$('feed-input').value='';okEl.textContent='전송되었습니다.';okEl.style.display='block';setTimeout(()=>okEl.style.display='none',3000);renderMyFeed();}
-function renderMyFeed(){const mp=feedPosts.filter(p=>p.user_id===cu.id),el=$('feed-list');if(!mp.length){el.innerHTML='<p class="empty-state">전송된 피드가 없습니다.</p>';return;}el.innerHTML=mp.map(p=>`<div class="feed-card"><div class="feed-content">${esc(p.content)}</div><div class="feed-time">${fmtDate(p.created_at)}</div>${p.admin_reply?`<div class="feed-reply"><div class="feed-reply-label">관리자 답변</div>${esc(p.admin_reply)}</div>`:`<div class="feed-pending">답변 대기 중...</div>`}</div>`).join('');}
+function renderMyFeed(){
+  const mp=feedPosts.filter(p=>p.user_id===cu.id);
+  const el=$('feed-list');
+  if(!mp.length){el.innerHTML='<p class="empty-state">전송된 피드가 없습니다.</p>';return;}
+  el.innerHTML=mp.map(p=>`
+    <div class="feed-card${p.admin_reply&&!p.reply_read?' feed-card-new':''}">
+      <div class="feed-content">${esc(p.content)}</div>
+      <div class="feed-time">${fmtDate(p.created_at)}</div>
+      ${p.admin_reply
+        ? `<div class="feed-reply" onclick="markReplyRead(${p.id})">
+            <div class="feed-reply-label">관리자 답변 ${!p.reply_read?'<span class="new-badge" style="font-size:9px;padding:1px 5px;margin-left:4px">NEW</span>':''}</div>
+            ${esc(p.admin_reply)}
+           </div>`
+        : `<div class="feed-pending">답변 대기 중...</div>`}
+    </div>`).join('');
+}
 
-// ══════════════════════════════════════════════════
-//  1:1 채팅 (DM)
-// ══════════════════════════════════════════════════
+function markReplyRead(postId){
+  const p=feedPosts.find(x=>x.id===postId); if(!p||p.reply_read) return;
+  p.reply_read=true;
+  updateFeedBadge();
+  renderMyFeed();
+}
+
+function updateFeedBadge(){
+  // 읽지 않은 관리자 답변 수
+  const myPosts=feedPosts.filter(p=>p.user_id===cu.id);
+  const unread=myPosts.filter(p=>p.admin_reply&&!p.reply_read).length;
+  const btn=$('btn-feed');
+  let b=btn?.querySelector('.feed-badge');
+  if(unread>0){if(!b){b=document.createElement('div');b.className='nav-badge feed-badge';btn?.appendChild(b);}b.textContent=unread;}
+  else b?.remove();
+}
+
 function updateDmBadge(){
   const cnt=Object.values(chatMessages).flat().filter(m=>m.to_id===cu.id&&!m.is_read).length;
   dmUnreadCount=cnt;
-  // 소통 탭 뱃지 (관리자), 또는 별도 뱃지
   const btn=$('btn-feed');
   let b=btn?.querySelector('.dm-badge');
   if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge dm-badge';btn?.appendChild(b);}b.textContent=cnt;}
