@@ -862,14 +862,35 @@ function processExcelRows2(rows, fileName, sheetName){
     return null;
   }
 
-  // 이름 파싱: "안종훈\n(김동권)" → ["안종훈", "김동권"]
-  // 괄호 안은 부담당으로 포함
+  // 이름 파싱: "안종훈\n(김동권)" → 메인: "안종훈", 백업: "김동권"
   function parseNames(str){
     if(!str) return [];
-    return String(str).split(/[\n,]+/).map(s=>{
-      // 괄호 제거: "(김동권)" → "김동권"
-      return s.replace(/[()（）]/g,'').trim();
-    }).filter(s=>s.length>0);
+    const s = String(str).trim();
+    const results = [];
+    // \n 으로 분리
+    const parts = s.split(/\n/);
+    parts.forEach(part => {
+      part = part.trim();
+      if(!part) return;
+      // 괄호 안에 있으면 백업
+      const backupMatch = part.match(/^[（(](.+)[)）]$/);
+      if(backupMatch){
+        const name = backupMatch[1].trim();
+        if(name) results.push({name, isBackup: true});
+      } else {
+        // 괄호가 포함된 경우: "안종훈(김동권)"
+        const inlineBackup = part.match(/^([^（(]+)[（(]([^)）]+)[)）]$/);
+        if(inlineBackup){
+          const main = inlineBackup[1].trim();
+          const backup = inlineBackup[2].trim();
+          if(main) results.push({name: main, isBackup: false});
+          if(backup) results.push({name: backup, isBackup: true});
+        } else {
+          results.push({name: part, isBackup: false});
+        }
+      }
+    });
+    return results.filter(r => r.name.length >= 2);
   }
 
   const result={};
@@ -903,12 +924,12 @@ function processExcelRows2(rows, fileName, sheetName){
         // 각 날짜 열에서 이름 추출
         dateCols.forEach(({colIdx,day})=>{
           const cell=shiftRow[colIdx];
-          const names=parseNames(cell);
-          names.forEach(name=>{
+          const persons=parseNames(cell);
+          persons.forEach(({name,isBackup})=>{
             if(!name||name.length<2) return;
             if(!result[name]) result[name]={};
             const dayStr=String(day);
-            const typeLabel=`[새벽]${shiftType}`;
+            const typeLabel=isBackup?`[새벽]${shiftType}(백업)`:`[새벽]${shiftType}`;
             // 기존 값 있으면 /로 합치기
             if(result[name][dayStr]){
               if(!result[name][dayStr].includes(typeLabel))
