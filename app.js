@@ -841,7 +841,9 @@ function handleExcelFile(inp){const f=inp.files[0];if(f)parseExcelFile(f);inp.va
 function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];processExcelRows(XLSX.utils.sheet_to_json(ws,{header:1,defval:null}),file.name,wb.SheetNames[0]);}catch(err){showExcelErr('파일 읽기 오류: '+err.message);}};reader.readAsArrayBuffer(file);}
 function processExcelRows(rows,fileName,sheetName){
   if(!rows||rows.length<2){showExcelErr('데이터가 없습니다.');return;}
-  let year=curY,month=curM+1;const ymM=(sheetName+' '+fileName).match(/(\d{4})[년\s_-]*(\d{1,2})[월\s_-]/);if(ymM){year=parseInt(ymM[1]);month=parseInt(ymM[2]);}
+  let year=curY,month=curM+1;
+  const ymM=(sheetName+' '+fileName).match(/(\d{4})[년\s_-]*(\d{1,2})[월]/);
+  if(ymM){year=parseInt(ymM[1]);month=parseInt(ymM[2]);}
   const header=rows[0],nameCol=header.findIndex(h=>h&&String(h).trim()==='이름');if(nameCol<0){showExcelErr('"이름" 열을 찾을 수 없습니다.');return;}
   const dateCols=[];header.forEach((h,i)=>{if(i===nameCol||h==null)return;const m=String(h).match(/^(\d{1,2})/);if(m){const d=parseInt(m[1]);if(d>=1&&d<=31)dateCols.push({i,d});}});
   if(!dateCols.length){showExcelErr('날짜 열을 찾을 수 없습니다.');return;}
