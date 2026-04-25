@@ -929,7 +929,7 @@ function processExcelRows2(rows, fileName, sheetName){
             if(!name||name.length<2) return;
             if(!result[name]) result[name]={};
             const dayStr=String(day);
-            const typeLabel=isBackup?`[새벽]${shiftType}(백업)`:`[새벽]${shiftType}`;
+            const typeLabel=isBackup?`[백업]${shiftType}`:`[새벽]${shiftType}`;
             // 기존 값 있으면 /로 합치기
             if(result[name][dayStr]){
               if(!result[name][dayStr].includes(typeLabel))
