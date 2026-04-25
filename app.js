@@ -249,7 +249,7 @@ function startRealtime() {
       if(chatTarget?.id===otherId) renderChatMessages();
       // 내가 받은 메시지면 뱃지
       if(m.to_id===cu.id){
-        updateDmBadge();
+        updateDmBadge(); // 이미 renderDmInbox 포함됨
         const sender=allMembers.find(u=>u.id===m.from_id);
         pushNotify(`${sender?.name||'누군가'}님의 메시지`,m.content);
       }
@@ -438,7 +438,7 @@ function switchTab(tab,btn){
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
-  if(tab==='feed'){renderMyFeed();updateFeedBadge();}
+  if(tab==='feed'){renderDmInbox();renderMyFeed();updateFeedBadge();}
   if(tab==='admin')renderAdmin();
   $('alarm-panel').style.display='none';
 }
@@ -798,6 +798,39 @@ function updateDmBadge(){
   let b=btn?.querySelector('.dm-badge');
   if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge dm-badge';btn?.appendChild(b);}b.textContent=cnt;}
   else b?.remove();
+  // 소통 탭이 열려있으면 인박스도 갱신
+  if($('tab-feed')?.style.display!=='none') renderDmInbox();
+}
+
+// ★ 받은 메시지 인박스 (소통 탭 상단)
+function renderDmInbox(){
+  const el=$('dm-inbox'); if(!el) return;
+  // 나에게 온 메시지가 있는 대화 상대 목록
+  const senders=new Set();
+  Object.entries(chatMessages).forEach(([uid,msgs])=>{
+    if(msgs.some(m=>m.to_id===cu.id)) senders.add(parseInt(uid));
+  });
+  if(!senders.size){ el.innerHTML=''; return; }
+
+  let html='<div class="list-section-title">받은 메시지</div>';
+  [...senders].forEach(uid=>{
+    const msgs=chatMessages[uid]||[];
+    const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+    const last=msgs[msgs.length-1];
+    const sender=allMembers.find(u=>u.id===uid);
+    if(!sender) return;
+    html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${uid})" style="display:flex;align-items:center;gap:12px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0">${sender.name[0]}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+          <span style="font-size:14px;font-weight:700">${sender.name}</span>
+          ${unread?`<span class="cnt-badge">${unread}</span>`:''}
+        </div>
+        <div style="font-size:12px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(last?.content||'')}</div>
+      </div>
+    </div>`;
+  });
+  el.innerHTML=html;
 }
 
 function openChat(userId){
