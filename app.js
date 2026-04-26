@@ -289,7 +289,7 @@ function startRealtime() {
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'notices'},payload=>{
       const n={...payload.new,is_unread:true};
-      if(!notices.find(x=>x.id===n.id)){notices.unshift(n);renderNotices();updateNoticeBadge();pushNotify(`새 공지: ${n.title}`,n.body);}
+      if(!notices.find(x=>x.id===n.id)){notices.unshift(n);renderNotices();updateNoticeBadge();pushNotify(`새 공지: ${n.title}`,n.body,'notice');}
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'feed_posts'},payload=>{
       const idx=feedPosts.findIndex(p=>p.id===payload.new.id);
@@ -323,13 +323,16 @@ function startRealtime() {
       if(chatTarget?.id===otherId) renderChatMessages();
       // 내가 받은 메시지면 뱃지
       if(m.to_id===cu.id){
-        updateDmBadge(); // 이미 renderDmInbox 포함됨
+        updateDmBadge();
         const sender=allMembers.find(u=>u.id===m.from_id);
-        pushNotify(`${sender?.name||'누군가'}님의 메시지`,m.content);
+        pushNotify(`${sender?.name||'누군가'}님의 메시지`,m.content,'chat');
       }
     }).subscribe();
 }
-function pushNotify(title,body){if(!('Notification'in window)||Notification.permission!=='granted')return;try{new Notification(title,{body,icon:'icon-192.png'});}catch{}}
+function pushNotify(title, body, type=''){
+  if(!canNotify(type)) return;
+  try{ new Notification(title,{body,icon:'icon-192.png'}); }catch{}
+}
 
 // ── 기기 알림 권한 배너 ───────────────────────────
 function checkNotifPermission(){
@@ -422,7 +425,7 @@ function scheduleLocalAlarms(){
     const[h,m]=(alarm.alarmTime||'09:00').split(':').map(Number);
     const alarmDt=new Date(curY,curM,d-1,h,m,0);
     const ms=alarmDt-now;
-    if(ms>0&&ms<24*60*60*1000) setTimeout(()=>pushNotify(`내일 근무 알림 (${type})`,`${curY}년 ${curM+1}월 ${d}일 근무가 내일입니다.`),ms);
+    if(ms>0&&ms<24*60*60*1000) setTimeout(()=>pushNotify(`내일 근무 알림 (${type})`,`${curY}년 ${curM+1}월 ${d}일 근무가 내일입니다.`,'shift'),ms);
   });
 }
 
@@ -913,34 +916,99 @@ function toggleSettingsPanel(){
   }
 }
 
+// 알림 설정 (localStorage)
+function getNotifSettings(){
+  try{ return JSON.parse(localStorage.getItem('ws_notif_settings')||'{}'); }catch{ return {}; }
+}
+function saveNotifSettings(s){ localStorage.setItem('ws_notif_settings', JSON.stringify(s)); }
+
+// ★ 알림 전송 전 설정 확인 헬퍼
+function canNotify(type){
+  // 배지는 항상 허용 — 이 함수는 소리/배너 알림 여부만 제어
+  if(!('Notification' in window)||Notification.permission!=='granted') return false;
+  const s=getNotifSettings();
+  if(s.masterOff) return false; // 마스터 OFF
+  if(type==='notice' && s.noticeOff) return false;
+  if(type==='chat'   && s.chatOff)   return false;
+  if(type==='shift'  && s.shiftOff)  return false;
+  return true;
+}
+
 function renderSettingsPanel(){
   const el=$('settings-panel-body'); if(!el) return;
   const notifGranted='Notification' in window && Notification.permission==='granted';
   const keepLogin=localStorage.getItem('ws_session')!==null;
+  const s=getNotifSettings();
+  const masterOn=notifGranted && !s.masterOff;
+
   el.innerHTML=`
+    <!-- 기기 알림 마스터 -->
     <div class="settings-item">
       <div class="settings-item-left">
-        <div class="settings-item-title">기기 알림</div>
-        <div class="settings-item-desc">${notifGranted?'허용됨 — 공지·채팅 알림을 받습니다':'미허용 — 아래 버튼으로 허용하세요'}</div>
+        <div class="settings-item-title">기기 알림 허용</div>
+        <div class="settings-item-desc">${notifGranted?'근무·공지·채팅 소리/배너 알림':'먼저 허용하기를 눌러주세요'}</div>
       </div>
       ${notifGranted
-        ? `<span style="font-size:12px;color:#16a34a;font-weight:600">✅ 허용됨</span>`
+        ? `<div class="toggle${masterOn?' on':''}" onclick="toggleNotifMaster(this)"></div>`
         : `<button onclick="requestNotifPermission()" style="padding:7px 14px;background:#185FA5;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">허용하기</button>`}
     </div>
-    <div class="settings-item">
+    <!-- 세부 알림 (마스터 ON일 때만 활성화) -->
+    <div style="opacity:${masterOn?1:0.35};pointer-events:${masterOn?'auto':'none'}">
+      <div class="settings-item">
+        <div class="settings-item-left">
+          <div class="settings-item-title">근무 알림</div>
+          <div class="settings-item-desc">근무 전날 알림</div>
+        </div>
+        <div class="toggle${!s.shiftOff?' on':''}" onclick="toggleNotifSetting('shiftOff',this)"></div>
+      </div>
+      <div class="settings-item">
+        <div class="settings-item-left">
+          <div class="settings-item-title">공지 알림</div>
+          <div class="settings-item-desc">새 공지 등록 시 알림</div>
+        </div>
+        <div class="toggle${!s.noticeOff?' on':''}" onclick="toggleNotifSetting('noticeOff',this)"></div>
+      </div>
+      <div class="settings-item">
+        <div class="settings-item-left">
+          <div class="settings-item-title">채팅 알림</div>
+          <div class="settings-item-desc">새 메시지 수신 시 알림</div>
+        </div>
+        <div class="toggle${!s.chatOff?' on':''}" onclick="toggleNotifSetting('chatOff',this)"></div>
+      </div>
+    </div>
+    <!-- 로그인 유지 -->
+    <div class="settings-item" style="border-top:4px solid #f5f5f0">
       <div class="settings-item-left">
         <div class="settings-item-title">로그인 유지</div>
         <div class="settings-item-desc">로그아웃 전까지 자동 로그인</div>
       </div>
       <div class="toggle${keepLogin?' on':''}" onclick="toggleKeepLogin(this)"></div>
     </div>
+    <!-- 앱 버전 -->
     <div class="settings-item">
       <div class="settings-item-left">
         <div class="settings-item-title">앱 버전</div>
-        <div class="settings-item-desc">은평교회 교역자 사역스케줄러 v10</div>
+        <div class="settings-item-desc">은평교회 교역자 사역스케줄러</div>
       </div>
       <span style="font-size:12px;color:#bbb">v10.0</span>
     </div>`;
+}
+
+function toggleNotifMaster(el){
+  const s=getNotifSettings();
+  s.masterOff=!s.masterOff;
+  saveNotifSettings(s);
+  el.classList.toggle('on', !s.masterOff);
+  renderSettingsPanel();
+  showToastMsg(s.masterOff?'기기 알림이 꺼졌습니다':'기기 알림이 켜졌습니다');
+}
+
+function toggleNotifSetting(key, el){
+  const s=getNotifSettings();
+  s[key]=!s[key];
+  saveNotifSettings(s);
+  el.classList.toggle('on', !s[key]);
+  showToastMsg('설정이 저장되었습니다.');
 }
 
 function toggleKeepLogin(toggleEl){
@@ -1102,7 +1170,13 @@ async function sendDm(){
   dmSending = false;
 }
 
-function closeChatModal(){$('chat-modal').style.display='none';chatTarget=null;}
+function closeChatModal(){
+  $('chat-modal').style.display='none';
+  chatTarget=null;
+  // ★ 채팅창 닫을 때 소통 탭 목록 갱신 → 배지 사라짐
+  if($('tab-feed')?.style.display!=='none') renderFeedTab();
+  updateFeedBadge();
+}
 
 function fmtTime(s){
   if(!s)return'';
