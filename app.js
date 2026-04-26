@@ -832,13 +832,18 @@ function openChat(userId){
   const user=allMembers.find(u=>u.id===userId);
   if(!user) return;
   chatTarget=user;
-  // ★ 읽음 처리
+  // ★ 로컬 읽음 처리
   const msgs=chatMessages[userId]||[];
-  msgs.filter(m=>m.to_id===cu.id&&!m.is_read).forEach(m=>{
-    m.is_read=true;
-    if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
-  });
-  // ★ 배지 즉시 갱신
+  const unreadIds=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).map(m=>m.id);
+  msgs.forEach(m=>{if(m.to_id===cu.id)m.is_read=true;});
+  // ★ DB 한 번에 업데이트
+  if(!OFFLINE&&unreadIds.length>0){
+    sb.from('direct_messages')
+      .update({is_read:true})
+      .eq('to_id',cu.id)
+      .eq('from_id',userId)
+      .then(({error})=>{if(error)console.warn('DM read error:',error.message);});
+  }
   updateFeedBadge();
   $('chat-target-name').textContent=user.name;
   $('chat-modal').style.display='flex';
@@ -1351,6 +1356,8 @@ function openProfileModal(){
   const modal=$('profile-modal'); if(!modal) return;
   const img=$('profile-modal-img');
   const txt=$('profile-modal-txt');
+  const nameEl=$('profile-modal-name');
+  if(nameEl) nameEl.textContent=cu.name;
   if(cu.avatar){
     img.src=cu.avatar; img.style.display='block';
     txt.style.display='none';
