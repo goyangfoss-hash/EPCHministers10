@@ -185,8 +185,70 @@ function enterApp() {
   startRealtime();
   if(!OFFLINE){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>refreshSchedules(),5*60*1000);}
   scheduleLocalAlarms();
-  checkNotifPermission(); // ★ 기기 알림 권한 배너
+  checkNotifPermission();
   if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  // ★ FCM 토큰 등록 (푸시 알림)
+  initFCM();
+}
+
+// ══════════════════════════════════════════════════
+//  FCM 푸시 알림
+// ══════════════════════════════════════════════════
+const FCM_VAPID_KEY = 'BG-F2TKvkvGtQiYXLfhxPDazbmOYr-A-E4EyzE6waA5lczTpUCrMcp02Ei7R_gqb_UbEtsYbxXIcDnOS8FxsreA';
+
+async function initFCM(){
+  if(OFFLINE||!('serviceWorker' in navigator)) return;
+  try {
+    // Firebase 스크립트 동적 로드
+    if(!window.firebase){
+      await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+      window.firebase.initializeApp({
+        apiKey: "AIzaSyAQLc0H_AoD7E2JF8Tji3ZgMWAiJxQ2SPY",
+        authDomain: "epchminister.firebaseapp.com",
+        projectId: "epchminister",
+        storageBucket: "epchminister.firebasestorage.app",
+        messagingSenderId: "110307544897",
+        appId: "1:110307544897:web:12e73220454bba67aedbc0"
+      });
+    }
+    const messaging = window.firebase.messaging();
+    // 알림 권한 확인
+    if(Notification.permission !== 'granted') return;
+    // FCM 토큰 발급
+    const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY });
+    if(token) await saveFCMToken(token);
+    // 포그라운드 메시지 수신
+    messaging.onMessage(payload=>{
+      const {title, body} = payload.notification || {};
+      if(title) showToastMsg(`🔔 ${title}: ${body||''}`);
+    });
+  } catch(e){ console.warn('FCM init error:', e.message); }
+}
+
+function loadScript(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[src="${src}"]`)){resolve();return;}
+    const s=document.createElement('script');
+    s.src=src; s.onload=resolve; s.onerror=reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function saveFCMToken(token){
+  try {
+    await sb.from('fcm_tokens').upsert({user_id:cu.id, token}, {onConflict:'user_id,token'});
+  } catch(e){ console.warn('FCM token save error:', e.message); }
+}
+
+// ★ 푸시 알림 전송 (Edge Function 호출)
+async function sendPushToUsers(userIds, title, body){
+  if(OFFLINE||!userIds?.length) return;
+  try {
+    await sb.functions.invoke('send-push', {
+      body: { user_ids: userIds, title, body }
+    });
+  } catch(e){ console.warn('Push send error:', e.message); }
 }
 
 // ══════════════════════════════════════════════════
@@ -781,6 +843,8 @@ function updateNoticeBadge(){
   let b=$('btn-notice').querySelector('.nav-badge');
   if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-notice').appendChild(b);}b.textContent=cnt;}
   else b?.remove();
+  updateAppBadge();
+}
 }
 
 // ★ 공지 탭 진입 시 모두 읽음 처리 (clearNoticeBadge 개선)
@@ -872,11 +936,22 @@ function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 function updateFeedBadge(){
   const cnt=Object.values(chatMessages).flat().filter(m=>m.to_id===cu.id&&!m.is_read).length;
   const btn=$('btn-feed');
-  // 기존 배지 모두 제거 후 재생성
   btn?.querySelectorAll('.nav-badge').forEach(b=>b.remove());
   if(cnt>0){const b=document.createElement('div');b.className='nav-badge';btn?.appendChild(b);b.textContent=cnt;}
+  updateAppBadge();
 }
 function updateDmBadge(){updateFeedBadge();}
+
+// ★ 앱 아이콘 배지
+function updateAppBadge(){
+  if(!cu) return;
+  const dmCnt=Object.values(chatMessages).flat().filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  const noticeCnt=notices.filter(n=>n.is_unread).length;
+  const total=dmCnt+noticeCnt;
+  if('setAppBadge' in navigator){
+    total>0 ? navigator.setAppBadge(total).catch(()=>{}) : navigator.clearAppBadge().catch(()=>{});
+  }
+}
 // 하위 호환용 (관리자 탭에서 renderAdminFeed 호출 방지)
 function renderMyFeed(){}
 function renderAdminFeed(){}
@@ -933,7 +1008,12 @@ async function sendDm(){
   renderChatMessages();
   if(!OFFLINE){
     const{data}=await sb.from('direct_messages').insert({from_id:cu.id,to_id:chatTarget.id,content:txt}).select('*').single();
-    if(data){const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===msg.id);if(idx>=0)chatMessages[chatTarget.id][idx]=data;}
+    if(data){
+      const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===msg.id);
+      if(idx>=0)chatMessages[chatTarget.id][idx]=data;
+      // ★ 상대방에게 푸시 알림
+      sendPushToUsers([chatTarget.id], `💬 ${cu.name}`, txt);
+    }
   }
   dmSending = false;
 }
@@ -1079,15 +1159,17 @@ async function deleteReply(postId){
 async function postNotice(){
   const title=val('n-title'),body=val('n-body');
   if(!title||!body) return;
-  const n={id:Date.now(),title,body,created_at:new Date().toISOString(),is_unread:false}; // 관리자 본인은 읽음
+  const n={id:Date.now(),title,body,created_at:new Date().toISOString(),is_unread:false};
   if(!OFFLINE){
     const{data}=await sb.from('notices').insert({title,body,created_by:cu.id}).select('*').single();
     if(data){
       n.id=data.id; n.created_at=data.created_at;
-      // 관리자 본인 읽음 처리
       await sb.from('notice_reads').upsert({notice_id:n.id, user_id:cu.id});
+      // ★ 모든 이용자에게 푸시 알림
+      const userIds=allMembers.filter(u=>u.id!==cu.id).map(u=>u.id);
+      sendPushToUsers(userIds, `📢 새 공지: ${title}`, body);
     }
-  }
+  } else { notices.unshift(n); renderNotices(); }
   notices.unshift(n);
   renderNotices();
   $('n-title').value=''; $('n-body').value='';
