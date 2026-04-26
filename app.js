@@ -845,9 +845,8 @@ function updateNoticeBadge(){
   else b?.remove();
   updateAppBadge();
 }
-}
 
-// ★ 공지 탭 진입 시 모두 읽음 처리 (clearNoticeBadge 개선)
+// ★ 공지 탭 진입 시 모두 읽음 처리
 function clearNoticeBadge(){
   const unread = notices.filter(n => n.is_unread);
   if (!unread.length) return;
