@@ -366,31 +366,63 @@ function scheduleLocalAlarms(){
 
 function toggleAlarmPanel(){
   const panel=$('alarm-panel');if(!panel)return;
-  panel.style.display=panel.style.display==='none'?'block':'none';
-  if(panel.style.display==='block') renderAlarmPanel();
+  const isOpen=panel.style.display!=='none';
+  if(isOpen){
+    panel.style.display='none';
+    $('alarm-overlay')?.remove();
+  } else {
+    panel.style.display='block';
+    renderAlarmPanel();
+    // ★ 오버레이 추가 — 다른 요소 탭 방지
+    const ov=document.createElement('div');
+    ov.id='alarm-overlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:24;background:transparent';
+    ov.onclick=()=>{panel.style.display='none';ov.remove();};
+    document.body.appendChild(ov);
+    // 패널이 오버레이 위에 오도록
+    panel.style.zIndex='25';
+  }
 }
 
 function renderAlarmPanel(){
   const el=$('alarm-panel-list');
-  const myD=curData()[cu.name]||{};
-  const days=Object.keys(myD).map(Number).sort((a,b)=>a-b);
   const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const DN=['일','월','화','수','목','금','토'];
-  if(!days.length){el.innerHTML='<p style="font-size:13px;color:#bbb;padding:16px;text-align:center">이번 달 근무일이 없습니다</p>';return;}
-  el.innerHTML=days.map(d=>{
-    const type=myD[String(d)]||'',c=type?tc(type):null,alarm=getAlarm(curY,curM+1,d);
-    const dow=new Date(curY,curM,d).getDay();
-    return`<div class="alarm-item" onclick="openDayModal(${d});toggleAlarmPanel()">
+
+  // ★ 알림 설정된 근무만 표시 (전체 저장된 알람에서 alarm=true인 것)
+  const alarmDays=[];
+  Object.entries(shiftAlarms).forEach(([key,v])=>{
+    if(!v.alarm) return;
+    const[y,m,d]=key.split('-').map(Number);
+    // 본인 근무인지 확인
+    const myData=getMonthData(y,m)[cu.name]||{};
+    const type=myData[String(d)];
+    if(!type) return;
+    alarmDays.push({y,m,d,type,alarm:v});
+  });
+  alarmDays.sort((a,b)=>a.y!==b.y?a.y-b.y:a.m!==b.m?a.m-b.m:a.d-b.d);
+
+  if(!alarmDays.length){
+    el.innerHTML='<p style="font-size:13px;color:#bbb;padding:16px;text-align:center">설정된 알림이 없습니다<br><span style="font-size:11px">근무일을 탭해서 알림을 설정하세요</span></p>';
+    return;
+  }
+  el.innerHTML=alarmDays.map(({y,m,d,type,alarm})=>{
+    const c=type?tc(type):null;
+    const dow=new Date(y,m-1,d).getDay();
+    const now=new Date();
+    const isPast=new Date(y,m-1,d)<new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    return`<div class="alarm-item${isPast?' past-card':''}" onclick="viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
       <div style="display:flex;align-items:center;gap:10px;flex:1">
         <div class="alarm-day-num" ${c?`style="background:${c.bg};color:${c.dot}"`:''}>${d}</div>
         <div>
-          <div style="font-size:13px;font-weight:600">${MN[curM]} ${d}일 <span style="color:#aaa;font-weight:400">${DN[dow]}</span></div>
+          <div style="font-size:13px;font-weight:600">${y}년 ${MN[m-1]} ${d}일 <span style="color:#aaa;font-weight:400">${DN[dow]}</span></div>
           ${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}
-          ${alarm.memo?`<div style="font-size:11px;color:#888;margin-top:3px">📝 ${esc(alarm.memo)}</div>`:''}
+          <div style="font-size:11px;color:#888;margin-top:3px">⏰ ${alarm.alarmTime||'09:00'} 알림</div>
+          ${alarm.memo?`<div style="font-size:11px;color:#888;margin-top:2px">📝 ${esc(alarm.memo)}</div>`:''}
         </div>
       </div>
       <div onclick="event.stopPropagation()">
-        <div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${curY},${curM+1},${d})"></div>
+        <div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${y},${m},${d})"></div>
       </div>
     </div>`;
   }).join('');
@@ -679,7 +711,13 @@ function renderSearchResult(){
     const entries=Object.entries(targets).flatMap(([name,wd])=>Object.entries(wd||{}).map(([day,type])=>({name,day:parseInt(day),type}))).sort((a,b)=>a.day-b.day);
     if(!entries.length)return;
     html+=`<div class="list-section-title">${y}년 ${MN[m]} (${entries.length}건)</div>`;
-    html+=entries.map(({name,day,type})=>{const c=tc(type),dow=new Date(y,m-1,day).getDay(),past=new Date(y,m-1,day)<new Date(now.getFullYear(),now.getMonth(),now.getDate());return`<div class="list-card${past?' past':''}" onclick="viewDayInCal(${y},${m-1},${day})"><div class="list-card-header"><div><span class="list-date">${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>${!nf?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}</div><div style="display:flex;gap:6px;align-items:center"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span></div></div></div>`;}).join('');
+    html+=entries.map(({name,day,type})=>{
+      const c=tc(type),dow=new Date(y,m-1,day).getDay(),past=new Date(y,m-1,day)<new Date(now.getFullYear(),now.getMonth(),now.getDate());
+      // ★ 본인 근무일에만 알람 아이콘 표시
+      const isMyShift=name===cu.name;
+      const alarm=isMyShift?getAlarm(y,m,day):null;
+      return`<div class="list-card${past?' past':''}" onclick="viewDayInCal(${y},${m-1},${day})"><div class="list-card-header"><div><span class="list-date">${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>${!nf?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}</div><div style="display:flex;gap:6px;align-items:center">${alarm?.alarm?'<span>🔔</span>':''}<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span></div></div></div>`;
+    }).join('');
   });
   el.innerHTML=html||'<p class="empty-state">조건에 맞는 근무 기록이 없습니다.</p>';
 }
@@ -687,6 +725,19 @@ function renderSearchResult(){
 // ══════════════════════════════════════════════════
 //  공지
 // ══════════════════════════════════════════════════
+// ★ 관리자: 공지 읽음 현황 조회
+async function loadNoticeReadStatus(noticeId){
+  if(!isAdmin()||OFFLINE) return;
+  const{data}=await sb.from('notice_reads').select('user_id').eq('notice_id',noticeId);
+  const readIds=new Set((data||[]).map(r=>r.user_id));
+  const total=allMembers.length;
+  const readCount=allMembers.filter(u=>readIds.has(u.id)).length;
+  const unreadMembers=allMembers.filter(u=>!readIds.has(u.id)&&!isAdminRole(u));
+  // 팝업 표시
+  const msg=`읽음 ${readCount}/${total}명\n\n미읽음:\n${unreadMembers.map(u=>u.name).join(', ')||'없음'}`;
+  alert(msg);
+}
+
 function renderNotices(){
   const el=$('notice-list');
   if(!notices.length){el.innerHTML='<p class="empty-state">등록된 공지가 없습니다.</p>';return;}
@@ -696,10 +747,13 @@ function renderNotices(){
         ${n.is_unread?`<span class="new-badge">NEW</span>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
           <div class="n-title">${esc(n.title)}</div>
-          ${isAdmin()?`<div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px" onclick="event.stopPropagation()">
-            <button class="n-action-btn" onclick="editNotice(${n.id})">수정</button>
-            <button class="n-action-btn del" onclick="deleteNotice(${n.id})">삭제</button>
-          </div>`:''}
+          <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px" onclick="event.stopPropagation()">
+            ${isAdmin()?`
+              <button class="n-action-btn" onclick="loadNoticeReadStatus(${n.id})" title="읽음 현황">👁</button>
+              <button class="n-action-btn" onclick="editNotice(${n.id})">수정</button>
+              <button class="n-action-btn del" onclick="deleteNotice(${n.id})">삭제</button>
+            `:''}
+          </div>
         </div>
         <div class="n-meta">${fmtDate(n.created_at)}</div>
         <div class="n-body">${esc(n.body)}</div>
