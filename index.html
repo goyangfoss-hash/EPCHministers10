@@ -48,7 +48,20 @@
     .app-header{background:#fff;border-bottom:1px solid #ebebeb;padding:0 14px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:30}
     .hdr-left{display:flex;align-items:center;gap:10px}
     .app-header h1{font-size:17px;font-weight:700}
-    .hdr-av{width:34px;height:34px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+    .hdr-av{width:34px;height:34px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;cursor:pointer;overflow:hidden;border:2px solid transparent;transition:border-color .15s}
+    .hdr-av:hover{border-color:#185FA5}
+    /* 프로필 모달 */
+    #profile-modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .profile-modal-inner{display:flex;flex-direction:column;align-items:center;gap:20px}
+    .profile-modal-circle{width:120px;height:120px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:700;color:#fff;overflow:hidden;border:4px solid #fff;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+    .profile-modal-circle img{width:100%;height:100%;object-fit:cover}
+    .profile-edit-btn{padding:10px 28px;background:#fff;color:#185FA5;border:none;border-radius:22px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+    .profile-preview-wrap{display:none;flex-direction:column;align-items:center;gap:12px}
+    .profile-preview-circle{width:120px;height:120px;border-radius:50%;overflow:hidden;border:4px solid #fff;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+    .profile-preview-circle img{width:100%;height:100%;object-fit:cover}
+    .profile-action-btns{display:flex;gap:10px}
+    .profile-save-btn{padding:10px 24px;background:#185FA5;color:#fff;border:none;border-radius:22px;font-size:14px;font-weight:700;cursor:pointer}
+    .profile-cancel-btn{padding:10px 24px;background:rgba(255,255,255,.2);color:#fff;border:2px solid #fff;border-radius:22px;font-size:14px;font-weight:600;cursor:pointer}
     .hdr-name{font-size:12px;color:#aaa}
     .hdr-right{display:flex;align-items:center;gap:4px}
     /* 🔔 알림 아이콘 버튼 */
@@ -359,7 +372,7 @@
 <div id="main-screen" class="screen">
   <div class="app-header">
     <div class="hdr-left">
-      <div class="hdr-av" id="hdr-avatar">김</div>
+      <div class="hdr-av" id="hdr-avatar" onclick="openProfileModal()">김</div>
       <div><h1 id="hdr-title">근무표</h1><div class="hdr-name" id="hdr-name"></div></div>
     </div>
     <div class="hdr-right">
@@ -374,8 +387,8 @@
     </div>
   </div>
 
-  <!-- ★ 알림 패널 (종 버튼 클릭 시 표시) -->
-  <div id="alarm-panel" style="display:none">
+  <!-- ★ 알림 패널 (외부 탭 시 닫힘) -->
+  <div id="alarm-panel" style="display:none" onclick="event.stopPropagation()">
     <div class="alarm-panel-header">
       <h4>🔔 이번 달 내 근무 알림</h4>
       <button class="alarm-panel-close" onclick="toggleAlarmPanel()">✕</button>
@@ -390,10 +403,7 @@
       <h3 id="month-label"></h3>
       <button class="btn-mo" onclick="changeMonth(1)">&#8250;</button>
     </div>
-    <div class="view-toggle">
-      <button class="view-btn active" id="view-mine" onclick="setView('mine')">내 근무만</button>
-      <button class="view-btn" id="view-all" onclick="setView('all')">전체 보기</button>
-    </div>
+    <div id="view-toggle-wrap"></div>
     <div id="cal-legend"></div>
     <div class="cal-grid" id="cal-grid"></div>
     <div id="shift-list"></div>
@@ -472,7 +482,7 @@
     </div>
     <div class="section-card">
       <h3>직원 피드 관리</h3>
-      <div id="admin-feed-list"></div>
+      <p class="empty-state" style="font-size:12px">소통 탭에서 이용자와 직접 채팅하세요.</p>
     </div>
   </div>
 
@@ -527,8 +537,35 @@
   </div>
 </div>
 
+<!-- 프로필 모달 -->
+<div id="profile-modal" style="display:none" onclick="if(event.target===$('profile-modal'))closeProfileModal()">
+  <div class="profile-modal-inner">
+    <!-- 현재 프로필 -->
+    <div id="profile-current-wrap">
+      <div class="profile-modal-circle">
+        <img id="profile-modal-img" src="" style="display:none">
+        <span id="profile-modal-txt" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:48px;font-weight:700;color:#fff"></span>
+      </div>
+      <div style="text-align:center;margin-top:16px;color:#fff;font-size:16px;font-weight:600">${cu?.name||''}</div>
+      <button class="profile-edit-btn" style="margin-top:16px" onclick="openProfileEdit()">편집</button>
+    </div>
+    <!-- 미리보기 -->
+    <div class="profile-preview-wrap" id="profile-preview-wrap">
+      <div class="profile-preview-circle">
+        <img id="profile-preview-img" src="" style="width:100%;height:100%;object-fit:cover">
+      </div>
+      <div style="color:#fff;font-size:13px;opacity:.8">새 프로필 이미지 미리보기</div>
+      <div class="profile-action-btns">
+        <button class="profile-cancel-btn" onclick="cancelProfileEdit()">취소</button>
+        <button class="profile-save-btn" onclick="saveProfileImage()">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+<input type="file" id="profile-file-input" accept="image/*" style="display:none" onchange="handleProfileFile(this)">
+
 <!-- 채팅(DM) 모달 -->
-<div class="modal-bg" id="chat-modal" style="display:none">
+<div class="modal-bg" id="chat-modal" style="display:none" onclick="if(event.target===$('chat-modal'))closeChatModal()">
   <div class="chat-modal-box">
     <div class="modal-handle"></div>
     <div class="modal-header">

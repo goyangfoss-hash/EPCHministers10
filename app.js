@@ -165,9 +165,21 @@ function isAdmin(){return cu?.role==='admin'||cu?.role==='superadmin';}
 // ══════════════════════════════════════════════════
 function enterApp() {
   showScreen('main-screen');
-  $('hdr-name').textContent=cu.name; $('hdr-avatar').textContent=cu.name[0];
+  $('hdr-name').textContent=cu.name;
+  // ★ 프로필 이미지 or 이름 첫 글자
+  updateHeaderAvatar();
   $('btn-admin').style.display=isAdmin()?'flex':'none';
-  assignColors(collectAllTypes()); renderCalendar(); renderNotices(); updateAlarmBadge();
+  assignColors(collectAllTypes());
+  // 모든 이용자에게 내 근무만/전체 보기 토글 표시
+  const toggleWrap=$('view-toggle-wrap');
+  if(toggleWrap){
+    toggleWrap.innerHTML=`<div class="view-toggle">
+      <button class="view-btn active" id="view-mine" onclick="setView('mine')">내 근무만</button>
+      <button class="view-btn" id="view-all" onclick="setView('all')">전체 보기</button>
+    </div>`;
+  }
+  if(isAdmin()) calView='all'; // 관리자 기본값은 전체
+  renderCalendar(); renderNotices(); updateAlarmBadge();
   if(isAdmin()) renderAdmin();
   updateFeedBadge();
   startRealtime();
@@ -490,20 +502,28 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
   const el=$('shift-list'),now=new Date();
   const makeChips=ws=>ws.map(w=>`<span class="worker-chip" style="background:${w.c.bg};color:${w.c.text};border:1px solid ${w.c.border}">${w.name}<span class="chip-type">${w.type}</span></span>`).join('');
   const pastDay=d=>(curY<now.getFullYear())||(curY===now.getFullYear()&&curM<now.getMonth())||(curY===now.getFullYear()&&curM===now.getMonth()&&d<now.getDate());
+  const key='shift-list-body';
+  const isOpen=collapseState[key]===true; // 기본 접힘
+
+  // 헤더 (항상 표시)
+  const MNlabel=MN[curM];
+  let headerHtml=`<div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px;cursor:pointer;user-select:none">
+    <div class="list-section-title" style="margin:0">${isAdmin()||calView==='all'?`${MNlabel} 전체 근무`:`${MNlabel} 내 근무`}</div>
+    <button class="collapse-btn" style="border:none;background:none;color:#aaa;font-size:12px;cursor:pointer;padding:2px 8px;border-radius:6px;background:#f0f0ea">${isOpen?'▲ 접기':'▼ 펼치기'}</button>
+  </div>`;
+
+  let bodyHtml='';
   if(isAdmin()||calView==='all'){
-    let html=`<div class="list-section-title">${filterType?`'${filterType}' 근무 `:''}이번 달 전체</div>`,any=false;
-    for(let d=1;d<=dim;d++){const ws=fm[d]||[];if(!ws.length)continue;any=true;const key=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key]||[]).length;html+=`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})"><div class="list-card-header"><span class="list-date">${MN[curM]} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span><div style="display:flex;gap:6px;align-items:center">${cc?`<span class="cmt-cnt">${cc}개</span>`:''}<span class="worker-cnt">${ws.length}명</span></div></div><div class="worker-chips">${makeChips(ws)}</div></div>`;}
-    if(!any)html+=`<p class="empty-state">${filterType?`'${filterType}' 근무자 없음`:'근무 일정이 없습니다. 엑셀을 업로드해주세요.'}</p>`;
-    el.innerHTML=html;return;
+    let any=false;
+    for(let d=1;d<=dim;d++){const ws=fm[d]||[];if(!ws.length)continue;any=true;const key2=`${curY}-${curM+1}-${d}`;const cc=(shiftComments[key2]||[]).length;bodyHtml+=`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})"><div class="list-card-header"><span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span><div style="display:flex;gap:6px;align-items:center">${cc?`<span class="cmt-cnt">${cc}개</span>`:''}<span class="worker-cnt">${ws.length}명</span></div></div><div class="worker-chips">${makeChips(ws)}</div></div>`;}
+    if(!any) bodyHtml=`<p class="empty-state">${filterType?`'${filterType}' 근무자 없음`:'근무 일정이 없습니다. 엑셀을 업로드해주세요.'}</p>`;
+  } else {
+    const arr=[...myDays].filter(d=>!filterType||myRaw[String(d)]===filterType).sort((a,b)=>a-b);
+    if(!arr.length){ bodyHtml=`<p class="empty-state">${filterType?`'${filterType}' 근무일 없음`:'이번 달 등록된 근무일이 없습니다.'}</p>`; }
+    else { bodyHtml=arr.map(d=>{const type=myRaw[String(d)]||'',c=type?tc(type):null,key2=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key2]||[]).length,alarm=getAlarm(curY,curM+1,d);return`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})"><div class="list-card-header"><span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span><div style="display:flex;gap:6px;align-items:center">${alarm.alarm?'<span>🔔</span>':''}${cc?`<span class="cmt-cnt">${cc}개 댓글</span>`:''}${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}</div></div>${alarm.memo?`<div style="font-size:12px;color:#888;margin-top:4px;border-top:1px solid #f5f5f0;padding-top:4px">📝 ${esc(alarm.memo)}</div>`:''}</div>`;}).join(''); }
   }
-  const arr=[...myDays].filter(d=>!filterType||myRaw[String(d)]===filterType).sort((a,b)=>a-b);
-  if(!arr.length){el.innerHTML=`<p class="empty-state">${filterType?`'${filterType}' 근무일 없음`:'이번 달 등록된 근무일이 없습니다.'}</p>`;return;}
-  let html=`<div class="list-section-title">근무일 (${arr.length}일)</div>`;
-  html+=arr.map(d=>{
-    const type=myRaw[String(d)]||'',c=type?tc(type):null,key=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key]||[]).length,alarm=getAlarm(curY,curM+1,d);
-    return`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})"><div class="list-card-header"><span class="list-date">${MN[curM]} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span><div style="display:flex;gap:6px;align-items:center">${alarm.alarm?'<span>🔔</span>':''}${cc?`<span class="cmt-cnt">${cc}개 댓글</span>`:''}${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}</div></div>${alarm.memo?`<div style="font-size:12px;color:#888;margin-top:4px;border-top:1px solid #f5f5f0;padding-top:4px">📝 ${esc(alarm.memo)}</div>`:''}</div>`;
-  }).join('');
-  el.innerHTML=html;
+
+  el.innerHTML=headerHtml+`<div data-collapse="${key}" style="display:${isOpen?'block':'none'}">${bodyHtml}</div>`;
 }
 
 // ══════════════════════════════════════════════════
@@ -606,7 +626,7 @@ function renderMyShift(){
       <div class="stat-section-title">${myShiftYear}년 ${MN[myShiftMonth]} 근무현황</div>
       ${Object.keys(typeCount).length?`<div class="type-stat-grid" style="margin-bottom:12px">${Object.entries(typeCount).map(([type,cnt])=>{const c=tc(type);return`<div class="type-stat-block" style="background:${c.bg};border:1px solid ${c.border}"><div class="type-stat-name" style="color:${c.text}">${type}</div><div class="type-stat-big" style="color:${c.dot}">${cnt}</div><div class="type-stat-sub" style="color:${c.text}">회</div></div>`;}).join('')}</div>`:''}
       ${myDays.length?myDays.map(d=>{
-        const type=myRaw2[String(d)]||'',c=type?tc(type):null,dow=new Date(myShiftYear,myShiftMonth-1,d).getDay(),key=`${myShiftYear}-${myShiftMonth}-${d}`,cc=(shiftComments[key]||[]).length;
+        const type=myRaw2[String(d)]||'',c=type?tc(type):null,dow=new Date(myShiftYear,myShiftMonth-1,d).getDay();
         const alarm=getAlarm(myShiftYear,myShiftMonth,d),isToday=now.getFullYear()===myShiftYear&&now.getMonth()===myShiftMonth-1&&now.getDate()===d,past=pastDay(myShiftYear,myShiftMonth,d)&&!isToday;
         return`<div class="search-card${isToday?' today-card':past?' past-card':''}" ${type&&c?`style="border-left:4px solid ${c.dot}"`:''}  onclick="viewDayInCal(${myShiftYear},${myShiftMonth-1},${d})">
           <div class="search-card-left">
@@ -618,7 +638,7 @@ function renderMyShift(){
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:6px">
-            ${alarm.alarm?'<span>🔔</span>':''}${cc?`<span class="cmt-cnt">${cc}개</span>`:''}
+            ${alarm.alarm?'<span>🔔</span>':''}
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           </div>
         </div>`;
@@ -659,7 +679,7 @@ function renderSearchResult(){
     const entries=Object.entries(targets).flatMap(([name,wd])=>Object.entries(wd||{}).map(([day,type])=>({name,day:parseInt(day),type}))).sort((a,b)=>a.day-b.day);
     if(!entries.length)return;
     html+=`<div class="list-section-title">${y}년 ${MN[m]} (${entries.length}건)</div>`;
-    html+=entries.map(({name,day,type})=>{const c=tc(type),dow=new Date(y,m-1,day).getDay(),key=`${y}-${m}-${day}`,cc=(shiftComments[key]||[]).length,past=new Date(y,m-1,day)<new Date(now.getFullYear(),now.getMonth(),now.getDate());return`<div class="list-card${past?' past':''}" onclick="viewDayInCal(${y},${m-1},${day})"><div class="list-card-header"><div><span class="list-date">${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>${!nf?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}</div><div style="display:flex;gap:6px;align-items:center">${cc?`<span class="cmt-cnt">${cc}개</span>`:''}<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span></div></div></div>`;}).join('');
+    html+=entries.map(({name,day,type})=>{const c=tc(type),dow=new Date(y,m-1,day).getDay(),past=new Date(y,m-1,day)<new Date(now.getFullYear(),now.getMonth(),now.getDate());return`<div class="list-card${past?' past':''}" onclick="viewDayInCal(${y},${m-1},${day})"><div class="list-card-header"><div><span class="list-date">${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>${!nf?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}</div><div style="display:flex;gap:6px;align-items:center"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span></div></div></div>`;}).join('');
   });
   el.innerHTML=html||'<p class="empty-state">조건에 맞는 근무 기록이 없습니다.</p>';
 }
@@ -1287,11 +1307,139 @@ async function doUndo(){
   showToastMsg('이전 근무표로 되돌렸습니다.');
 }
 function buildSchedPreview(){
-  const el=$('sched-form'),allMonths=[];Object.entries(allSchedules).forEach(([y,ym])=>Object.keys(ym).forEach(m=>allMonths.push({y:parseInt(y),m:parseInt(m)})));
-  allMonths.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 근무표가 없습니다.</p>';return;}
-  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];let html='';
-  allMonths.forEach(({y,m})=>{const d=getMonthData(y,m),names=Object.keys(d);html+=`<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:#185FA5;margin-bottom:6px">${y}년 ${MN[m]}</div>`;html+=names.map(name=>{const wd=d[name]||{},days=Object.keys(wd).map(Number).sort((a,b)=>a-b),approved=allMembers.some(u=>u.name===name);return`<div class="sched-preview-row"><span class="sched-name">${name}${!approved?` <span class="unregistered-tag">미가입</span>`:''}</span><span class="sched-days">${days.map(d2=>{const t=wd[String(d2)],c=t?tc(t):null;return c?`<span class="day-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}" title="${t}">${d2}</span>`:`<span class="day-chip">${d2}</span>`;}).join('')}</span></div>`;}).join('');html+='</div>';});
+  const el=$('sched-form'),allMonths=[];
+  Object.entries(allSchedules).forEach(([y,ym])=>Object.keys(ym).forEach(m=>allMonths.push({y:parseInt(y),m:parseInt(m)})));
+  allMonths.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
+  if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 근무표가 없습니다.</p>';return;}
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  let html='';
+  allMonths.forEach(({y,m},idx)=>{
+    const d=getMonthData(y,m),names=Object.keys(d);
+    const key=`sched-${y}-${m}`;
+    // 기본: 접힘 (collapseState에 없으면 false=접힘)
+    const isOpen=collapseState[key]===true;
+    html+=`<div style="margin-bottom:8px;background:#f8f8f4;border-radius:10px;overflow:hidden">
+      <div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none">
+        <div style="font-size:13px;font-weight:700;color:#185FA5">${y}년 ${MN[m]} <span style="font-size:11px;color:#aaa;font-weight:400">(${names.length}명)</span></div>
+        <button class="collapse-btn" style="border:none;background:none;color:#aaa;font-size:12px;cursor:pointer;padding:2px 6px">${isOpen?'▲':'▼'}</button>
+      </div>
+      <div data-collapse="${key}" style="display:${isOpen?'block':'none'};padding:0 14px 10px">
+        ${names.map(name=>{const wd=d[name]||{},days=Object.keys(wd).map(Number).sort((a,b)=>a-b),approved=allMembers.some(u=>u.name===name);return`<div class="sched-preview-row"><span class="sched-name">${name}${!approved?` <span class="unregistered-tag">미가입</span>`:''}</span><span class="sched-days">${days.map(d2=>{const t=wd[String(d2)],c=t?tc(t):null;return c?`<span class="day-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}" title="${t}">${d2}</span>`:`<span class="day-chip">${d2}</span>`;}).join('')}</span></div>`;}).join('')}
+      </div>
+    </div>`;
+  });
   el.innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════
+//  프로필 이미지
+// ══════════════════════════════════════════════════
+function updateHeaderAvatar(){
+  const av=$('hdr-avatar'); if(!av) return;
+  if(cu.avatar){
+    av.style.backgroundImage=`url(${cu.avatar})`;
+    av.style.backgroundSize='cover';
+    av.style.backgroundPosition='center';
+    av.textContent='';
+  } else {
+    av.style.backgroundImage='';
+    av.textContent=cu.name[0];
+  }
+}
+
+function openProfileModal(){
+  const modal=$('profile-modal'); if(!modal) return;
+  const img=$('profile-modal-img');
+  const txt=$('profile-modal-txt');
+  if(cu.avatar){
+    img.src=cu.avatar; img.style.display='block';
+    txt.style.display='none';
+  } else {
+    img.style.display='none';
+    txt.style.display='flex'; txt.textContent=cu.name[0];
+  }
+  $('profile-preview-wrap').style.display='none';
+  modal.style.display='flex';
+}
+
+function closeProfileModal(){
+  $('profile-modal').style.display='none';
+  $('profile-preview-wrap').style.display='none';
+}
+
+function openProfileEdit(){
+  $('profile-file-input').click();
+}
+
+function handleProfileFile(inp){
+  const file=inp.files[0]; if(!file) return;
+  if(!file.type.startsWith('image/')){showToastMsg('이미지 파일만 선택해주세요.');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const dataUrl=e.target.result;
+    // 이미지 압축 (최대 300x300)
+    const canvas=document.createElement('canvas');
+    const imgEl=new Image();
+    imgEl.onload=()=>{
+      const size=300;
+      const ratio=Math.min(size/imgEl.width, size/imgEl.height);
+      canvas.width=imgEl.width*ratio;
+      canvas.height=imgEl.height*ratio;
+      canvas.getContext('2d').drawImage(imgEl,0,0,canvas.width,canvas.height);
+      const compressed=canvas.toDataURL('image/jpeg',0.7);
+      // 미리보기 표시
+      $('profile-preview-img').src=compressed;
+      $('profile-preview-wrap').style.display='block';
+      $('profile-preview-wrap').dataset.avatar=compressed;
+    };
+    imgEl.src=dataUrl;
+  };
+  reader.readAsDataURL(file);
+  inp.value='';
+}
+
+async function saveProfileImage(){
+  const wrap=$('profile-preview-wrap'); if(!wrap) return;
+  const avatar=wrap.dataset.avatar; if(!avatar) return;
+  cu.avatar=avatar;
+  updateHeaderAvatar();
+  if(!OFFLINE) await sb.from('app_users').update({avatar}).eq('id',cu.id);
+  // 세션에도 저장
+  const raw=localStorage.getItem('ws_session');
+  if(raw){ try{ const s=JSON.parse(raw); localStorage.setItem('ws_session',JSON.stringify({...s})); }catch{} }
+  closeProfileModal();
+  showToastMsg('프로필 이미지가 저장되었습니다.');
+}
+
+function cancelProfileEdit(){
+  $('profile-preview-wrap').style.display='none';
+}
+
+// ══════════════════════════════════════════════════
+//  외부 탭 시 닫기 — 전역 클릭 핸들러
+// ══════════════════════════════════════════════════
+document.addEventListener('click', e=>{
+  // 알림 패널
+  const alarmPanel=$('alarm-panel');
+  const alarmBtn=$('btn-alarm');
+  if(alarmPanel&&alarmPanel.style.display!=='none'){
+    if(!alarmPanel.contains(e.target)&&!alarmBtn?.contains(e.target)){
+      alarmPanel.style.display='none';
+    }
+  }
+}, true);
+
+// ══════════════════════════════════════════════════
+//  접기/펼치기 상태 관리
+// ══════════════════════════════════════════════════
+const collapseState = {}; // { 'sched-2026-5': false, 'shift-list': false }
+
+function toggleCollapse(key, btnEl){
+  collapseState[key] = !collapseState[key]; // true=펼침
+  const content=document.querySelector(`[data-collapse="${key}"]`);
+  if(!content) return;
+  content.style.display=collapseState[key]?'block':'none';
+  if(btnEl) btnEl.textContent=collapseState[key]?'▲':'▼';
 }
 
 // ══════════════════════════════════════════════════
