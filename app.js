@@ -1529,7 +1529,9 @@ function showAIPreview(parsed, fileName){
   }).join('');
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
   $('parse-summary').innerHTML=`<b>근무자:</b> ${names.join(', ')}`;
-}const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
+}
+
+function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
     const header=rows[0]||[];const hasNameCol=header.some(h=>h&&String(h).trim()==='이름');
     if(hasNameCol){processExcelRows(rows,file.name,wb.SheetNames[0]);}
     else{processExcelRows2(rows,file.name,wb.SheetNames[0]);}
