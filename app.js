@@ -354,23 +354,30 @@ function startRealtime() {
     })
     .subscribe(s=>console.log('[RT]',s));
 
-  // ★ DM 실시간 구독
-  sb.channel('ws_dm')
-    .on('postgres_changes',{event:'INSERT',schema:'public',table:'direct_messages'},payload=>{
+  // ★ DM 실시간 구독 (별도 채널, 중복 방지)
+  if(window._dmChannel) { try{sb.removeChannel(window._dmChannel);}catch{} }
+  window._dmChannel = sb.channel('ws_dm_'+cu.id)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'direct_messages',filter:`to_id=eq.${cu.id}`},payload=>{
       const m=payload.new;
-      if(m.from_id!==cu.id&&m.to_id!==cu.id) return;
-      const otherId=m.from_id===cu.id?m.to_id:m.from_id;
+      const otherId=m.from_id;
       if(!chatMessages[otherId])chatMessages[otherId]=[];
-      if(!chatMessages[otherId].find(x=>x.id===m.id)) chatMessages[otherId].push(m);
-      // 채팅창 열려있으면 즉시 렌더
-      if(chatTarget?.id===otherId) renderChatMessages();
-      // 내가 받은 메시지면 뱃지
-      if(m.to_id===cu.id){
-        updateDmBadge();
-        const sender=allMembers.find(u=>u.id===m.from_id);
-        pushNotify(`${sender?.name||'누군가'}님의 메시지`,m.content,'chat');
+      if(!chatMessages[otherId].find(x=>x.id===m.id)){
+        chatMessages[otherId].push(m);
       }
-    }).subscribe();
+      // 채팅창 열려있으면 즉시 렌더 + 읽음 처리
+      if(chatTarget?.id===otherId){
+        m.is_read=true;
+        if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
+        renderChatMessages();
+      }
+      // 배지 업데이트
+      updateFeedBadge();
+      // 소통 탭 열려있으면 목록 갱신
+      if($('tab-feed')?.style.display!=='none') renderFeedTab();
+      // 알림
+      const sender=allMembers.find(u=>u.id===m.from_id);
+      pushNotify(`${sender?.name||'누군가'}님의 메시지`,m.content,'chat');
+    }).subscribe(s=>console.log('[DM]',s));
 }
 function pushNotify(title, body, type=''){
   if(!canNotify(type)) return;
