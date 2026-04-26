@@ -548,7 +548,7 @@
     <div id="chat-messages"></div>
     <div class="chat-input-row">
       <input id="chat-input" placeholder="메시지를 입력하세요..." maxlength="500"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendDm()}">
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();event.stopPropagation();sendDm()}">
       <button class="chat-send-btn" onclick="sendDm()">➤</button>
     </div>
   </div>

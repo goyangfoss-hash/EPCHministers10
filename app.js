@@ -864,10 +864,13 @@ function renderChatMessages(){
   el.scrollTop=el.scrollHeight;
 }
 
+let dmSending = false;
 async function sendDm(){
+  if(dmSending) return;
   const input=$('chat-input');
   const txt=input?.value.trim();
   if(!txt||!chatTarget) return;
+  dmSending = true;
   const msg={id:Date.now(),from_id:cu.id,to_id:chatTarget.id,content:txt,is_read:false,created_at:new Date().toISOString()};
   if(!chatMessages[chatTarget.id])chatMessages[chatTarget.id]=[];
   chatMessages[chatTarget.id].push(msg);
@@ -877,6 +880,7 @@ async function sendDm(){
     const{data}=await sb.from('direct_messages').insert({from_id:cu.id,to_id:chatTarget.id,content:txt}).select('*').single();
     if(data){const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===msg.id);if(idx>=0)chatMessages[chatTarget.id][idx]=data;}
   }
+  dmSending = false;
 }
 
 function closeChatModal(){$('chat-modal').style.display='none';chatTarget=null;}
