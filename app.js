@@ -891,7 +891,72 @@ async function deleteNotice(id){
 }
 
 // ══════════════════════════════════════════════════
-//  소통 탭 — 채팅으로 완전 통합
+//  설정 패널
+// ══════════════════════════════════════════════════
+function toggleSettingsPanel(){
+  const panel=$('settings-panel'); if(!panel) return;
+  const isOpen=panel.style.display!=='none';
+  if(isOpen){
+    panel.style.display='none';
+    $('settings-overlay')?.remove();
+  } else {
+    renderSettingsPanel();
+    panel.style.display='flex';
+    panel.style.flexDirection='column';
+    // 오버레이
+    const ov=document.createElement('div');
+    ov.id='settings-overlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:24;background:transparent';
+    ov.onclick=()=>{panel.style.display='none';ov.remove();};
+    document.body.appendChild(ov);
+    panel.style.zIndex='25';
+  }
+}
+
+function renderSettingsPanel(){
+  const el=$('settings-panel-body'); if(!el) return;
+  const notifGranted='Notification' in window && Notification.permission==='granted';
+  const keepLogin=localStorage.getItem('ws_session')!==null;
+  el.innerHTML=`
+    <div class="settings-item">
+      <div class="settings-item-left">
+        <div class="settings-item-title">기기 알림</div>
+        <div class="settings-item-desc">${notifGranted?'허용됨 — 공지·채팅 알림을 받습니다':'미허용 — 아래 버튼으로 허용하세요'}</div>
+      </div>
+      ${notifGranted
+        ? `<span style="font-size:12px;color:#16a34a;font-weight:600">✅ 허용됨</span>`
+        : `<button onclick="requestNotifPermission()" style="padding:7px 14px;background:#185FA5;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">허용하기</button>`}
+    </div>
+    <div class="settings-item">
+      <div class="settings-item-left">
+        <div class="settings-item-title">로그인 유지</div>
+        <div class="settings-item-desc">로그아웃 전까지 자동 로그인</div>
+      </div>
+      <div class="toggle${keepLogin?' on':''}" onclick="toggleKeepLogin(this)"></div>
+    </div>
+    <div class="settings-item">
+      <div class="settings-item-left">
+        <div class="settings-item-title">앱 버전</div>
+        <div class="settings-item-desc">은평교회 교역자 사역스케줄러 v10</div>
+      </div>
+      <span style="font-size:12px;color:#bbb">v10.0</span>
+    </div>`;
+}
+
+function toggleKeepLogin(toggleEl){
+  const isOn=toggleEl.classList.contains('on');
+  if(isOn){
+    localStorage.removeItem('ws_session');
+    toggleEl.classList.remove('on');
+    showToastMsg('로그인 유지가 해제되었습니다.');
+  } else {
+    if(cu){
+      // 현재 로그인 정보 다시 저장 (비밀번호는 없으므로 안내)
+      showToastMsg('다음 로그인 시 자동 저장됩니다.');
+    }
+    toggleEl.classList.add('on');
+  }
+}
 // ══════════════════════════════════════════════════
 function renderFeedTab(){
   const el=$('feed-list'); if(!el) return;
@@ -916,17 +981,37 @@ function renderFeedTab(){
             </div>
           </div>
           <div style="font-size:12px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-            ${last?esc(last.content):'<span style="color:#ccc">아직 대화가 없습니다</span>'}
+            ${last?`<span style="color:${last.from_id===cu.id?'#aaa':'#555'}">${last.from_id===cu.id?'나: ':''}${esc(last.content)}</span>`:'<span style="color:#ccc">아직 대화가 없습니다</span>'}
           </div>
         </div>
       </div>`;
     });
     el.innerHTML=html;
   } else {
-    // 이용자: 관리자와의 채팅 바로 열기
+    // ★ 이용자: 관리자와의 대화 목록 표시 (카드 형태)
     const admin=allMembers.find(u=>isAdminRole(u));
-    if(admin){ openChat(admin.id); }
-    else { el.innerHTML='<p class="empty-state">관리자를 찾을 수 없습니다.</p>'; }
+    if(!admin){ el.innerHTML='<p class="empty-state">관리자를 찾을 수 없습니다.</p>'; return; }
+    const msgs=chatMessages[admin.id]||[];
+    const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+    const last=msgs[msgs.length-1];
+    let html='<div class="list-section-title">관리자와의 대화</div>';
+    html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${admin.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <div style="width:42px;height:42px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;flex-shrink:0">${admin.name[0]}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+          <span style="font-size:14px;font-weight:700">${admin.name} <span style="font-size:11px;color:#185FA5;font-weight:400">관리자</span></span>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${unread?`<span class="cnt-badge">${unread}</span>`:''}
+            ${last?`<span style="font-size:10px;color:#bbb">${fmtTime(last.created_at)}</span>`:''}
+          </div>
+        </div>
+        <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${last?`<span style="color:${last.from_id===cu.id?'#aaa':'#555'}">${last.from_id===cu.id?'나: ':''}${esc(last.content)}</span>`:'<span style="color:#bbb">관리자에게 먼저 말을 걸어보세요 💬</span>'}
+        </div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </div>`;
+    el.innerHTML=html;
   }
 }
 function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}

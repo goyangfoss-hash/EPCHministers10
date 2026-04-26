@@ -68,6 +68,17 @@
     #btn-alarm{position:relative;width:38px;height:38px;border:none;background:none;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .15s}
     #btn-alarm:hover{background:#f2f2f0}
     #btn-alarm svg{width:22px;height:22px;color:#666}
+    /* ★ 설정 버튼 */
+    #btn-settings{position:relative;width:38px;height:38px;border:none;background:none;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .15s}
+    #btn-settings:hover{background:#f0f5fd}
+    #btn-settings svg{width:22px;height:22px}
+    /* 설정 패널 */
+    #settings-panel{position:fixed;top:56px;right:0;left:50%;transform:none;width:100%;max-width:480px;background:#fff;border-bottom:1px solid #ebebeb;z-index:25;box-shadow:0 4px 20px rgba(0,0,0,.1);display:none;flex-direction:column}
+    .settings-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #f5f5f0}
+    .settings-item:last-child{border-bottom:none}
+    .settings-item-left{display:flex;flex-direction:column;gap:3px}
+    .settings-item-title{font-size:14px;font-weight:600;color:#1a1a18}
+    .settings-item-desc{font-size:11px;color:#aaa}
     .alarm-badge{position:absolute;top:2px;right:2px;background:#e74c3c;color:#fff;font-size:9px;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;font-weight:700}
     .btn-logout{font-size:12px;color:#bbb;cursor:pointer;border:none;background:none;padding:5px 9px;border-radius:7px}
     .btn-logout:hover{background:#f2f2f0;color:#555}
@@ -396,24 +407,39 @@
       <div><h1 id="hdr-title">근무표</h1><div class="hdr-name" id="hdr-name"></div></div>
     </div>
     <div class="hdr-right">
-      <!-- ★ 종 모양 알림 버튼 -->
+      <!-- 종 모양 알림 버튼 -->
       <button id="btn-alarm" onclick="toggleAlarmPanel()" title="내 근무 알림">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
           <path d="M13.73 21a2 2 0 01-3.46 0"/>
         </svg>
       </button>
-      <button class="btn-logout" onclick="doLogout()">로그아웃</button>
+      <!-- ★ 설정 버튼 -->
+      <button id="btn-settings" onclick="toggleSettingsPanel()" title="설정">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
     </div>
   </div>
 
   <!-- ★ 알림 패널 (외부 탭 시 닫힘) -->
   <div id="alarm-panel" style="display:none" onclick="event.stopPropagation()">
     <div class="alarm-panel-header">
-      <h4>🔔 이번 달 내 근무 알림</h4>
+      <h4>🔔 알림 설정한 근무</h4>
       <button class="alarm-panel-close" onclick="toggleAlarmPanel()">✕</button>
     </div>
     <div id="alarm-panel-list"></div>
+  </div>
+
+  <!-- ★ 설정 패널 -->
+  <div id="settings-panel" style="display:none" onclick="event.stopPropagation()">
+    <div class="alarm-panel-header">
+      <h4>⚙️ 설정</h4>
+      <button class="alarm-panel-close" onclick="toggleSettingsPanel()">✕</button>
+    </div>
+    <div id="settings-panel-body"></div>
   </div>
 
   <!-- 근무표 탭 -->
@@ -565,6 +591,8 @@
       </div>
       <div style="text-align:center;margin-top:16px;color:#fff;font-size:16px;font-weight:600" id="profile-modal-name"></div>
       <button class="profile-edit-btn" style="margin-top:16px" onclick="openProfileEdit()">편집</button>
+      <!-- ★ 로그아웃 버튼 -->
+      <button onclick="closeProfileModal();doLogout()" style="margin-top:12px;padding:10px 32px;background:transparent;color:rgba(255,255,255,0.7);border:1.5px solid rgba(255,255,255,0.3);border-radius:22px;font-size:14px;cursor:pointer;font-weight:500;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='transparent'">로그아웃</button>
     </div>
     <!-- 미리보기 -->
     <div class="profile-preview-wrap" id="profile-preview-wrap">
