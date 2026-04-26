@@ -1114,7 +1114,8 @@ async function changeRole(id,role){const u=allMembers.find(x=>x.id===id);if(!u)r
 async function removeUser(id){allMembers=allMembers.filter(x=>x.id!==id);if(!OFFLINE)await sb.from('app_users').delete().eq('id',id);renderAdmin();}
 function renderAdminFeed(){
   const el=$('admin-feed-list');
-  if(!feedPosts.length){el.innerHTML='<p class="empty-state">피드가 없습니다.</p>';return;}
+  if(!el) return; // 요소 없으면 무시
+
   el.innerHTML=feedPosts.map(p=>`
     <div class="feed-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
