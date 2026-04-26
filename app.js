@@ -57,9 +57,10 @@ const PALETTE = [
   {bg:'#f1f5f9',text:'#334155',dot:'#64748b',border:'#cbd5e1'},
 ];
 let typeColorMap = {};
-function assignColors(types) { let idx=Object.keys(typeColorMap).length; (types||[]).forEach(t=>{if(t&&!typeColorMap[t])typeColorMap[t]=PALETTE[idx++%PALETTE.length];}); }
+function assignColors(types){ let idx=Object.keys(typeColorMap).length; (types||[]).forEach(t=>{if(t&&!typeColorMap[t])typeColorMap[t]=PALETTE[idx++%PALETTE.length];}); }
+function resetTypeColors(){ typeColorMap={}; assignColors(collectAllTypes()); }
 const tc = t => typeColorMap[t] || PALETTE[9];
-function collectAllTypes() { const s=new Set(); Object.values(allSchedules).forEach(ym=>Object.values(ym).forEach(nm=>Object.values(nm).forEach(dm=>Object.values(dm).forEach(t=>t&&s.add(t))))); return[...s]; }
+function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEach(ym=>Object.values(ym).forEach(nm=>Object.values(nm).forEach(dm=>Object.values(dm).forEach(t=>t&&s.add(t))))); return[...s]; }
 
 // ══════════════════════════════════════════════════
 //  초기화
@@ -76,7 +77,49 @@ window.addEventListener('DOMContentLoaded', async () => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && cu) refreshSchedules(); });
 
 // ══════════════════════════════════════════════════
-//  스케줄 새로고침 (폴링 / 포커스 시)
+//  당겨서 새로고침 (Pull to Refresh)
+// ══════════════════════════════════════════════════
+function initPullToRefresh(){
+  let startY=0, pulling=false, indicator=null;
+  const threshold=70; // 당기는 최소 거리
+
+  const createIndicator=()=>{
+    if($('ptr-indicator')) return $('ptr-indicator');
+    const el=document.createElement('div');
+    el.id='ptr-indicator';
+    el.style.cssText='position:fixed;top:56px;left:50%;transform:translateX(-50%);background:#185FA5;color:#fff;padding:8px 20px;border-radius:0 0 20px 20px;font-size:12px;font-weight:600;z-index:35;display:none;align-items:center;gap:8px;box-shadow:0 2px 10px rgba(0,0,0,.2)';
+    el.innerHTML='<div class="ptr-spinner"></div><span id="ptr-text">당겨서 새로고침</span>';
+    document.body.appendChild(el);
+    return el;
+  };
+
+  document.addEventListener('touchstart', e=>{
+    if(window.scrollY===0) { startY=e.touches[0].clientY; pulling=true; }
+  }, {passive:true});
+
+  document.addEventListener('touchmove', e=>{
+    if(!pulling) return;
+    const dist=e.touches[0].clientY - startY;
+    if(dist<=0){ pulling=false; return; }
+    indicator=createIndicator();
+    if(dist>20){
+      indicator.style.display='flex';
+      $('ptr-text').textContent=dist>threshold?'놓아서 새로고침':'당겨서 새로고침';
+    }
+  }, {passive:true});
+
+  document.addEventListener('touchend', async e=>{
+    if(!pulling){return;}
+    pulling=false;
+    const dist=e.changedTouches[0].clientY - startY;
+    if(dist>threshold && indicator){
+      $('ptr-text').textContent='새로고침 중...';
+      await refreshSchedules();
+      if(cu) updateNoticeBadge();
+    }
+    if(indicator){ indicator.style.display='none'; }
+  }, {passive:true});
+}
 // ══════════════════════════════════════════════════
 async function refreshSchedules() {
   if (OFFLINE||!sb) return;
@@ -187,8 +230,8 @@ function enterApp() {
   scheduleLocalAlarms();
   checkNotifPermission();
   if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-  // ★ FCM 토큰 등록 (푸시 알림)
   initFCM();
+  initPullToRefresh(); // ★ 당겨서 새로고침
 }
 
 // ══════════════════════════════════════════════════
@@ -1348,9 +1391,145 @@ async function postNotice(){
 // ══════════════════════════════════════════════════
 function dragOver(e){e.preventDefault();$('upload-zone').classList.add('drag');}
 function dragLeave(){$('upload-zone').classList.remove('drag');}
-function dropFile(e){e.preventDefault();$('upload-zone').classList.remove('drag');parseExcelFile(e.dataTransfer.files[0]);}
-function handleExcelFile(inp){const f=inp.files[0];if(f)parseExcelFile(f);inp.value='';}
-function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
+function dropFile(e){e.preventDefault();$('upload-zone').classList.remove('drag');handleAnyFile(e.dataTransfer.files[0]);}
+function handleExcelFile(inp){const f=inp.files[0];if(f)handleAnyFile(f);inp.value='';}
+
+// ★ 파일 형식 자동 감지 → 엑셀/이미지 분기
+function handleAnyFile(file){
+  if(!file) return;
+  const isImage = file.type.startsWith('image/');
+  const isExcel = file.name.match(/\.(xlsx|xls)$/i);
+  if(isImage){
+    parseImageWithAI(file);
+  } else if(isExcel){
+    parseExcelFile(file);
+  } else {
+    showExcelErr('엑셀(.xlsx) 또는 이미지(jpg, png) 파일만 업로드 가능합니다.');
+  }
+}
+
+// ★ AI 파서 — 이미지를 Claude API로 분석
+async function parseImageWithAI(file){
+  showAILoading(true);
+  try {
+    // 이미지를 base64로 변환
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const memberNames = allMembers.map(u=>u.name).join(', ');
+
+    const prompt = `이 이미지는 교회 근무표입니다. 다음 규칙에 따라 분석해주세요:
+
+1. 날짜별로 근무자를 추출해주세요
+2. 괄호 안에 사람 이름이 있으면 [기도] 역할입니다
+3. 괄호 안에 행사명/교회명/소속이 있으면 무시하세요
+4. 괄호가 두 개면 첫 번째는 무시, 두 번째 이름이 [기도]입니다
+5. 주일 새벽 설교의 경우, 다음 주 설교자가 이번 주 백업입니다
+6. 등록된 회원 이름 목록: ${memberNames}
+7. 이름이 비슷하면 회원 목록의 이름으로 교정해주세요
+
+결과를 반드시 아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이):
+{
+  "year": 연도(숫자),
+  "month": 월(숫자, 여러 달이면 첫 번째 달),
+  "data": {
+    "이름": {
+      "날짜(일자 숫자)": "근무유형",
+      ...
+    },
+    ...
+  },
+  "summary": "인식 결과 요약 (몇 명, 어떤 근무 등)"
+}
+
+근무유형은 예: "[주일새벽]설교", "[주일4부]설교", "[수요]설교", "[금요]설교", "[수요오전]사회", "[수요오전]자막", "[수요저녁]사회", "[수요저녁]자막", "[수요저녁]영상", "[기도]설교", "[백업]설교" 등으로 표현하세요.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: file.type, data: base64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    showAILoading(false);
+    showAIPreview(parsed, file.name);
+
+  } catch(e) {
+    showAILoading(false);
+    showExcelErr('AI 분석 오류: ' + e.message);
+  }
+}
+
+function showAILoading(show){
+  let el=$('ai-loading');
+  if(!el){
+    el=document.createElement('div');
+    el.id='ai-loading';
+    el.style.cssText='text-align:center;padding:20px;color:#185FA5;font-size:13px;font-weight:600';
+    el.innerHTML='<div class="spinner" style="margin:0 auto 10px"></div>AI가 근무표를 분석하고 있습니다...';
+    $('upload-zone').after(el);
+  }
+  el.style.display=show?'block':'none';
+  $('upload-zone').style.display=show?'none':'block';
+}
+
+// AI 분석 결과 미리보기
+function showAIPreview(parsed, fileName){
+  const {year, month, data, summary} = parsed;
+  if(!data||!Object.keys(data).length){ showExcelErr('근무자 데이터를 찾을 수 없습니다.'); return; }
+
+  parsedExcel = {year, month, data, fileName: fileName||'AI분석결과'};
+  assignColors(collectAllTypes());
+
+  $('upload-zone').style.display='none';
+  $('excel-preview').style.display='block';
+  $('excel-info').textContent=`${year}년 ${month}월 · 근무자 ${Object.keys(data).length}명`;
+
+  // 요약 표시
+  if(summary){
+    const sumEl=document.createElement('div');
+    sumEl.style.cssText='background:#f0f5fd;border-radius:10px;padding:10px 13px;font-size:12px;color:#185FA5;margin-bottom:10px;line-height:1.6';
+    sumEl.innerHTML=`🤖 AI 분석 결과<br>${esc(summary)}`;
+    $('excel-preview').prepend(sumEl);
+  }
+
+  // 미리보기 테이블
+  const names=Object.keys(data);
+  const allDays=[...new Set(names.flatMap(n=>Object.keys(data[n]).map(Number)))].sort((a,b)=>a-b);
+  let th='<tr><th>이름</th>';
+  allDays.forEach(d=>th+=`<th>${d}</th>`);
+  th+='</tr>';
+  const tb=names.map(name=>{
+    const dd=data[name];
+    let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap">${name}</td>`;
+    allDays.forEach(d=>{
+      const v=dd[String(d)]||'';
+      const c=v?tc(v):null;
+      r+=`<td ${c?`style="background:${c.bg};color:${c.text};font-weight:600"`:''} title="${v}">${v?v.replace(/[\[\]]/g,'').slice(0,5):''}</td>`;
+    });
+    return r+'</tr>';
+  }).join('');
+  $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
+  $('parse-summary').innerHTML=`<b>근무자:</b> ${names.join(', ')}`;
+}const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
     const header=rows[0]||[];const hasNameCol=header.some(h=>h&&String(h).trim()==='이름');
     if(hasNameCol){processExcelRows(rows,file.name,wb.SheetNames[0]);}
     else{processExcelRows2(rows,file.name,wb.SheetNames[0]);}
