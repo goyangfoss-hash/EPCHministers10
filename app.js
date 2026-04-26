@@ -390,6 +390,9 @@ function showNotifBanner(){
 }
 
 async function requestNotifPermission(){
+  // ★ 설정 패널이 열려있으면 먼저 닫기
+  const sp=$('settings-panel');
+  if(sp&&sp.style.display!=='none'){sp.style.display='none';$('settings-overlay')?.remove();}
   $('notif-banner')?.remove();
   if(!('Notification'in window)) return showToastMsg('이 브라우저는 알림을 지원하지 않습니다.');
   try {
@@ -397,7 +400,9 @@ async function requestNotifPermission(){
     if(perm==='granted'){
       showToastMsg('✅ 기기 알림이 허용되었습니다!');
       updateAlarmBadge(); scheduleLocalAlarms();
-      setTimeout(()=>pushNotify('근무표 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.'),800);
+      // 설정 패널 갱신
+      setTimeout(()=>renderSettingsPanel(), 300);
+      setTimeout(()=>pushNotify('근무표 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.','shift'),800);
     } else {
       showToastMsg('알림이 거부되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
       localStorage.setItem('ws_notif_dismissed','1');
