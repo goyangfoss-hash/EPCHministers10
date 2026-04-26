@@ -438,7 +438,7 @@ function switchTab(tab,btn){
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
-  if(tab==='feed'){renderDmInbox();renderMyFeed();updateFeedBadge();}
+  if(tab==='feed'){renderFeedTab();}
   if(tab==='admin')renderAdmin();
   $('alarm-panel').style.display='none';
 }
@@ -754,96 +754,72 @@ async function deleteNotice(id){
 }
 
 // ══════════════════════════════════════════════════
-//  피드
+//  소통 탭 — 채팅으로 완전 통합
 // ══════════════════════════════════════════════════
-async function submitFeed(){const txt=$('feed-input').value.trim();const errEl=$('feed-err'),okEl=$('feed-ok');errEl.style.display='none';okEl.style.display='none';if(!txt)return showErr(errEl,'내용을 입력해주세요.');const post={id:Date.now(),user_id:cu.id,author_name:cu.name,content:txt,admin_reply:null,created_at:new Date().toISOString()};if(!OFFLINE){const{data}=await sb.from('feed_posts').insert({user_id:cu.id,content:txt,is_private:true}).select('*').single();if(data){post.id=data.id;post.created_at=data.created_at;}}feedPosts.unshift(post);$('feed-input').value='';okEl.textContent='전송되었습니다.';okEl.style.display='block';setTimeout(()=>okEl.style.display='none',3000);renderMyFeed();}
-function renderMyFeed(){
-  const mp=feedPosts.filter(p=>p.user_id===cu.id);
-  const el=$('feed-list');
-  if(!mp.length){el.innerHTML='<p class="empty-state">전송된 피드가 없습니다.</p>';return;}
-  el.innerHTML=mp.map(p=>`
-    <div class="feed-card${p.admin_reply&&!p.reply_read?' feed-card-new':''}">
-      <div class="feed-content">${esc(p.content)}</div>
-      <div class="feed-time">${fmtDate(p.created_at)}</div>
-      ${p.admin_reply
-        ? `<div class="feed-reply" onclick="markReplyRead(${p.id})">
-            <div class="feed-reply-label">관리자 답변 ${!p.reply_read?'<span class="new-badge" style="font-size:9px;padding:1px 5px;margin-left:4px">NEW</span>':''}</div>
-            ${esc(p.admin_reply)}
-           </div>`
-        : `<div class="feed-pending">답변 대기 중...</div>`}
-    </div>`).join('');
-}
-
-function markReplyRead(postId){
-  const p=feedPosts.find(x=>x.id===postId); if(!p||p.reply_read) return;
-  p.reply_read=true;
-  updateFeedBadge();
-  renderMyFeed();
-}
-
-function updateFeedBadge(){
-  // 읽지 않은 관리자 답변 수
-  const myPosts=feedPosts.filter(p=>p.user_id===cu.id);
-  const unread=myPosts.filter(p=>p.admin_reply&&!p.reply_read).length;
-  const btn=$('btn-feed');
-  let b=btn?.querySelector('.feed-badge');
-  if(unread>0){if(!b){b=document.createElement('div');b.className='nav-badge feed-badge';btn?.appendChild(b);}b.textContent=unread;}
-  else b?.remove();
-}
-
-function updateDmBadge(){
-  const cnt=Object.values(chatMessages).flat().filter(m=>m.to_id===cu.id&&!m.is_read).length;
-  dmUnreadCount=cnt;
-  const btn=$('btn-feed');
-  let b=btn?.querySelector('.dm-badge');
-  if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge dm-badge';btn?.appendChild(b);}b.textContent=cnt;}
-  else b?.remove();
-  // 소통 탭이 열려있으면 인박스도 갱신
-  if($('tab-feed')?.style.display!=='none') renderDmInbox();
-}
-
-// ★ 받은 메시지 인박스 (소통 탭 상단)
-function renderDmInbox(){
-  const el=$('dm-inbox'); if(!el) return;
-  // 나에게 온 메시지가 있는 대화 상대 목록
-  const senders=new Set();
-  Object.entries(chatMessages).forEach(([uid,msgs])=>{
-    if(msgs.some(m=>m.to_id===cu.id)) senders.add(parseInt(uid));
-  });
-  if(!senders.size){ el.innerHTML=''; return; }
-
-  let html='<div class="list-section-title">받은 메시지</div>';
-  [...senders].forEach(uid=>{
-    const msgs=chatMessages[uid]||[];
-    const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
-    const last=msgs[msgs.length-1];
-    const sender=allMembers.find(u=>u.id===uid);
-    if(!sender) return;
-    html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${uid})" style="display:flex;align-items:center;gap:12px">
-      <div style="width:40px;height:40px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0">${sender.name[0]}</div>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-          <span style="font-size:14px;font-weight:700">${sender.name}</span>
-          ${unread?`<span class="cnt-badge">${unread}</span>`:''}
+function renderFeedTab(){
+  const el=$('feed-list'); if(!el) return;
+  if(isAdmin()){
+    // 관리자: 전체 이용자 대화 목록
+    const members=allMembers.filter(u=>!isAdminRole(u));
+    if(!members.length){el.innerHTML='<p class="empty-state">이용자가 없습니다.</p>';return;}
+    let html='<div class="list-section-title">이용자 채팅</div>';
+    members.forEach((u,i)=>{
+      const msgs=chatMessages[u.id]||[];
+      const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+      const last=msgs[msgs.length-1];
+      const c=PALETTE[i%PALETTE.length];
+      html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${u.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:${c.text};flex-shrink:0;border:2px solid ${c.border}">${u.name[0]}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+            <span style="font-size:14px;font-weight:700">${u.name}</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              ${unread?`<span class="cnt-badge">${unread}</span>`:''}
+              ${last?`<span style="font-size:10px;color:#bbb">${fmtTime(last.created_at)}</span>`:''}
+            </div>
+          </div>
+          <div style="font-size:12px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${last?esc(last.content):'<span style="color:#ccc">아직 대화가 없습니다</span>'}
+          </div>
         </div>
-        <div style="font-size:12px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(last?.content||'')}</div>
-      </div>
-    </div>`;
-  });
-  el.innerHTML=html;
+      </div>`;
+    });
+    el.innerHTML=html;
+  } else {
+    // 이용자: 관리자와의 채팅 바로 열기
+    const admin=allMembers.find(u=>isAdminRole(u));
+    if(admin){ openChat(admin.id); }
+    else { el.innerHTML='<p class="empty-state">관리자를 찾을 수 없습니다.</p>'; }
+  }
 }
+function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
+
+// 배지: 받은 읽지 않은 DM 수
+function updateFeedBadge(){
+  const cnt=Object.values(chatMessages).flat().filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  const btn=$('btn-feed');
+  // 기존 배지 모두 제거 후 재생성
+  btn?.querySelectorAll('.nav-badge').forEach(b=>b.remove());
+  if(cnt>0){const b=document.createElement('div');b.className='nav-badge';btn?.appendChild(b);b.textContent=cnt;}
+}
+function updateDmBadge(){updateFeedBadge();}
+// 하위 호환용 (관리자 탭에서 renderAdminFeed 호출 방지)
+function renderMyFeed(){}
+function renderAdminFeed(){}
+function renderDmInbox(){}
 
 function openChat(userId){
   const user=allMembers.find(u=>u.id===userId);
   if(!user) return;
   chatTarget=user;
-  // 읽음 처리
+  // ★ 읽음 처리
   const msgs=chatMessages[userId]||[];
   msgs.filter(m=>m.to_id===cu.id&&!m.is_read).forEach(m=>{
     m.is_read=true;
     if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
   });
-  updateDmBadge();
+  // ★ 배지 즉시 갱신
+  updateFeedBadge();
   $('chat-target-name').textContent=user.name;
   $('chat-modal').style.display='flex';
   renderChatMessages();
