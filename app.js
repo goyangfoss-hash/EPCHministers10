@@ -434,22 +434,44 @@ function scheduleLocalAlarms(){
   });
 }
 
+// ★ 모든 패널 닫기 (상호 배타적)
+function closeAllPanels(){
+  const ap=$('alarm-panel'), sp=$('settings-panel');
+  if(ap) ap.style.display='none';
+  if(sp) sp.style.display='none';
+  $('alarm-overlay')?.remove();
+  $('settings-overlay')?.remove();
+}
+
 function toggleAlarmPanel(){
-  const panel=$('alarm-panel');if(!panel)return;
-  const isOpen=panel.style.display!=='none';
-  if(isOpen){
-    panel.style.display='none';
-    $('alarm-overlay')?.remove();
-  } else {
-    panel.style.display='block';
+  const panel=$('alarm-panel'); if(!panel) return;
+  const isOpen=panel.style.display==='flex';
+  closeAllPanels();
+  if(!isOpen){
+    panel.style.display='flex';
     renderAlarmPanel();
-    // ★ 오버레이 추가 — 다른 요소 탭 방지
     const ov=document.createElement('div');
     ov.id='alarm-overlay';
     ov.style.cssText='position:fixed;inset:0;z-index:24;background:transparent';
-    ov.onclick=()=>{panel.style.display='none';ov.remove();};
+    ov.onclick=()=>closeAllPanels();
     document.body.appendChild(ov);
-    // 패널이 오버레이 위에 오도록
+    panel.style.zIndex='25';
+  }
+}
+
+function toggleSettingsPanel(){
+  const panel=$('settings-panel'); if(!panel) return;
+  const isOpen=panel.style.display==='flex';
+  closeAllPanels();
+  if(!isOpen){
+    renderSettingsPanel();
+    panel.style.display='flex';
+    panel.style.flexDirection='column';
+    const ov=document.createElement('div');
+    ov.id='settings-overlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:24;background:transparent';
+    ov.onclick=()=>closeAllPanels();
+    document.body.appendChild(ov);
     panel.style.zIndex='25';
   }
 }
@@ -546,6 +568,7 @@ function initOfflineSample(){allSchedules={2026:{5:{'김동권':{'6':'[오전]�
 //  탭 전환
 // ══════════════════════════════════════════════════
 function switchTab(tab,btn){
+  closeAllPanels(); // ★ 탭 전환 시 모든 패널 닫기
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   ['cal','myshift','search','notice','feed','admin'].forEach(t=>$(`tab-${t}`).style.display=t===tab?'block':'none');
   $('hdr-title').textContent={cal:'근무표',myshift:'내 근무',search:'근무 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
@@ -901,26 +924,6 @@ async function deleteNotice(id){
 // ══════════════════════════════════════════════════
 //  설정 패널
 // ══════════════════════════════════════════════════
-function toggleSettingsPanel(){
-  const panel=$('settings-panel'); if(!panel) return;
-  const isOpen=panel.style.display!=='none';
-  if(isOpen){
-    panel.style.display='none';
-    $('settings-overlay')?.remove();
-  } else {
-    renderSettingsPanel();
-    panel.style.display='flex';
-    panel.style.flexDirection='column';
-    // 오버레이
-    const ov=document.createElement('div');
-    ov.id='settings-overlay';
-    ov.style.cssText='position:fixed;inset:0;z-index:24;background:transparent';
-    ov.onclick=()=>{panel.style.display='none';ov.remove();};
-    document.body.appendChild(ov);
-    panel.style.zIndex='25';
-  }
-}
-
 // 알림 설정 (localStorage)
 function getNotifSettings(){
   try{ return JSON.parse(localStorage.getItem('ws_notif_settings')||'{}'); }catch{ return {}; }
