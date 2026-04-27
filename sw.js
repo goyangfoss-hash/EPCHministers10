@@ -59,23 +59,6 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// ── 푸시 알림 (FCM이 없을 때 기본 처리) ────────────
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  try {
-    const data = event.data.json();
-    const title = data.title || '은평교회 근무관리';
-    const options = {
-      body: data.body || '새 알림이 있습니다.',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [200, 100, 200],
-      data: { url: data.url || '/' },
-    };
-    event.waitUntil(self.registration.showNotification(title, options));
-  } catch (e) {}
-});
-
 // ── 알림 클릭 ───────────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
