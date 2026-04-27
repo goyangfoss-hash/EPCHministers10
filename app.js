@@ -1722,23 +1722,29 @@ async function parseImageWithAI(file){
 
 근무유형 예시: "[주일새벽]설교", "[주일오전]사회", "[주일4부]자막", "[수요]설교", "[금요]설교", "[수요]사회", "[금요]자막", "[새벽]설교", "[기도]설교", "[백업]설교"`;
 
-    // ★ Supabase Edge Function을 fetch로 직접 호출 (invoke 대신)
+    // ★ Google Gemini API 직접 호출 (무료)
     let text = '';
-    const fnResp = await fetch(`${SUPABASE_URL}/functions/v1/ai-parse`, {
+    const GEMINI_KEY = 'AIzaSyCsVNUYub1bktkmN_Q6v7dZmEgJ_I4jcIw';
+    const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+    const geminiResp = await fetch(GEMINI_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'apikey': SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({ base64, mediaType, prompt, model: 'claude-sonnet-4-20250514', maxTokens: 4096 })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mediaType, data: base64 } },
+            { text: prompt }
+          ]
+        }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+      })
     });
-    if(!fnResp.ok){
-      const errText = await fnResp.text();
-      throw new Error(`Edge Function 오류 ${fnResp.status}: ${errText.slice(0,200)}`);
+    if(!geminiResp.ok){
+      const errText = await geminiResp.text();
+      throw new Error(`Gemini API 오류 ${geminiResp.status}: ${errText.slice(0,200)}`);
     }
-    const fnData = await fnResp.json();
-    text = fnData?.text || '';
+    const geminiData = await geminiResp.json();
+    text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     if(!text) throw new Error('AI 응답이 비어 있습니다.');
 
