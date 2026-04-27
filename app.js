@@ -1722,41 +1722,23 @@ async function parseImageWithAI(file){
 
 근무유형 예시: "[주일새벽]설교", "[주일오전]사회", "[주일4부]자막", "[수요]설교", "[금요]설교", "[수요]사회", "[금요]자막", "[새벽]설교", "[기도]설교", "[백업]설교"`;
 
-    // ★ Supabase Edge Function을 프록시로 사용
+    // ★ Supabase Edge Function을 fetch로 직접 호출 (invoke 대신)
     let text = '';
-    try {
-      const { data: fnData, error: fnError } = await sb.functions.invoke('ai-parse', {
-        body: { base64, mediaType, prompt, model: 'claude-sonnet-4-20250514', maxTokens: 4096 },
-        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
-      });
-      if(fnError) throw new Error(fnError.message);
-      text = fnData?.text || fnData?.content?.[0]?.text || '';
-    } catch(fnErr) {
-      // Edge Function 없으면 직접 호출 시도 (로컬/개발 환경)
-      console.warn('Edge Function 실패, 직접 호출 시도:', fnErr.message);
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-            { type: 'text', text: prompt }
-          ]}]
-        })
-      });
-      if(!resp.ok){
-        const errBody = await resp.text();
-        throw new Error(`API 오류 ${resp.status}: ${errBody.slice(0,200)}`);
-      }
-      const respData = await resp.json();
-      text = respData.content?.map(b=>b.text||'').join('') || '';
+    const fnResp = await fetch(`${SUPABASE_URL}/functions/v1/ai-parse`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ base64, mediaType, prompt, model: 'claude-sonnet-4-20250514', maxTokens: 4096 })
+    });
+    if(!fnResp.ok){
+      const errText = await fnResp.text();
+      throw new Error(`Edge Function 오류 ${fnResp.status}: ${errText.slice(0,200)}`);
     }
+    const fnData = await fnResp.json();
+    text = fnData?.text || '';
 
     if(!text) throw new Error('AI 응답이 비어 있습니다.');
 
