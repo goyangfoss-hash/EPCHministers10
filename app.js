@@ -1825,13 +1825,18 @@ function showAIPreview(parsed, fileName){
 
   $('upload-zone').style.display='none';
   $('excel-preview').style.display='block';
-  $('excel-info').textContent=`${year}년 ${month}월 · 근무자 ${Object.keys(data).length}명`;
+
+  // ★ 기존 AI 요약 박스 제거 (중복 방지)
+  $('excel-preview').querySelectorAll('.ai-summary-box').forEach(el=>el.remove());
+
+  $('excel-info').textContent=`${year}년 ${month}월 · 근무자 ${Object.keys(data).length}명 (AI 분석)`;
 
   // 요약 표시
   if(summary){
     const sumEl=document.createElement('div');
-    sumEl.style.cssText='background:#f0f5fd;border-radius:10px;padding:10px 13px;font-size:12px;color:#185FA5;margin-bottom:10px;line-height:1.6';
-    sumEl.innerHTML=`🤖 AI 분석 결과<br>${esc(summary)}`;
+    sumEl.className='ai-summary-box';
+    sumEl.style.cssText='background:#f0f5fd;border-radius:10px;padding:10px 13px;font-size:12px;color:#185FA5;margin-bottom:10px;line-height:1.6;border:1px solid #dbeafe';
+    sumEl.innerHTML=`🤖 <b>AI 분석 완료</b><br>${esc(summary)}`;
     $('excel-preview').prepend(sumEl);
   }
 
@@ -1852,7 +1857,7 @@ function showAIPreview(parsed, fileName){
     return r+'</tr>';
   }).join('');
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
-  $('parse-summary').innerHTML=`<b>근무자:</b> ${names.join(', ')}`;
+  $('parse-summary').innerHTML=`<b>근무자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...new Set(names.flatMap(n=>Object.values(data[n]||{})))].map(t=>{const c=tc(t);return`<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
 }
 
 function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
