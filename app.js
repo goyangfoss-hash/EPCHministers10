@@ -257,7 +257,10 @@ function enterApp() {
   scheduleLocalAlarms();
   autoSetMyShiftAlarms(); // ★ 로그인 후 본인 근무 자동 알림 설정
   checkNotifPermission();
-  if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+    navigator.serviceWorker.register('firebase-messaging-sw.js').catch(()=>{});
+  }
   initFCM();
   initPullToRefresh(); // ★ 당겨서 새로고침
 }
@@ -1787,13 +1790,21 @@ function compressImageToBase64(file){
       const img = new Image();
       img.onerror = reject;
       img.onload = () => {
-        const MAX = 1600;
+        // ★ Edge Function 크기 제한 대응: 최대 1024px, 품질 0.75
+        const MAX = 1024;
         let {width:w, height:h} = img;
         if(w>MAX||h>MAX){const r=Math.min(MAX/w,MAX/h);w=Math.round(w*r);h=Math.round(h*r);}
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        // 품질 낮춰서 크기 줄이기 (약 200~400KB 목표)
+        let quality = 0.75;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        // base64 크기가 400KB 초과하면 품질 더 낮춤
+        while(dataUrl.length > 400000 && quality > 0.3){
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
         resolve(dataUrl.split(',')[1]);
       };
       img.src = e.target.result;
