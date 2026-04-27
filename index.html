@@ -132,8 +132,11 @@
     .view-toggle{display:flex;background:#ebebeb;border-radius:10px;padding:3px;margin-bottom:10px;gap:2px}
     .view-btn{flex:1;padding:7px;border:none;background:none;border-radius:8px;font-size:12px;color:#999;cursor:pointer;font-weight:600;transition:all .15s}
     .view-btn.active{background:#fff;color:#185FA5;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-    #cal-legend{margin-bottom:10px}
-    .legend-wrap{display:flex;flex-wrap:wrap;gap:5px}
+    /* 카테고리 탭 */
+    .cat-tab-wrap{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+    .cat-tab-btn{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid #e8e8e0;background:#fff;color:#888;transition:all .15s;white-space:nowrap}
+    .cat-tab-btn.active{background:#185FA5;color:#fff;border-color:#185FA5;box-shadow:0 2px 8px rgba(24,95,165,.3)}
+    .cat-tab-btn:hover:not(.active){border-color:#185FA5;color:#185FA5}
     .legend-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid transparent;transition:all .15s;white-space:nowrap}
     .legend-btn.active{box-shadow:0 0 0 2.5px #1a1a18}
     .legend-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}

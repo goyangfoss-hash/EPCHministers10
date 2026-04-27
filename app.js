@@ -57,9 +57,9 @@ const PALETTE = [
   {bg:'#f1f5f9',text:'#334155',dot:'#64748b',border:'#cbd5e1'},
 ];
 let typeColorMap = {};
-function assignColors(types){ let idx=Object.keys(typeColorMap).length; (types||[]).forEach(t=>{if(t&&!typeColorMap[t])typeColorMap[t]=PALETTE[idx++%PALETTE.length];}); }
+function assignColors(types){ (types||[]).forEach(t=>{if(t&&!typeColorMap[t])typeColorMap[t]=getTypeColor(t);}); }
 function resetTypeColors(){ typeColorMap={}; assignColors(collectAllTypes()); }
-const tc = t => typeColorMap[t] || PALETTE[9];
+const tc = t => typeColorMap[t] || getTypeColor(t);
 function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEach(ym=>Object.values(ym).forEach(nm=>Object.values(nm).forEach(dm=>Object.values(dm).forEach(t=>t&&s.add(t))))); return[...s]; }
 
 // ══════════════════════════════════════════════════
@@ -631,18 +631,92 @@ function switchTab(tab,btn){
 }
 
 // ══════════════════════════════════════════════════
-//  캘린더
+//  카테고리 시스템
 // ══════════════════════════════════════════════════
-function setView(v){calView=v;filterType='';$('view-mine').classList.toggle('active',v==='mine');$('view-all').classList.toggle('active',v==='all');renderCalendar();}
-function setFilter(t){filterType=filterType===t?'':t;renderCalendar();}
-function changeMonth(d){curM+=d;if(curM>11){curM=0;curY++;}if(curM<0){curM=11;curY--;}filterType='';if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}renderCalendar();});}else renderCalendar();}
+const CATEGORIES = [
+  { id:'all',   label:'전체',        keywords:[] },
+  { id:'주일',  label:'주일',        keywords:['주일'] },
+  { id:'수요',  label:'수요',        keywords:['수요'] },
+  { id:'금요',  label:'금요',        keywords:['금요'] },
+  { id:'새벽',  label:'새벽',        keywords:['새벽'], exclude:['주일'] },
+  { id:'특새',  label:'특새&축복성회', keywords:['특새','축복','행사'] },
+];
+
+function getCategory(type){
+  if(!type) return 'all';
+  for(const cat of CATEGORIES){
+    if(cat.id==='all') continue;
+    const hasKeyword=cat.keywords.some(k=>type.includes(k));
+    const hasExclude=cat.exclude?.some(k=>type.includes(k));
+    if(hasKeyword && !hasExclude) return cat.id;
+  }
+  return '특새'; // 매핑 안되면 특새로
+}
+
+// 색상 간소화 — 근무 형태 키워드 기반
+const TYPE_COLOR_RULES = [
+  { keywords:['설교'],                              color:0 }, // 파랑
+  { keywords:['사회'],                              color:1 }, // 초록
+  { keywords:['자막'],                              color:2 }, // 주황
+  { keywords:['영상'],                              color:3 }, // 보라
+  { keywords:['기도'],                              color:4 }, // 청록
+  { keywords:['백업'],                              color:9 }, // 회색
+  { keywords:['방송','건반','드럼','베이스','싱어','인도'], color:5 }, // 연주황
+];
+
+function getTypeColor(type){
+  if(!type) return PALETTE[9];
+  for(const rule of TYPE_COLOR_RULES){
+    if(rule.keywords.some(k=>type.includes(k))) return PALETTE[rule.color];
+  }
+  return PALETTE[6]; // 기타
+}
+
+let filterCategory = 'all'; // 카테고리 필터
+
+function setCategoryFilter(catId){
+  filterCategory=catId;
+  filterType='';
+  renderCalendar();
+}
 
 function renderLegend(){
-  const el=$('cal-legend');if(!el)return;
+  const el=$('cal-legend'); if(!el) return;
   const types=(()=>{const s=new Set();Object.values(curData()).forEach(wd=>Object.values(wd).forEach(t=>t&&s.add(t)));return[...s];})();
   if(!types.length){el.innerHTML='';return;}
-  el.innerHTML=`<div class="legend-wrap"><button class="legend-btn${filterType===''?' active':''}" onclick="setFilter('')" style="background:#f0f0ea;color:#666;border-color:#ddd">전체</button>${types.map(t=>{const c=tc(t);return`<button class="legend-btn${filterType===t?' active':''}" onclick="setFilter('${esc(t)}')" style="background:${c.bg};color:${c.text};border-color:${c.border}"><span class="legend-dot" style="background:${c.dot}"></span>${t}</button>`;}).join('')}</div>`;
+
+  // 현재 달에 있는 카테고리만 표시
+  const activeCats=new Set(types.map(t=>getCategory(t)));
+
+  el.innerHTML=`<div class="cat-tab-wrap">
+    ${CATEGORIES.filter(c=>c.id==='all'||activeCats.has(c.id)).map(c=>`
+      <button class="cat-tab-btn${filterCategory===c.id?' active':''}" onclick="setCategoryFilter('${c.id}')">
+        ${c.label}
+      </button>`).join('')}
+  </div>`;
 }
+
+// 카테고리 필터 적용된 근무 맵 생성
+function getFilteredMap(allMap, myRaw, myDays){
+  if(filterCategory==='all') return {fm:{...allMap}, fmMy:new Set(myDays)};
+  const fm={};
+  Object.entries(allMap).forEach(([day,ws])=>{
+    const fw=ws.filter(w=>getCategory(w.type)===filterCategory);
+    if(fw.length) fm[parseInt(day)]=fw;
+  });
+  const fmMy=new Set();
+  myDays.forEach(d=>{
+    if(getCategory(myRaw[String(d)])===filterCategory) fmMy.add(d);
+  });
+  return {fm, fmMy};
+}
+
+// ══════════════════════════════════════════════════
+//  캘린더
+// ══════════════════════════════════════════════════
+function setView(v){calView=v;filterType='';filterCategory='all';$('view-mine').classList.toggle('active',v==='mine');$('view-all').classList.toggle('active',v==='all');renderCalendar();}
+function setFilter(t){filterType=filterType===t?'':t;renderCalendar();}
+function changeMonth(d){curM+=d;if(curM>11){curM=0;curY++;}if(curM<0){curM=11;curY--;}filterType='';filterCategory='all';if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}renderCalendar();});}else renderCalendar();}
 
 function renderCalendar(){
   const DN=['일','월','화','수','목','금','토'],MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
@@ -651,15 +725,18 @@ function renderCalendar(){
   $('month-label').textContent=`${curY}년 ${MN[curM]}`;
   const allMap={};
   Object.keys(d).forEach((name)=>{Object.entries(d[name]||{}).forEach(([ds,type])=>{const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;if(!allMap[dn])allMap[dn]=[];allMap[dn].push({name,type,c:tc(type)});});});
-  const fm={};if(filterType){Object.entries(allMap).forEach(([day,ws])=>{const fw=ws.filter(w=>w.type===filterType);if(fw.length)fm[parseInt(day)]=fw;});}else Object.assign(fm,allMap);
-  const fmMy=new Set();if(filterType)myDays.forEach(d=>{if(myRaw[String(d)]===filterType)fmMy.add(d);});else myDays.forEach(d=>fmMy.add(d));
+
+  // ★ 카테고리 필터 적용
+  const {fm, fmMy}=getFilteredMap(allMap, myRaw, myDays);
+
   let html=DN.map(d=>`<div class="cal-head">${d}</div>`).join('');
   for(let i=0;i<fd;i++)html+=`<div class="cal-cell empty"></div>`;
   for(let d=1;d<=dim;d++){
     const isMy=myDays.has(d),isToday=now.getFullYear()===curY&&now.getMonth()===curM&&now.getDate()===d;
     const dow=new Date(curY,curM,d).getDay(),key=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key]||[]).length;
     const myType=myRaw[String(d)]||'',myC=myType?tc(myType):null,workers=fm[d]||[];
-    const dimmed=filterType&&((calView==='mine'&&!fmMy.has(d)&&!isAdmin())||(calView==='all'&&!workers.length));
+    const catFiltered=filterCategory!=='all';
+    const dimmed=catFiltered&&((calView==='mine'&&!fmMy.has(d)&&!isAdmin())||(calView==='all'&&!workers.length));
     const alarm=isMy?getAlarm(curY,curM+1,d):null;
     let cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(isToday?' today':'')+(dimmed?' dimmed':'');
     let style=isMy&&calView==='mine'&&myC?`style="background:${myC.bg};border-color:${myC.border}"`:'';
