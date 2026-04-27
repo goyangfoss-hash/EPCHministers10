@@ -659,7 +659,7 @@ function switchTab(tab,btn){
   closeAllPanels(); // ★ 탭 전환 시 모든 패널 닫기
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   ['cal','myshift','search','notice','feed','admin'].forEach(t=>$(`tab-${t}`).style.display=t===tab?'block':'none');
-  $('hdr-title').textContent={cal:'근무표',myshift:'내 근무',search:'근무 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
+  $('hdr-title').textContent={cal:'사역스케줄',myshift:'내 사역',search:'근무 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
@@ -807,12 +807,17 @@ function renderCalendar(){
     const dow=new Date(curY,curM,d).getDay(),key=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key]||[]).length;
     const myType=myRaw[String(d)]||'',myC=myType?tc(myType):null,workers=fm[d]||[];
     const catFiltered=filterCategory!=='all';
-    const dimmed=(calView==='mine'&&!fmMy.has(d)&&!isAdmin())||(catFiltered&&!workers.length&&calView==='all');
+    // 내 사역 ON: 내 사역 없는 날 dimmed / 카테고리 필터: 해당 사역 없는 날 dimmed
+    const myModeActive = calView==='mine' && !isAdmin();
+    const myHasDay = fmMy.has(d);
+    const dimmed = myModeActive && !myHasDay;
     const alarm=isMy?getAlarm(curY,curM+1,d):null;
     let cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(isToday?' today':'')+(dimmed?' dimmed':'');
-    let style=isMy&&calView==='mine'&&myC?`style="background:${myC.bg};border-color:${myC.border}"`:'';
-    const dots=(calView==='all'||isAdmin())&&workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'';
-    const typeTip=myType&&calView==='mine'&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
+    let style=isMy&&myModeActive&&myC?`style="background:${myC.bg};border-color:${myC.border}"`:'';
+    // dots: 전체모드=모든 사역자 점, 내사역모드=내 사역만
+    const dotsWorkers = myModeActive ? (myHasDay?[{name:cu.name,type:myType,c:myC}]:[]) : workers;
+    const dots = dotsWorkers.length?`<div class="shift-dots">${dotsWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c?.dot||'#185FA5'}" title="${w.name}:${w.type}"></div>`).join('')}${dotsWorkers.length>5?`<span class="more-dot">+${dotsWorkers.length-5}</span>`:''}</div>`:'';
+    const typeTip=myType&&myModeActive&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
     const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
     const myDot=isMy?`<span class="my-dot" style="background:${myC?.dot||'#185FA5'}"></span>`:'';
     const alarmDot=alarm?.alarm?`<div class="alarm-dot-cal">🔔</div>`:'';
@@ -831,7 +836,7 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
   // 헤더 (항상 표시)
   const MNlabel=MN[curM];
   let headerHtml=`<div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px;cursor:pointer;user-select:none">
-    <div class="list-section-title" style="margin:0">${calView==='mine'?`${MNlabel} 내 사역`:`${MNlabel} 전체 근무`}</div>
+    <div class="list-section-title" style="margin:0">${calView==='mine'?`${MNlabel} 내 사역`:`${MNlabel} 전체 사역`}</div>
     <button class="collapse-btn" style="border:none;background:none;color:#aaa;font-size:12px;cursor:pointer;padding:2px 8px;border-radius:6px;background:#f0f0ea">${isOpen?'▲ 접기':'▼ 펼치기'}</button>
   </div>`;
 
@@ -842,7 +847,7 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
     if(!any) bodyHtml=`<p class="empty-state">${filterType?`'${filterType}' 근무자 없음`:'근무 일정이 없습니다. 엑셀을 업로드해주세요.'}</p>`;
   } else {
     const arr=[...myDays].filter(d=>!filterType||myRaw[String(d)]===filterType).sort((a,b)=>a-b);
-    if(!arr.length){ bodyHtml=`<p class="empty-state">${filterType?`'${filterType}' 근무일 없음`:'이번 달 등록된 근무일이 없습니다.'}</p>`; }
+    if(!arr.length){ bodyHtml=`<p class="empty-state">${filterType?`'${filterType}' 내 사역 없음`:'이번 달 내 사역이 없습니다.'}</p>`; }
     else { bodyHtml=arr.map(d=>{const type=myRaw[String(d)]||'',c=type?tc(type):null,key2=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key2]||[]).length,alarm=getAlarm(curY,curM+1,d);return`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})"><div class="list-card-header"><span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span><div style="display:flex;gap:6px;align-items:center">${alarm.alarm?'<span>🔔</span>':''}${cc?`<span class="cmt-cnt">${cc}개 댓글</span>`:''}${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}</div></div>${alarm.memo?`<div style="font-size:12px;color:#888;margin-top:4px;border-top:1px solid #f5f5f0;padding-top:4px">📝 ${esc(alarm.memo)}</div>`:''}</div>`;}).join(''); }
   }
 
