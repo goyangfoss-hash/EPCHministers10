@@ -1049,6 +1049,14 @@ function renderSettingsPanel(){
         <div class="settings-item-desc">은평교회 교역자 사역스케줄러</div>
       </div>
       <span style="font-size:12px;color:#bbb">v10.0</span>
+    </div>
+    <!-- ★ 로그아웃 -->
+    <div class="settings-item" style="border-top:4px solid #f5f5f0">
+      <div class="settings-item-left">
+        <div class="settings-item-title" style="color:#e74c3c">로그아웃</div>
+        <div class="settings-item-desc">현재 기기에서 로그아웃합니다</div>
+      </div>
+      <button onclick="closeAllPanels();doLogout()" style="padding:7px 16px;background:#fff0f0;color:#e74c3c;border:1.5px solid #fcc;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">로그아웃</button>
     </div>`;
 }
 

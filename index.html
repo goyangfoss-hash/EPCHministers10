@@ -376,9 +376,9 @@
     </div>
     <h2>근무표 앱</h2>
     <p class="sub">로그인하여 내 근무 일정을 확인하세요</p>
-    <div class="field"><label>이름</label><input id="l-name" type="text" placeholder="예: 홍길동" autocomplete="name"></div>
-    <div class="field"><label>연락처 뒷자리</label><input id="l-phone" type="tel" placeholder="예: 0000" maxlength="4" inputmode="numeric"><div class="hint">전화번호 뒷 4자리</div></div>
-    <div class="field"><label>생년월일</label><input id="l-pw" type="password" placeholder="예: 260101" maxlength="6" inputmode="numeric"><div class="hint">연/월/일 6자리</div></div>
+    <div class="field"><label>이름</label><input id="l-name" type="text" placeholder="예: 홍길동" autocomplete="name" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="field"><label>연락처 뒷자리</label><input id="l-phone" type="tel" placeholder="예: 0000" maxlength="4" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()"><div class="hint">전화번호 뒷 4자리</div></div>
+    <div class="field"><label>생년월일</label><input id="l-pw" type="password" placeholder="예: 260101" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()"><div class="hint">연/월/일 6자리</div></div>
     <!-- ★ 로그인 유지 체크박스 -->
     <label class="keep-login-row">
       <input type="checkbox" id="keep-login" checked>
@@ -594,8 +594,6 @@
       </div>
       <div style="text-align:center;margin-top:16px;color:#fff;font-size:16px;font-weight:600" id="profile-modal-name"></div>
       <button class="profile-edit-btn" style="margin-top:16px" onclick="openProfileEdit()">편집</button>
-      <!-- ★ 로그아웃 버튼 -->
-      <button onclick="closeProfileModal();doLogout()" style="margin-top:12px;padding:10px 32px;background:transparent;color:rgba(255,255,255,0.7);border:1.5px solid rgba(255,255,255,0.3);border-radius:22px;font-size:14px;cursor:pointer;font-weight:500;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='transparent'">로그아웃</button>
     </div>
     <!-- 미리보기 -->
     <div class="profile-preview-wrap" id="profile-preview-wrap">
