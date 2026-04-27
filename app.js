@@ -278,7 +278,7 @@ async function initFCM(){
       await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
       window.firebase.initializeApp({
-        apiKey: "AIzaSyAQLc0H_AoD7E2JF8Tji3ZgMWAiJxQ2SPY",
+        apiKey: "AIzaSyCDt6a8IHG7yF_UZu1rzObhs_NEX87oJ1o",
         authDomain: "epchminister.firebaseapp.com",
         projectId: "epchminister",
         storageBucket: "epchminister.firebasestorage.app",
