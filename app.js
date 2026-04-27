@@ -659,7 +659,7 @@ function switchTab(tab,btn){
   closeAllPanels(); // ★ 탭 전환 시 모든 패널 닫기
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   ['cal','myshift','search','notice','feed','admin'].forEach(t=>$(`tab-${t}`).style.display=t===tab?'block':'none');
-  $('hdr-title').textContent={cal:'사역스케줄',myshift:'내 사역',search:'근무 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
+  $('hdr-title').textContent={cal:'사역스케줄',myshift:'내 사역',search:'사역 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
@@ -831,24 +831,58 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
   const makeChips=ws=>ws.map(w=>`<span class="worker-chip" style="background:${w.c.bg};color:${w.c.text};border:1px solid ${w.c.border}">${w.name}<span class="chip-type">${w.type}</span></span>`).join('');
   const pastDay=d=>(curY<now.getFullYear())||(curY===now.getFullYear()&&curM<now.getMonth())||(curY===now.getFullYear()&&curM===now.getMonth()&&d<now.getDate());
   const key='shift-list-body';
-  const isOpen=collapseState[key]===true; // 기본 접힘
-
-  // 헤더 (항상 표시)
+  const isOpen=collapseState[key]===true;
   const MNlabel=MN[curM];
+  const myModeActive=calView==='mine'&&!isAdmin();
+
+  // 카테고리 필터가 적용된 내 사역 날짜 집합
+  const {fmMy}=getFilteredMap(allMap,myRaw,myDays);
+  const catLabel=filterCategory!=='all'?` (${filterCategory})`:'';
+
   let headerHtml=`<div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px;cursor:pointer;user-select:none">
-    <div class="list-section-title" style="margin:0">${calView==='mine'?`${MNlabel} 내 사역`:`${MNlabel} 전체 사역`}</div>
+    <div class="list-section-title" style="margin:0">${myModeActive?`${MNlabel} 내 사역${catLabel}`:`${MNlabel} 전체 사역${catLabel}`}</div>
     <button class="collapse-btn" style="border:none;background:none;color:#aaa;font-size:12px;cursor:pointer;padding:2px 8px;border-radius:6px;background:#f0f0ea">${isOpen?'▲ 접기':'▼ 펼치기'}</button>
   </div>`;
 
   let bodyHtml='';
-  if(isAdmin()||calView==='all'){
-    let any=false;
-    for(let d=1;d<=dim;d++){const ws=fm[d]||[];if(!ws.length)continue;any=true;const key2=`${curY}-${curM+1}-${d}`;const cc=(shiftComments[key2]||[]).length;bodyHtml+=`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})"><div class="list-card-header"><span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span><div style="display:flex;gap:6px;align-items:center">${cc?`<span class="cmt-cnt">${cc}개</span>`:''}<span class="worker-cnt">${ws.length}명</span></div></div><div class="worker-chips">${makeChips(ws)}</div></div>`;}
-    if(!any) bodyHtml=`<p class="empty-state">${filterType?`'${filterType}' 근무자 없음`:'근무 일정이 없습니다. 엑셀을 업로드해주세요.'}</p>`;
+  if(myModeActive){
+    // ★ 내 사역 모드: 카테고리 필터 + 내 사역 날짜만 표시
+    const arr=[...fmMy].sort((a,b)=>a-b);
+    if(!arr.length){
+      const msg=filterCategory!=='all'?`이번 달 ${filterCategory} 내 사역이 없습니다.`:'이번 달 내 사역이 없습니다.';
+      bodyHtml=`<p class="empty-state">${msg}</p>`;
+    } else {
+      bodyHtml=arr.map(d=>{
+        const type=myRaw[String(d)]||'',c=type?tc(type):null;
+        const key2=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key2]||[]).length,alarm=getAlarm(curY,curM+1,d);
+        return`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})">
+          <div class="list-card-header">
+            <span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span>
+            <div style="display:flex;gap:6px;align-items:center">
+              ${alarm.alarm?'<span>🔔</span>':''}
+              ${cc?`<span class="cmt-cnt">${cc}개 댓글</span>`:''}
+              ${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}
+            </div>
+          </div>
+          ${alarm.memo?`<div style="font-size:12px;color:#888;margin-top:4px;border-top:1px solid #f5f5f0;padding-top:4px">📝 ${esc(alarm.memo)}</div>`:''}
+        </div>`;
+      }).join('');
+    }
   } else {
-    const arr=[...myDays].filter(d=>!filterType||myRaw[String(d)]===filterType).sort((a,b)=>a-b);
-    if(!arr.length){ bodyHtml=`<p class="empty-state">${filterType?`'${filterType}' 내 사역 없음`:'이번 달 내 사역이 없습니다.'}</p>`; }
-    else { bodyHtml=arr.map(d=>{const type=myRaw[String(d)]||'',c=type?tc(type):null,key2=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key2]||[]).length,alarm=getAlarm(curY,curM+1,d);return`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})"><div class="list-card-header"><span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span><div style="display:flex;gap:6px;align-items:center">${alarm.alarm?'<span>🔔</span>':''}${cc?`<span class="cmt-cnt">${cc}개 댓글</span>`:''}${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}</div></div>${alarm.memo?`<div style="font-size:12px;color:#888;margin-top:4px;border-top:1px solid #f5f5f0;padding-top:4px">📝 ${esc(alarm.memo)}</div>`:''}</div>`;}).join(''); }
+    // 전체 사역 모드
+    let any=false;
+    for(let d=1;d<=dim;d++){
+      const ws=fm[d]||[];if(!ws.length)continue;any=true;
+      const key2=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key2]||[]).length;
+      bodyHtml+=`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})">
+        <div class="list-card-header">
+          <span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span>
+          <div style="display:flex;gap:6px;align-items:center">${cc?`<span class="cmt-cnt">${cc}개</span>`:''}<span class="worker-cnt">${ws.length}명</span></div>
+        </div>
+        <div class="worker-chips">${makeChips(ws)}</div>
+      </div>`;
+    }
+    if(!any) bodyHtml=`<p class="empty-state">${filterCategory!=='all'?`${filterCategory} 사역 일정이 없습니다.`:'근무 일정이 없습니다. 엑셀을 업로드해주세요.'}</p>`;
   }
 
   el.innerHTML=headerHtml+`<div data-collapse="${key}" style="display:${isOpen?'block':'none'}">${bodyHtml}</div>`;
