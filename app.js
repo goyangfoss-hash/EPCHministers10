@@ -634,23 +634,40 @@ function switchTab(tab,btn){
 //  카테고리 시스템
 // ══════════════════════════════════════════════════
 const CATEGORIES = [
-  { id:'all',   label:'전체',        keywords:[] },
-  { id:'주일',  label:'주일',        keywords:['주일'] },
-  { id:'수요',  label:'수요',        keywords:['수요'] },
-  { id:'금요',  label:'금요',        keywords:['금요'] },
-  { id:'새벽',  label:'새벽',        keywords:['새벽'], exclude:['주일'] },
-  { id:'특새',  label:'특새&축복성회', keywords:['특새','축복','행사'] },
+  { id:'all',   label:'전체' },
+  { id:'주일',  label:'주일' },
+  { id:'수요',  label:'수요' },
+  { id:'금요',  label:'금요' },
+  { id:'새벽',  label:'새벽' },
+  { id:'특새',  label:'특새&축복성회' },
 ];
 
-function getCategory(type){
+// ★ 요일 + 근무유형으로 카테고리 판별
+function getCategory(type, year, month, day){
   if(!type) return 'all';
-  for(const cat of CATEGORIES){
-    if(cat.id==='all') continue;
-    const hasKeyword=cat.keywords.some(k=>type.includes(k));
-    const hasExclude=cat.exclude?.some(k=>type.includes(k));
-    if(hasKeyword && !hasExclude) return cat.id;
+  const t=type.split('/')[0]; // 병합된 경우 첫 번째
+
+  // 날짜 정보가 있으면 요일 기반 판별
+  if(year && month && day){
+    const dow=new Date(year, month-1, day).getDay();
+    const isSunday   = dow===0;
+    const isWednesday= dow===3;
+    const isFriday   = dow===5;
+    const hasSaebyeok= t.includes('새벽');
+
+    if(isSunday)    return '주일';
+    if(isWednesday && !hasSaebyeok) return '수요';
+    if(isFriday    && !hasSaebyeok) return '금요';
+    if(hasSaebyeok) return '새벽'; // 평일 새벽 (수/금 포함)
+    return '특새'; // 그 외
   }
-  return '특새'; // 매핑 안되면 특새로
+
+  // 날짜 정보 없으면 키워드 기반 fallback
+  if(t.includes('수요')) return '수요';
+  if(t.includes('금요')) return '금요';
+  if(t.includes('새벽')) return '새벽';
+  if(t.includes('4부')||t.includes('저녁')||t.includes('오전')) return '주일';
+  return '특새';
 }
 
 // 색상 간소화 — 근무 형태 키워드 기반
@@ -682,11 +699,14 @@ function setCategoryFilter(catId){
 
 function renderLegend(){
   const el=$('cal-legend'); if(!el) return;
-  const types=(()=>{const s=new Set();Object.values(curData()).forEach(wd=>Object.values(wd).forEach(t=>t&&s.add(t)));return[...s];})();
-  if(!types.length){el.innerHTML='';return;}
-
-  // 현재 달에 있는 카테고리만 표시
-  const activeCats=new Set(types.map(t=>getCategory(t)));
+  const d=curData();
+  // ★ 날짜 정보 포함해서 카테고리 판별
+  const activeCats=new Set();
+  Object.keys(d).forEach(name=>{
+    Object.entries(d[name]||{}).forEach(([day,type])=>{
+      if(type) activeCats.add(getCategory(type, curY, curM+1, parseInt(day)));
+    });
+  });
 
   el.innerHTML=`<div class="cat-tab-wrap">
     ${CATEGORIES.filter(c=>c.id==='all'||activeCats.has(c.id)).map(c=>`
@@ -701,12 +721,13 @@ function getFilteredMap(allMap, myRaw, myDays){
   if(filterCategory==='all') return {fm:{...allMap}, fmMy:new Set(myDays)};
   const fm={};
   Object.entries(allMap).forEach(([day,ws])=>{
-    const fw=ws.filter(w=>getCategory(w.type)===filterCategory);
-    if(fw.length) fm[parseInt(day)]=fw;
+    const d=parseInt(day);
+    const fw=ws.filter(w=>getCategory(w.type,curY,curM+1,d)===filterCategory);
+    if(fw.length) fm[d]=fw;
   });
   const fmMy=new Set();
   myDays.forEach(d=>{
-    if(getCategory(myRaw[String(d)])===filterCategory) fmMy.add(d);
+    if(getCategory(myRaw[String(d)],curY,curM+1,d)===filterCategory) fmMy.add(d);
   });
   return {fm, fmMy};
 }
