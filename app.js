@@ -278,7 +278,7 @@ async function initFCM(){
       await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
       window.firebase.initializeApp({
-        apiKey: "AIzaSyCDt6a8IHG7yF_UZu1rzObhs_NEX87oJ1o",
+        apiKey: "AIzaSyAQLc0H_AoD7E2JF8Tji3ZgMWAiJxQ2SPY",
         authDomain: "epchminister.firebaseapp.com",
         projectId: "epchminister",
         storageBucket: "epchminister.firebasestorage.app",
@@ -1724,7 +1724,7 @@ async function parseImageWithAI(file){
 
     // ★ Google Gemini API 직접 호출 (무료)
     let text = '';
-    const GEMINI_KEY = 'AIzaSyDS-IUNhdFltaCQPo2SksWsdBgIbAKBucM';
+    const GEMINI_KEY = 'AIzaSyCDt6a8IHG7yF_UZu1rzObhs_NEX87oJ1o';
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
     const geminiResp = await fetch(GEMINI_URL, {
       method: 'POST',
