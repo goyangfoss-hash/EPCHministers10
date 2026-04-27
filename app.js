@@ -14,7 +14,7 @@ const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_
 //  전역 상태
 // ══════════════════════════════════════════════════
 let cu = null, curY = new Date().getFullYear(), curM = new Date().getMonth();
-let calView = 'mine', filterType = '', pollTimer = null, rtChannel = null;
+let calView = 'all', filterType = '', pollTimer = null, rtChannel = null;
 let allSchedules = {};
 const getMonthData = (y, m) => allSchedules[y]?.[m] || {};
 const curData = () => getMonthData(curY, curM + 1);
@@ -243,12 +243,10 @@ function enterApp() {
   // 모든 이용자에게 내 근무만/전체 보기 토글 표시
   const toggleWrap=$('view-toggle-wrap');
   if(toggleWrap){
-    toggleWrap.innerHTML=`<div class="view-toggle">
-      <button class="view-btn active" id="view-mine" onclick="setView('mine')">내 근무만</button>
-      <button class="view-btn" id="view-all" onclick="setView('all')">전체 보기</button>
-    </div>`;
+    toggleWrap.innerHTML=`<button id="btn-my-ministry" onclick="toggleMyMinistry()" class="my-ministry-btn">
+      <span style="font-size:14px">🙋</span> 내 사역
+    </button>`;
   }
-  if(isAdmin()) calView='all'; // 관리자 기본값은 전체
   renderCalendar(); renderNotices(); updateAlarmBadge();
   if(isAdmin()) renderAdmin();
   updateFeedBadge();
@@ -775,7 +773,19 @@ function getFilteredMap(allMap, myRaw, myDays){
 // ══════════════════════════════════════════════════
 //  캘린더
 // ══════════════════════════════════════════════════
-function setView(v){calView=v;filterType='';filterCategory='all';$('view-mine').classList.toggle('active',v==='mine');$('view-all').classList.toggle('active',v==='all');renderCalendar();}
+function toggleMyMinistry(){
+  calView = calView==='all' ? 'mine' : 'all';
+  filterType=''; filterCategory='all';
+  const btn=$('btn-my-ministry');
+  if(btn){
+    btn.classList.toggle('active', calView==='mine');
+    btn.innerHTML = calView==='mine'
+      ? '<span style="font-size:14px">🙋</span> 내 사역 <span style="font-size:10px;opacity:.8">ON</span>'
+      : '<span style="font-size:14px">🙋</span> 내 사역';
+  }
+  renderCalendar();
+}
+function setView(v){calView=v;filterType='';filterCategory='all';renderCalendar();}
 function setFilter(t){filterType=filterType===t?'':t;renderCalendar();}
 function changeMonth(d){curM+=d;if(curM>11){curM=0;curY++;}if(curM<0){curM=11;curY--;}filterType='';filterCategory='all';if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}renderCalendar();});}else renderCalendar();}
 
@@ -797,7 +807,7 @@ function renderCalendar(){
     const dow=new Date(curY,curM,d).getDay(),key=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key]||[]).length;
     const myType=myRaw[String(d)]||'',myC=myType?tc(myType):null,workers=fm[d]||[];
     const catFiltered=filterCategory!=='all';
-    const dimmed=catFiltered&&((calView==='mine'&&!fmMy.has(d)&&!isAdmin())||(calView==='all'&&!workers.length));
+    const dimmed=(calView==='mine'&&!fmMy.has(d)&&!isAdmin())||(catFiltered&&!workers.length&&calView==='all');
     const alarm=isMy?getAlarm(curY,curM+1,d):null;
     let cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(isToday?' today':'')+(dimmed?' dimmed':'');
     let style=isMy&&calView==='mine'&&myC?`style="background:${myC.bg};border-color:${myC.border}"`:'';
@@ -821,7 +831,7 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
   // 헤더 (항상 표시)
   const MNlabel=MN[curM];
   let headerHtml=`<div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px;cursor:pointer;user-select:none">
-    <div class="list-section-title" style="margin:0">${isAdmin()||calView==='all'?`${MNlabel} 전체 근무`:`${MNlabel} 내 근무`}</div>
+    <div class="list-section-title" style="margin:0">${calView==='mine'?`${MNlabel} 내 사역`:`${MNlabel} 전체 근무`}</div>
     <button class="collapse-btn" style="border:none;background:none;color:#aaa;font-size:12px;cursor:pointer;padding:2px 8px;border-radius:6px;background:#f0f0ea">${isOpen?'▲ 접기':'▼ 펼치기'}</button>
   </div>`;
 
