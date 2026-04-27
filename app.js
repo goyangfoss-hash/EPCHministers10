@@ -806,22 +806,38 @@ function renderCalendar(){
     const isMy=myDays.has(d),isToday=now.getFullYear()===curY&&now.getMonth()===curM&&now.getDate()===d;
     const dow=new Date(curY,curM,d).getDay(),key=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key]||[]).length;
     const myType=myRaw[String(d)]||'',myC=myType?tc(myType):null,workers=fm[d]||[];
-    const catFiltered=filterCategory!=='all';
-    // 내 사역 ON: 내 사역 없는 날 dimmed / 카테고리 필터: 해당 사역 없는 날 dimmed
-    const myModeActive = calView==='mine' && !isAdmin();
-    const myHasDay = fmMy.has(d);
-    const dimmed = myModeActive && !myHasDay;
+    const myModeActive=calView==='mine'&&!isAdmin();
+    const myHasDay=fmMy.has(d);
     const alarm=isMy?getAlarm(curY,curM+1,d):null;
-    let cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(isToday?' today':'')+(dimmed?' dimmed':'');
-    let style=isMy&&myModeActive&&myC?`style="background:${myC.bg};border-color:${myC.border}"`:'';
-    // dots: 전체모드=모든 사역자 점, 내사역모드=내 사역만
-    const dotsWorkers = myModeActive ? (myHasDay?[{name:cu.name,type:myType,c:myC}]:[]) : workers;
-    const dots = dotsWorkers.length?`<div class="shift-dots">${dotsWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c?.dot||'#185FA5'}" title="${w.name}:${w.type}"></div>`).join('')}${dotsWorkers.length>5?`<span class="more-dot">+${dotsWorkers.length-5}</span>`:''}</div>`:'';
-    const typeTip=myType&&myModeActive&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
-    const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
-    const myDot=isMy?`<span class="my-dot" style="background:${myC?.dot||'#185FA5'}"></span>`:'';
-    const alarmDot=alarm?.alarm?`<div class="alarm-dot-cal">🔔</div>`:'';
-    html+=`<div class="${cls}" ${style} onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmDot}</div>`;
+    const alarmOff=isMy&&alarm&&!alarm.alarm;
+
+    if(myModeActive){
+      // ★ 내 사역 모드: 내 사역 날 셀 전체 색칠, 없는 날 dimmed
+      const dimmed=!myHasDay;
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(dimmed?' dimmed':'');
+      const bgColor=myHasDay&&myC?myC.dot:'';
+      const cellStyle=myHasDay&&bgColor?`background:${bgColor};border-color:${bgColor};position:relative`:`position:relative`;
+      const dayStyle=myHasDay?`color:#fff;font-weight:800`:``;
+      const typeLabel=myHasDay&&myC?`<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,5)}</div>`:'';
+      const todayRing=isToday&&myHasDay?`<div style="position:absolute;inset:1px;border:2px solid rgba(255,255,255,.7);border-radius:6px;pointer-events:none"></div>`:'';
+      const cmtBadge=cc&&myHasDay?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff">${cc}</div>`:'';
+      const alarmOffBadge=alarmOff?`<div style="font-size:9px;color:rgba(255,255,255,.5);position:absolute;bottom:2px;right:2px">🔕</div>`:'';
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})">
+        <div class="day-num-wrap"><span class="day-num" style="${dayStyle}">${d}</span></div>
+        ${typeLabel}${cmtBadge}${todayRing}${alarmOffBadge}
+      </div>`;
+    } else {
+      // ★ 전체 사역 모드: 기존 방식
+      const dimmed=filterCategory!=='all'&&!workers.length;
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(isToday?' today':'')+(dimmed?' dimmed':'');
+      const cellStyle=isMy&&myC?`background:${myC.bg};border-color:${myC.border}`:'';
+      const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'';
+      const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
+      const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
+      const myDot=isMy&&myC?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
+      const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
+    }
   }
   $('cal-grid').innerHTML=html; renderLegend(); renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap);
 }
