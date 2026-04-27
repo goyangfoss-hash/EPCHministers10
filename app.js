@@ -1723,7 +1723,8 @@ async function parseImageWithAI(file){
     let text = '';
     try {
       const { data: fnData, error: fnError } = await sb.functions.invoke('ai-parse', {
-        body: { base64, mediaType, prompt, model: 'claude-sonnet-4-20250514', maxTokens: 4096 }
+        body: { base64, mediaType, prompt, model: 'claude-sonnet-4-20250514', maxTokens: 4096 },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
       });
       if(fnError) throw new Error(fnError.message);
       text = fnData?.text || fnData?.content?.[0]?.text || '';
