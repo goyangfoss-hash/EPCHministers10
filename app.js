@@ -311,7 +311,9 @@ function loadScript(src){
 
 async function saveFCMToken(token){
   try {
-    await sb.from('fcm_tokens').upsert({user_id:cu.id, token}, {onConflict:'user_id,token'});
+    // 기존 토큰 모두 삭제 후 새 토큰만 저장 (중복 방지)
+    await sb.from('fcm_tokens').delete().eq('user_id', cu.id);
+    await sb.from('fcm_tokens').insert({user_id: cu.id, token});
   } catch(e){ console.warn('FCM token save error:', e.message); }
 }
 
@@ -1724,7 +1726,7 @@ async function parseImageWithAI(file){
 
     // ★ Google Gemini API 직접 호출 (무료)
     let text = '';
-    const GEMINI_KEY = 'AIzaSyCDt6a8IHG7yF_UZu1rzObhs_NEX87oJ1o';
+    const GEMINI_KEY = 'AIzaSyCsVNUYub1bktkmN_Q6v7dZmEgJ_I4jcIw';
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
     const geminiResp = await fetch(GEMINI_URL, {
       method: 'POST',
