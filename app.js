@@ -657,7 +657,7 @@ function switchTab(tab,btn){
   closeAllPanels(); // ★ 탭 전환 시 모든 패널 닫기
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   ['cal','myshift','search','notice','feed','admin'].forEach(t=>$(`tab-${t}`).style.display=t===tab?'block':'none');
-  $('hdr-title').textContent={cal:'사역스케줄',myshift:'내 사역',search:'사역 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
+  $('hdr-title').textContent={cal:'캘린더',myshift:'내 사역',search:'사역 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
@@ -736,7 +736,9 @@ function setCategoryFilter(catId){
 function renderLegend(){
   const el=$('cal-legend'); if(!el) return;
   const d=curData();
-  // ★ 날짜 정보 포함해서 카테고리 판별
+  const myModeActive=calView==='mine'&&!isAdmin();
+
+  // 이번 달 활성 카테고리 계산
   const activeCats=new Set();
   Object.keys(d).forEach(name=>{
     Object.entries(d[name]||{}).forEach(([day,type])=>{
@@ -744,11 +746,22 @@ function renderLegend(){
     });
   });
 
+  // 내 사역 모드일 때: 내가 사역하는 카테고리만 활성화
+  const myRaw=d[cu?.name]||{};
+  const myCats=new Set();
+  if(myModeActive){
+    Object.entries(myRaw).forEach(([day,type])=>{
+      if(type) myCats.add(getCategory(type, curY, curM+1, parseInt(day)));
+    });
+  }
+
   el.innerHTML=`<div class="cat-tab-wrap">
-    ${CATEGORIES.filter(c=>c.id==='all'||activeCats.has(c.id)).map(c=>`
-      <button class="cat-tab-btn${filterCategory===c.id?' active':''}" onclick="setCategoryFilter('${c.id}')">
-        ${c.label}
-      </button>`).join('')}
+    ${CATEGORIES.filter(c=>c.id==='all'||activeCats.has(c.id)).map(c=>{
+      // 내 사역 모드: 내 사역 없는 카테고리는 dimmed
+      const noMyShift=myModeActive&&c.id!=='all'&&!myCats.has(c.id);
+      const label=myModeActive&&c.id!=='all'?`내 ${c.label}`:c.label;
+      return `<button class="cat-tab-btn${filterCategory===c.id?' active':''}${noMyShift?' dimmed-cat':''}" onclick="setCategoryFilter('${c.id}')">${label}</button>`;
+    }).join('')}
   </div>`;
 }
 
