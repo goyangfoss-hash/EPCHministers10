@@ -194,7 +194,7 @@
     .shift-memo-area:focus{border-color:#185FA5}
     .memo-save-btn{width:100%;padding:9px;background:#185FA5;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px}
 
-    /* 내 근무 탭 */
+    /* 내 사역 탭 */
     .my-header-card{background:#fff;border-radius:16px;padding:16px;margin-bottom:12px}
     .my-name-badge{font-size:20px;font-weight:700;color:#185FA5;margin-bottom:10px;display:flex;align-items:center;gap:8px}
     .search-stats{display:flex;align-items:center;gap:16px}
@@ -382,7 +382,7 @@
       </svg>
     </div>
     <h2>사역스케줄러</h2>
-    <p class="sub">로그인하여 내 근무 일정을 확인하세요</p>
+    <p class="sub">로그인하여 내 사역 일정을 확인하세요</p>
     <div class="field"><label>이름</label><input id="l-name" type="text" placeholder="예: 홍길동" autocomplete="name" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div class="field"><label>연락처 뒷자리</label><input id="l-phone" type="tel" placeholder="예: 0000" maxlength="4" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()"><div class="hint">전화번호 뒷 4자리</div></div>
     <div class="field"><label>생년월일</label><input id="l-pw" type="password" placeholder="예: 260101" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()"><div class="hint">연/월/일 6자리</div></div>
@@ -418,7 +418,7 @@
     </div>
     <div class="hdr-right">
       <!-- 종 모양 알림 버튼 -->
-      <button id="btn-alarm" onclick="toggleAlarmPanel()" title="내 근무 알림">
+      <button id="btn-alarm" onclick="toggleAlarmPanel()" title="내 사역 알림">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
           <path d="M13.73 21a2 2 0 01-3.46 0"/>
@@ -452,7 +452,7 @@
     <div id="settings-panel-body"></div>
   </div>
 
-  <!-- 근무표 탭 -->
+  <!-- 캘린더 탭 -->
   <div id="tab-cal" class="content">
     <div class="month-nav">
       <button class="btn-mo" onclick="changeMonth(-1)">&#8249;</button>
@@ -465,7 +465,7 @@
     <div id="shift-list"></div>
   </div>
 
-  <!-- 내 근무 탭 -->
+  <!-- 내 사역 탭 -->
   <div id="tab-myshift" class="content" style="display:none">
     <div id="myshift-content"></div>
   </div>
@@ -497,7 +497,7 @@
       <div id="member-list"></div>
     </div>
     <div class="section-card">
-      <h3>근무표 업로드 (엑셀)</h3>
+      <h3>캘린더 업로드 (엑셀)</h3>
       <div style="font-size:12px;color:#888;background:#f8f8f4;border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.7">
         <b>형식:</b> 1행 = 이름 | 1(금) | 2(토) | ...<br>
         2행~ = 홍길동 | [오전]자막 | (빈칸) | ...
@@ -515,18 +515,18 @@
         <p style="font-size:12px;color:#888;margin-bottom:4px" id="excel-info"></p>
         <div class="preview-wrap"><table class="preview-table" id="preview-table"></table></div>
         <div style="margin-top:10px;padding:10px 13px;background:#f0f5fd;border-radius:10px;font-size:12px;color:#185FA5;line-height:1.7" id="parse-summary"></div>
-        <button class="btn-admin" style="margin-top:10px" onclick="applyExcelSchedule()">이 근무표 저장 (전체 반영)</button>
+        <button class="btn-admin" style="margin-top:10px" onclick="applyExcelSchedule()">이 캘린더 저장 (전체 반영)</button>
         <button class="btn-admin secondary" style="margin-top:7px" onclick="clearExcel()">다시 선택</button>
-        <div class="toast" id="excel-toast">근무표가 저장되었습니다. 모든 회원에게 즉시 반영됩니다.</div>
+        <div class="toast" id="excel-toast">캘린더가 저장되었습니다. 모든 회원에게 즉시 반영됩니다.</div>
         <div class="toast err" id="excel-err-toast"></div>
       </div>
       <div style="margin-top:16px">
-        <div class="list-section-title">저장된 월별 근무표</div>
-        <div id="sched-form"><p class="empty-state">업로드된 근무표가 없습니다.</p></div>
+        <div class="list-section-title">저장된 월별 캘린더</div>
+        <div id="sched-form"><p class="empty-state">업로드된 캘린더가 없습니다.</p></div>
       </div>
     </div>
     <div class="section-card">
-      <h3>근무표 업로드 안전장치 설정</h3>
+      <h3>캘린더 업로드 안전장치 설정</h3>
       <div id="upload-settings-ui"></div>
     </div>
     <div class="section-card">
@@ -543,11 +543,11 @@
   <div class="bottom-nav">
     <button class="nav-btn active" id="btn-cal" onclick="switchTab('cal',this)">
       <svg viewBox="0 0 22 22" fill="none"><rect x="2" y="3" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/><line x1="2" y1="8" x2="20" y2="8" stroke="currentColor" stroke-width="1.6"/><line x1="7" y1="1" x2="7" y2="5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="15" y1="1" x2="15" y2="5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="13" r="1.3" fill="currentColor"/><circle cx="11" cy="13" r="1.3" fill="currentColor"/><circle cx="15" cy="13" r="1.3" fill="currentColor"/></svg>
-      근무표
+      캘린더
     </button>
     <button class="nav-btn" id="btn-myshift" onclick="switchTab('myshift',this)">
       <svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M4 19c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 5.5l1 1 2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      내 근무
+      내 사역
     </button>
     <button class="nav-btn" id="btn-search" onclick="switchTab('search',this)">
       <svg viewBox="0 0 22 22" fill="none"><circle cx="9.5" cy="9.5" r="6" stroke="currentColor" stroke-width="1.6"/><line x1="14" y1="14" x2="19.5" y2="19.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
