@@ -28,12 +28,40 @@ let chatMessages = {};   // { userId: [messages] }
 let chatTarget = null;   // 현재 채팅 상대
 let dmUnreadCount = 0;
 
-// ── 알림 & 메모 (localStorage 저장) ──────────────
+// ── 알림 & 메모 (Supabase + localStorage 이중 저장) ──
 let shiftAlarms = {};
-function loadAlarms()  { try { shiftAlarms = JSON.parse(localStorage.getItem('ws_alarms') || '{}'); } catch { shiftAlarms = {}; } }
-function saveAlarms()  { localStorage.setItem('ws_alarms', JSON.stringify(shiftAlarms)); }
+
+function loadAlarms(){
+  try { shiftAlarms = JSON.parse(localStorage.getItem('ws_alarms') || '{}'); } catch { shiftAlarms = {}; }
+}
+
+function saveAlarms(){
+  localStorage.setItem('ws_alarms', JSON.stringify(shiftAlarms));
+  // ★ Supabase에도 저장 (패치 후에도 유지)
+  if(sb && cu?.id){
+    sb.from('app_users')
+      .update({ alarm_settings: shiftAlarms })
+      .eq('id', cu.id)
+      .then(({error}) => { if(error) console.warn('알림 설정 저장 실패:', error.message); });
+  }
+}
+
+async function loadAlarmsFromServer(){
+  // Supabase에서 알림 설정 불러오기
+  if(!sb || !cu?.id) return;
+  try {
+    const { data } = await sb.from('app_users').select('alarm_settings').eq('id', cu.id).single();
+    if(data?.alarm_settings && Object.keys(data.alarm_settings).length > 0){
+      // 서버 설정을 로컬보다 우선 적용
+      shiftAlarms = data.alarm_settings;
+      localStorage.setItem('ws_alarms', JSON.stringify(shiftAlarms));
+      updateAlarmBadge();
+    }
+  } catch(e){ console.warn('알림 설정 불러오기 실패:', e.message); }
+}
+
 function getDefaultAlarmTime(){ try{ return JSON.parse(localStorage.getItem('ws_notif_settings')||'{}').defaultAlarmTime||'18:30'; }catch{ return '18:30'; } }
-function getAlarm(y,m,d) { return shiftAlarms[`${y}-${m}-${d}`] || { alarm: false, alarmTime: getDefaultAlarmTime(), memo: '' }; }
+function getAlarm(y,m,d) { return shiftAlarms[`${y}-${m}-${d}`] || { alarm: true, alarmTime: getDefaultAlarmTime(), memo: '' }; }
 function setAlarm(y,m,d,data) { shiftAlarms[`${y}-${m}-${d}`] = data; saveAlarms(); }
 function activeAlarmCount() {
   const now = new Date();
@@ -44,21 +72,22 @@ function activeAlarmCount() {
   }).length;
 }
 
-// ★ 로그인 후 본인 근무에 알림 자동 설정 (기존에 alarm=false인 날짜만 자동 설정)
+// ★ 로그인 후 본인 근무 알림 자동 설정
+// - 명시적으로 해제한 알림은 유지
+// - 새로 추가된 근무는 자동 ON
 function autoSetMyShiftAlarms(){
-  if(Notification.permission!=='granted') return; // 알림 권한 없으면 skip
   const defaultTime = getDefaultAlarmTime();
   const now = new Date();
   let newCount = 0;
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
-      const myData = data[cu.name]||{};
+      const myData = data[cu?.name]||{};
       Object.keys(myData).forEach(ds=>{
         const d=parseInt(ds);
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
-        if(dt < new Date(now.getFullYear(),now.getMonth(),now.getDate())) return; // 지난 날짜 skip
+        if(dt < new Date(now.getFullYear(),now.getMonth(),now.getDate())) return;
         const key=`${y}-${m}-${d}`;
-        // 아직 설정된 적 없는 날만 자동 설정
+        // 아직 설정된 적 없는 날만 자동 ON (명시적으로 끈 건 유지)
         if(!shiftAlarms[key]){
           shiftAlarms[key]={ alarm: true, alarmTime: defaultTime, memo: '' };
           newCount++;
@@ -251,7 +280,9 @@ function enterApp() {
   startRealtime();
   if(!OFFLINE){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>refreshSchedules(),5*60*1000);}
   scheduleLocalAlarms();
-  autoSetMyShiftAlarms(); // ★ 로그인 후 본인 근무 자동 알림 설정
+  loadAlarmsFromServer().then(()=>{ // ★ 서버에서 알림 설정 불러오기
+    autoSetMyShiftAlarms(); // ★ 본인 근무 자동 알림 설정
+  });
   checkNotifPermission();
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -1864,7 +1895,11 @@ async function parseImageWithAI(file){
 
 근무유형 예시:
 - 새벽 예배: "[새벽]설교", "[새벽]인도", "[새벽]건반", "[새벽]세컨건반", "[새벽]드럼", "[새벽]베이스", "[새벽]싱어", "[새벽]자막", "[새벽]영상", "[새벽]기도지원"
-- 저녁 예배: "[저녁]설교", "[저녁]인도", "[저녁]건반", "[저녁]세컨건반", "[저녁]드럼", "[저녁]베이스", "[저녁]싱어", "[저녁]자막", "[저녁]영상", "[저녁]기도지원"
+- 저녁 예배 (중요 규칙):
+  * "[저녁]설교" — 설교자
+  * "[저녁]찬양인도" — 저녁의 "인도"는 반드시 "찬양인도"로 기록
+  * "[저녁]자막", "[저녁]영상", "[저녁]기도지원" — 기록
+  * 저녁의 싱어, 베이스, 드럼, 건반, 세컨건반은 기록하지 않음 (생략)
 - 주일 예배: "[주일새벽]설교", "[주일오전]사회", "[주일오전]자막", "[주일4부]자막", "[주일4부]설교"
 - 수요 예배: "[수요]설교", "[수요]사회", "[수요]자막", "[수요]영상"
 - 금요 예배: "[금요]설교", "[금요]사회", "[금요]자막", "[금요]영상"
