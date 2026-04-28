@@ -841,8 +841,6 @@ function renderCalendar(){
 
     if(myModeActive){
       // ══ 내 사역 모드 ══
-      // 내 사역 있는 날: 셀 전체 색칠
-      // 내 사역 없는 날: 날짜만 흐리게, dots 없음
       const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay?' dimmed':'');
       if(myHasDay){
         // 내 사역 있는 날 — 색칠된 셀
@@ -850,9 +848,10 @@ function renderCalendar(){
         const typeLabel=`<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
         const todayRing=isToday?`<div style="position:absolute;inset:1px;border:2.5px solid rgba(255,255,255,.8);border-radius:6px;pointer-events:none"></div>`:'';
         const cmtBadge=cc?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff;border:none">${cc}</div>`:'';
+        const alarmOffBadge=alarmOff?`<div style="position:absolute;bottom:2px;right:3px;font-size:10px;opacity:.8">🔕</div>`:'';
         html+=`<div class="${cls}" style="background:${bg};border-color:${bg};position:relative" onclick="openDayModal(${d})">
           <div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div>
-          ${typeLabel}${cmtBadge}${todayRing}
+          ${typeLabel}${cmtBadge}${todayRing}${alarmOffBadge}
         </div>`;
       } else {
         // 내 사역 없는 날 — 흐린 빈 셀
