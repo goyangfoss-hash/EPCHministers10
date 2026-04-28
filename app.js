@@ -1845,6 +1845,8 @@ async function parseImageWithAI(file){
 6. 등록된 회원 이름 목록: ${memberNames || '(없음)'}
 7. 이름이 비슷하면 회원 목록의 이름으로 자동 교정해주세요.
 8. 연도와 월 정보를 이미지나 제목에서 최대한 추출하세요.
+9. 날짜 표기 규칙: "5/1"은 5월 1일, "4/27"은 4월 27일입니다. 슬래시(/) 앞 숫자가 월, 뒤 숫자가 일입니다.
+10. 표 상단이나 제목에 월 정보가 있으면 반드시 그 월로 인식하세요.
 
 결과를 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록, 설명 텍스트 없이 순수 JSON만):
 {"year":연도숫자,"month":월숫자,"data":{"이름":{"날짜숫자":"근무유형"}},"summary":"요약"}
@@ -1953,26 +1955,50 @@ function showAIPreview(parsed, fileName){
   // ★ 기존 AI 요약 박스 제거 (중복 방지)
   $('excel-preview').querySelectorAll('.ai-summary-box').forEach(el=>el.remove());
 
-  $('excel-info').textContent=`${year}년 ${month}월 · 근무자 ${Object.keys(data).length}명 (AI 분석)`;
+  // ★ 년도/월 수정 가능한 헤더
+  $('excel-info').innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;color:#888">AI 분석 결과 —</span>
+      <input id="ai-year" type="number" value="${year}" min="2020" max="2030"
+        style="width:70px;padding:4px 8px;border:1.5px solid #185FA5;border-radius:8px;font-size:13px;font-weight:700;text-align:center"
+        onchange="updateAIParsed()"> 년
+      <input id="ai-month" type="number" value="${month}" min="1" max="12"
+        style="width:50px;padding:4px 8px;border:1.5px solid #185FA5;border-radius:8px;font-size:13px;font-weight:700;text-align:center"
+        onchange="updateAIParsed()"> 월
+      <span style="font-size:12px;color:#888">· 근무자 ${Object.keys(data).length}명</span>
+    </div>`;
 
   // 요약 표시
   if(summary){
     const sumEl=document.createElement('div');
     sumEl.className='ai-summary-box';
     sumEl.style.cssText='background:#f0f5fd;border-radius:10px;padding:10px 13px;font-size:12px;color:#185FA5;margin-bottom:10px;line-height:1.6;border:1px solid #dbeafe';
-    sumEl.innerHTML=`🤖 <b>AI 분석 완료</b><br>${esc(summary)}`;
+    sumEl.innerHTML=`🤖 <b>AI 분석 완료</b><br>${esc(summary)}<br><span style="font-size:11px;color:#888;margin-top:4px;display:block">⚠️ 이름이 틀렸다면 아래 표에서 직접 클릭해서 수정하세요</span>`;
     $('excel-preview').prepend(sumEl);
   }
 
-  // 미리보기 테이블
+  renderAIPreviewTable();
+}
+
+function updateAIParsed(){
+  const y=parseInt($('ai-year')?.value)||parsedExcel.year;
+  const m=parseInt($('ai-month')?.value)||parsedExcel.month;
+  parsedExcel={...parsedExcel, year:y, month:m};
+}
+
+function renderAIPreviewTable(){
+  if(!parsedExcel) return;
+  const {data} = parsedExcel;
   const names=Object.keys(data);
   const allDays=[...new Set(names.flatMap(n=>Object.keys(data[n]).map(Number)))].sort((a,b)=>a-b);
-  let th='<tr><th>이름</th>';
+
+  let th='<tr><th>이름 (클릭시 수정)</th>';
   allDays.forEach(d=>th+=`<th>${d}</th>`);
   th+='</tr>';
-  const tb=names.map(name=>{
+
+  const tb=names.map((name,idx)=>{
     const dd=data[name];
-    let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap">${name}</td>`;
+    let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap;cursor:pointer;color:#185FA5" onclick="editAIName('${esc(name)}')" title="클릭해서 이름 수정">✏️ ${esc(name)}</td>`;
     allDays.forEach(d=>{
       const v=dd[String(d)]||'';
       const c=v?tc(v):null;
@@ -1980,8 +2006,22 @@ function showAIPreview(parsed, fileName){
     });
     return r+'</tr>';
   }).join('');
+
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
   $('parse-summary').innerHTML=`<b>근무자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...new Set(names.flatMap(n=>Object.values(data[n]||{})))].map(t=>{const c=tc(t);return`<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
+}
+
+function editAIName(oldName){
+  const newName = prompt(`이름 수정: "${oldName}"`, oldName);
+  if(!newName || newName===oldName) return;
+  if(!parsedExcel?.data) return;
+  // 데이터에서 이름 교체
+  const data = parsedExcel.data;
+  data[newName] = data[oldName];
+  delete data[oldName];
+  parsedExcel.data = data;
+  renderAIPreviewTable();
+  showToastMsg(`"${oldName}" → "${newName}" 수정됨`);
 }
 
 function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
@@ -2145,6 +2185,11 @@ function saveUploadSettings(s){ localStorage.setItem('ws_upload_settings', JSON.
 
 async function applyExcelSchedule(){
   if(!parsedExcel)return;
+  // ★ 입력창에서 수정된 년도/월 반영
+  const editedYear = parseInt($('ai-year')?.value) || parsedExcel.year;
+  const editedMonth = parseInt($('ai-month')?.value) || parsedExcel.month;
+  parsedExcel.year = editedYear;
+  parsedExcel.month = editedMonth;
   const{year,month,data,fileName}=parsedExcel;
   const settings=getUploadSettings();
 
