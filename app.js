@@ -767,17 +767,29 @@ function renderLegend(){
 
 // 카테고리 필터 적용된 근무 맵 생성
 function getFilteredMap(allMap, myRaw, myDays){
-  if(filterCategory==='all') return {fm:{...allMap}, fmMy:new Set(myDays)};
+  // fm: 전체 필터된 근무맵, fmMy: 내 사역 날짜 집합
   const fm={};
+  const fmMy=new Set();
+
   Object.entries(allMap).forEach(([day,ws])=>{
     const d=parseInt(day);
-    const fw=ws.filter(w=>getCategory(w.type,curY,curM+1,d)===filterCategory);
-    if(fw.length) fm[d]=fw;
+    const cat=filterCategory;
+    if(cat==='all'){
+      fm[d]=ws;
+    } else {
+      const fw=ws.filter(w=>getCategory(w.type,curY,curM+1,d)===cat);
+      if(fw.length) fm[d]=fw;
+    }
   });
-  const fmMy=new Set();
+
   myDays.forEach(d=>{
-    if(getCategory(myRaw[String(d)],curY,curM+1,d)===filterCategory) fmMy.add(d);
+    const type=myRaw[String(d)];
+    if(!type) return;
+    if(filterCategory==='all'||getCategory(type,curY,curM+1,d)===filterCategory){
+      fmMy.add(d);
+    }
   });
+
   return {fm, fmMy};
 }
 
@@ -814,31 +826,42 @@ function renderCalendar(){
   let html=DN.map(d=>`<div class="cal-head">${d}</div>`).join('');
   for(let i=0;i<fd;i++)html+=`<div class="cal-cell empty"></div>`;
   for(let d=1;d<=dim;d++){
-    const isMy=myDays.has(d),isToday=now.getFullYear()===curY&&now.getMonth()===curM&&now.getDate()===d;
-    const dow=new Date(curY,curM,d).getDay(),key=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key]||[]).length;
-    const myType=myRaw[String(d)]||'',myC=myType?tc(myType):null,workers=fm[d]||[];
+    const isMy=myDays.has(d);
+    const isToday=now.getFullYear()===curY&&now.getMonth()===curM&&now.getDate()===d;
+    const dow=new Date(curY,curM,d).getDay();
+    const key=`${curY}-${curM+1}-${d}`;
+    const cc=(shiftComments[key]||[]).length;
+    const myType=myRaw[String(d)]||'';
+    const myC=myType?tc(myType):null;
+    const workers=fm[d]||[];
     const myModeActive=calView==='mine'&&!isAdmin();
     const myHasDay=fmMy.has(d);
     const alarm=isMy?getAlarm(curY,curM+1,d):null;
     const alarmOff=isMy&&alarm&&!alarm.alarm;
 
     if(myModeActive){
-      // ★ 내 사역 모드: 내 사역 날 셀 전체 색칠, 없는 날 dimmed
-      const dimmed=!myHasDay;
-      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(dimmed?' dimmed':'');
-      const bgColor=myHasDay&&myC?myC.dot:'';
-      const cellStyle=myHasDay&&bgColor?`background:${bgColor};border-color:${bgColor};position:relative`:`position:relative`;
-      const dayStyle=myHasDay?`color:#fff;font-weight:800`:``;
-      const typeLabel=myHasDay&&myC?`<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,5)}</div>`:'';
-      const todayRing=isToday&&myHasDay?`<div style="position:absolute;inset:1px;border:2px solid rgba(255,255,255,.7);border-radius:6px;pointer-events:none"></div>`:'';
-      const cmtBadge=cc&&myHasDay?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff">${cc}</div>`:'';
-      const alarmOffBadge=alarmOff?`<div style="font-size:9px;color:rgba(255,255,255,.5);position:absolute;bottom:2px;right:2px">🔕</div>`:'';
-      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})">
-        <div class="day-num-wrap"><span class="day-num" style="${dayStyle}">${d}</span></div>
-        ${typeLabel}${cmtBadge}${todayRing}${alarmOffBadge}
-      </div>`;
+      // ══ 내 사역 모드 ══
+      // 내 사역 있는 날: 셀 전체 색칠
+      // 내 사역 없는 날: 날짜만 흐리게, dots 없음
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay?' dimmed':'');
+      if(myHasDay){
+        // 내 사역 있는 날 — 색칠된 셀
+        const bg=myC?myC.dot:'#185FA5';
+        const typeLabel=`<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
+        const todayRing=isToday?`<div style="position:absolute;inset:1px;border:2.5px solid rgba(255,255,255,.8);border-radius:6px;pointer-events:none"></div>`:'';
+        const cmtBadge=cc?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff;border:none">${cc}</div>`:'';
+        html+=`<div class="${cls}" style="background:${bg};border-color:${bg};position:relative" onclick="openDayModal(${d})">
+          <div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div>
+          ${typeLabel}${cmtBadge}${todayRing}
+        </div>`;
+      } else {
+        // 내 사역 없는 날 — 흐린 빈 셀
+        html+=`<div class="${cls}" onclick="openDayModal(${d})">
+          <div class="day-num-wrap"><span class="day-num">${d}</span></div>
+        </div>`;
+      }
     } else {
-      // ★ 전체 사역 모드: 기존 방식
+      // ══ 전체 사역 모드 ══
       const dimmed=filterCategory!=='all'&&!workers.length;
       const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(isToday?' today':'')+(dimmed?' dimmed':'');
       const cellStyle=isMy&&myC?`background:${myC.bg};border-color:${myC.border}`:'';
@@ -850,6 +873,7 @@ function renderCalendar(){
       html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
   }
+
   $('cal-grid').innerHTML=html; renderLegend(); renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap);
 }
 

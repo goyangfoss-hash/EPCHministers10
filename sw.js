@@ -1,61 +1,54 @@
 // ══════════════════════════════════════════════════
-//  Service Worker (sw.js)
-//  PWA 캐시 + 오프라인 지원
+//  Service Worker (sw.js) v12
+//  index.html은 항상 네트워크에서 가져옴 (캐시 안 함)
 // ══════════════════════════════════════════════════
-const CACHE_NAME = 'epc-v11';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-];
+const CACHE_NAME = 'epc-v12';
 
-// ── 설치: 정적 파일 캐시 ────────────────────────────
+// ── 설치: 캐시 초기화만 ─────────────────────────────
 self.addEventListener('install', (event) => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {});
-    })
-  );
 });
 
-// ── 활성화: 이전 캐시 삭제 ──────────────────────────
+// ── 활성화: 이전 캐시 전부 삭제 ─────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// ── 네트워크 요청: Network First 전략 ──────────────
+// ── fetch: index.html은 항상 네트워크, 나머지는 Network First ──
 self.addEventListener('fetch', (event) => {
-  // API/Supabase 요청은 캐시 안 함
+  const url = event.request.url;
+
+  // API 요청은 캐시 안 함
   if (
-    event.request.url.includes('supabase.co') ||
-    event.request.url.includes('firebaseio.com') ||
-    event.request.url.includes('googleapis.com') ||
-    event.request.url.includes('anthropic.com') ||
+    url.includes('supabase.co') ||
+    url.includes('firebaseio.com') ||
+    url.includes('googleapis.com') ||
+    url.includes('anthropic.com') ||
+    url.includes('generativelanguage') ||
     event.request.method !== 'GET'
   ) return;
 
+  // ★ index.html은 항상 네트워크에서 가져옴 (절대 캐시 안 함)
+  if (url.endsWith('/') || url.includes('index.html')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // 나머지: Network First
   event.respondWith(
     fetch(event.request)
       .then((res) => {
-        // 성공하면 캐시 업데이트
         if (res && res.status === 200) {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return res;
       })
-      .catch(() => {
-        // 오프라인이면 캐시에서
-        return caches.match(event.request).then((cached) => cached || caches.match('/index.html'));
-      })
+      .catch(() => caches.match(event.request))
   );
 });
 
