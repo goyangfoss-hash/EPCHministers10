@@ -243,9 +243,7 @@ function enterApp() {
   // 모든 이용자에게 내 근무만/전체 보기 토글 표시
   const toggleWrap=$('view-toggle-wrap');
   if(toggleWrap){
-    toggleWrap.innerHTML=`<button id="btn-my-ministry" onclick="toggleMyMinistry()" class="my-ministry-btn">
-      <span style="font-size:14px">🙋</span> 내 사역
-    </button>`;
+    toggleWrap.innerHTML=`<button id="btn-my-ministry" onclick="toggleMyMinistry()" class="my-ministry-btn">🙋 내 사역 보기</button>`;
   }
   renderCalendar(); renderNotices(); updateAlarmBadge();
   if(isAdmin()) renderAdmin();
@@ -780,8 +778,8 @@ function toggleMyMinistry(){
   if(btn){
     btn.classList.toggle('active', calView==='mine');
     btn.innerHTML = calView==='mine'
-      ? '<span style="font-size:14px">🙋</span> 내 사역 <span style="font-size:10px;opacity:.8">ON</span>'
-      : '<span style="font-size:14px">🙋</span> 내 사역';
+      ? '🙋 내 사역 보기 ✓'
+      : '🙋 내 사역 보기';
   }
   renderCalendar();
 }
