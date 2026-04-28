@@ -1246,7 +1246,7 @@ function renderNotices(){
           </div>
         </div>
         <div class="n-meta">${fmtDate(n.created_at)}</div>
-        <div class="n-body">${esc(n.body)}</div>
+        <div class="n-body">${escNl(n.body)}</div>
       </div>
     </div>`).join('');
   updateNoticeBadge();
@@ -1300,11 +1300,36 @@ function clearNoticeBadge(){
 // ★ 관리자: 공지 수정
 function editNotice(id){
   const n=notices.find(x=>x.id===id); if(!n) return;
-  const newTitle=prompt('제목 수정:', n.title); if(newTitle===null) return;
-  const newBody=prompt('내용 수정:', n.body); if(newBody===null) return;
-  if(!newTitle.trim()||!newBody.trim()) return showToastMsg('제목과 내용을 입력해주세요.');
-  n.title=newTitle.trim(); n.body=newBody.trim();
-  if(!OFFLINE) sb.from('notices').update({title:n.title,body:n.body}).eq('id',id);
+  // 기존 모달 제거
+  document.getElementById('notice-edit-modal')?.remove();
+  const modal=document.createElement('div');
+  modal.id='notice-edit-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:18px;padding:22px;width:100%;max-width:440px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="font-size:16px;font-weight:700;color:#185FA5;margin-bottom:16px">📝 공지 수정</div>
+      <div style="font-size:12px;color:#888;margin-bottom:6px;font-weight:600">제목</div>
+      <input id="edit-notice-title" type="text" value="${esc(n.title)}" style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;margin-bottom:14px;box-sizing:border-box;font-family:inherit">
+      <div style="font-size:12px;color:#888;margin-bottom:6px;font-weight:600">내용</div>
+      <textarea id="edit-notice-body" rows="8" style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;resize:vertical;box-sizing:border-box;font-family:inherit;line-height:1.6">${esc(n.body)}</textarea>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button onclick="document.getElementById('notice-edit-modal').remove()" style="flex:1;padding:12px;border:1.5px solid #e0e0e0;background:#fff;border-radius:10px;font-size:14px;font-weight:600;color:#888;cursor:pointer">취소</button>
+        <button onclick="saveNoticeEdit(${id})" style="flex:1;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">저장</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  // 바깥 클릭 닫기
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+}
+
+function saveNoticeEdit(id){
+  const n=notices.find(x=>x.id===id); if(!n) return;
+  const title=document.getElementById('edit-notice-title')?.value?.trim();
+  const body=document.getElementById('edit-notice-body')?.value?.trim();
+  if(!title||!body) return showToastMsg('제목과 내용을 입력해주세요.');
+  n.title=title; n.body=body;
+  if(!OFFLINE) sb.from('notices').update({title,body}).eq('id',id);
+  document.getElementById('notice-edit-modal')?.remove();
   renderNotices();
   showToastMsg('공지가 수정되었습니다.');
 }
@@ -1373,7 +1398,7 @@ function renderSettingsPanel(){
           <div class="settings-item-title">기본 알림 시간</div>
           <div class="settings-item-desc">전날 이 시각에 근무 알림 발송</div>
         </div>
-        <input type="time" class="time-input" value="${defaultAlarmTime}" onchange="saveDefaultAlarmTime(this.value)" style="width:100px;text-align:center;font-size:14px;font-weight:700">
+        <input type="time" value="${defaultAlarmTime}" onchange="saveDefaultAlarmTime(this.value)" style="width:120px;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;font-weight:700;text-align:center;box-sizing:border-box">
       </div>
       <div class="settings-item">
         <div class="settings-item-left">
@@ -2374,4 +2399,5 @@ function showErr(el,msg){if(el){el.textContent=msg;el.style.display='block';}}
 function toast(id){const e=$(id);if(!e)return;e.style.display='block';setTimeout(()=>e.style.display='none',3000);}
 function showToastMsg(msg){let el=$('g-toast');if(!el){el=document.createElement('div');el.id='g-toast';el.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(26,26,24,.9);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;white-space:nowrap;pointer-events:none';document.body.appendChild(el);}el.textContent=msg;el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function escNl(s){return esc(s).replace(/\n/g,"<br>").replace(/\r/g,"");}
 function fmtDate(s){if(!s)return'';try{const d=new Date(s);return`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;}catch{return'';}}
