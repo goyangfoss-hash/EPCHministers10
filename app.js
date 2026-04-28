@@ -1849,9 +1849,23 @@ async function parseImageWithAI(file){
 10. 표 상단이나 제목에 월 정보가 있으면 반드시 그 월로 인식하세요.
 
 결과를 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록, 설명 텍스트 없이 순수 JSON만):
-{"year":연도숫자,"month":월숫자,"data":{"이름":{"날짜숫자":"근무유형"}},"summary":"요약"}
 
-근무유형 예시: "[주일새벽]설교", "[주일오전]사회", "[주일4부]자막", "[수요]설교", "[금요]설교", "[수요]사회", "[금요]자막", "[새벽]설교", "[기도]설교", "[백업]설교"`;
+두 달치 데이터가 있으면 months 배열로, 한 달이면 단일 객체로 응답하세요:
+
+단일 월: {"year":연도숫자,"month":월숫자,"data":{"이름":{"날짜숫자":"근무유형"}},"summary":"요약"}
+
+두 달치: {"months":[{"year":연도숫자,"month":월숫자,"data":{"이름":{"날짜숫자":"근무유형"}}},{"year":연도숫자,"month":월숫자,"data":{"이름":{"날짜숫자":"근무유형"}}}],"summary":"요약"}
+
+예: 4/27~5/3 이 있으면 4월 데이터와 5월 데이터를 분리해서 months 배열로 응답하세요.
+
+근무유형 예시:
+- 새벽 예배: "[새벽]설교", "[새벽]인도", "[새벽]건반", "[새벽]세컨건반", "[새벽]드럼", "[새벽]베이스", "[새벽]싱어", "[새벽]자막", "[새벽]영상", "[새벽]기도지원"
+- 저녁 예배: "[저녁]설교", "[저녁]인도", "[저녁]건반", "[저녁]세컨건반", "[저녁]드럼", "[저녁]베이스", "[저녁]싱어", "[저녁]자막", "[저녁]영상", "[저녁]기도지원"
+- 주일 예배: "[주일새벽]설교", "[주일오전]사회", "[주일오전]자막", "[주일4부]자막", "[주일4부]설교"
+- 수요 예배: "[수요]설교", "[수요]사회", "[수요]자막", "[수요]영상"
+- 금요 예배: "[금요]설교", "[금요]사회", "[금요]자막", "[금요]영상"
+- 기타: "[기도]설교", "[백업]설교"
+- 표에서 "새벽" 섹션의 역할은 "[새벽]역할명", "저녁" 섹션의 역할은 "[저녁]역할명" 형식으로 작성하세요.`;
 
     // ★ Gemini API — Supabase Edge Function 프록시 사용
     let text = '';
@@ -1876,17 +1890,21 @@ async function parseImageWithAI(file){
 
     // JSON 파싱 (코드블록 제거)
     const clean = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
-    // JSON만 추출 (중괄호 기준)
     const jsonStart = clean.indexOf('{');
     const jsonEnd   = clean.lastIndexOf('}');
     if(jsonStart<0||jsonEnd<0) throw new Error('JSON 형식을 찾을 수 없습니다. AI 응답: '+clean.slice(0,100));
     const parsed = JSON.parse(clean.slice(jsonStart, jsonEnd+1));
 
-    if(!parsed.year || !parsed.month) throw new Error('연도/월 정보를 인식하지 못했습니다.');
-    if(!parsed.data || !Object.keys(parsed.data).length) throw new Error('근무자 데이터를 찾을 수 없습니다.');
-
     showAILoading(false);
-    showAIPreview(parsed, file.name);
+
+    // ★ 두 달치 데이터 처리
+    if(parsed.months && parsed.months.length > 0){
+      showAIPreviewMulti(parsed.months, parsed.summary, file.name);
+    } else {
+      if(!parsed.year || !parsed.month) throw new Error('연도/월 정보를 인식하지 못했습니다.');
+      if(!parsed.data || !Object.keys(parsed.data).length) throw new Error('근무자 데이터를 찾을 수 없습니다.');
+      showAIPreview(parsed, file.name);
+    }
 
   } catch(e) {
     showAILoading(false);
@@ -1984,6 +2002,86 @@ function updateAIParsed(){
   const y=parseInt($('ai-year')?.value)||parsedExcel.year;
   const m=parseInt($('ai-month')?.value)||parsedExcel.month;
   parsedExcel={...parsedExcel, year:y, month:m};
+}
+
+// ★ 두 달치 미리보기
+function showAIPreviewMulti(months, summary, fileName){
+  if(!months?.length) return;
+
+  // 각 월 데이터를 parsedExcelMulti에 저장
+  window.parsedExcelMulti = months.map(m => ({...m, fileName}));
+
+  $('upload-zone').style.display='none';
+  $('excel-preview').style.display='block';
+  $('excel-preview').querySelectorAll('.ai-summary-box').forEach(el=>el.remove());
+
+  // 요약 박스
+  if(summary){
+    const sumEl=document.createElement('div');
+    sumEl.className='ai-summary-box';
+    sumEl.style.cssText='background:#f0f5fd;border-radius:10px;padding:10px 13px;font-size:12px;color:#185FA5;margin-bottom:10px;line-height:1.6;border:1px solid #dbeafe';
+    sumEl.innerHTML=`🤖 <b>AI 분석 완료 — ${months.length}개월치 감지</b><br>${esc(summary)}`;
+    $('excel-preview').prepend(sumEl);
+  }
+
+  // 월별 탭 UI
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  let tabHtml = `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">`;
+  months.forEach((m,i) => {
+    tabHtml += `<button onclick="showAIMonthTab(${i})" id="ai-month-tab-${i}"
+      style="padding:7px 16px;border-radius:10px;border:1.5px solid ${i===0?'#185FA5':'#ddd'};
+      background:${i===0?'#185FA5':'#fff'};color:${i===0?'#fff':'#888'};
+      font-size:13px;font-weight:700;cursor:pointer">
+      ${m.year}년 ${MN[m.month]}
+    </button>`;
+  });
+  tabHtml += `</div>`;
+
+  $('excel-info').innerHTML = tabHtml;
+
+  // 첫 번째 월 표시
+  showAIMonthTab(0);
+
+  // 저장 버튼을 "전체 저장"으로 교체
+  const saveBtn = document.querySelector('[onclick="applyExcelSchedule()"]');
+  if(saveBtn) {
+    saveBtn.textContent = '전체 저장 (두 달치)';
+    saveBtn.onclick = applyExcelScheduleMulti;
+  }
+}
+
+function showAIMonthTab(idx){
+  const months = window.parsedExcelMulti;
+  if(!months || idx >= months.length) return;
+
+  // 탭 버튼 스타일 업데이트
+  months.forEach((_,i) => {
+    const btn = document.getElementById(`ai-month-tab-${i}`);
+    if(btn){
+      btn.style.background = i===idx ? '#185FA5' : '#fff';
+      btn.style.color = i===idx ? '#fff' : '#888';
+      btn.style.borderColor = i===idx ? '#185FA5' : '#ddd';
+    }
+  });
+
+  // 현재 탭 parsedExcel에 설정
+  parsedExcel = months[idx];
+
+  // 테이블 렌더링
+  renderAIPreviewTable();
+}
+
+async function applyExcelScheduleMulti(){
+  const months = window.parsedExcelMulti;
+  if(!months?.length) return applyExcelSchedule();
+
+  for(const m of months){
+    parsedExcel = m;
+    await applyExcelSchedule();
+    await new Promise(r=>setTimeout(r,500));
+  }
+  window.parsedExcelMulti = null;
+  showToastMsg(`${months.length}개월치 저장 완료!`);
 }
 
 function renderAIPreviewTable(){
