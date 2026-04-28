@@ -684,7 +684,9 @@ const CATEGORIES = [
 // ★ 요일 + 근무유형으로 카테고리 판별
 function getCategory(type, year, month, day){
   if(!type) return 'all';
-  const t=type.split('/')[0]; // 병합된 경우 첫 번째
+  // ★ 새벽/저녁 통합 유형 처리
+  const isCombined = type.includes('새벽/저녁') || type.includes('새벽+저녁');
+  const t = isCombined ? type : type.split('/')[0];
 
   // 날짜 정보가 있으면 요일 기반 판별
   if(year && month && day){
@@ -694,14 +696,16 @@ function getCategory(type, year, month, day){
     const isFriday   = dow===5;
     const hasSaebyeok= t.includes('새벽');
 
+    if(isCombined) return '새벽'; // 새벽/저녁 통합은 새벽 카테고리
     if(isSunday)    return '주일';
     if(isWednesday && !hasSaebyeok) return '수요';
     if(isFriday    && !hasSaebyeok) return '금요';
-    if(hasSaebyeok) return '새벽'; // 평일 새벽 (수/금 포함)
-    return '특새'; // 그 외
+    if(hasSaebyeok) return '새벽';
+    return '특새';
   }
 
   // 날짜 정보 없으면 키워드 기반 fallback
+  if(isCombined) return '새벽';
   if(t.includes('수요')) return '수요';
   if(t.includes('금요')) return '금요';
   if(t.includes('새벽')) return '새벽';
@@ -1865,7 +1869,16 @@ async function parseImageWithAI(file){
 - 수요 예배: "[수요]설교", "[수요]사회", "[수요]자막", "[수요]영상"
 - 금요 예배: "[금요]설교", "[금요]사회", "[금요]자막", "[금요]영상"
 - 기타: "[기도]설교", "[백업]설교"
-- 표에서 "새벽" 섹션의 역할은 "[새벽]역할명", "저녁" 섹션의 역할은 "[저녁]역할명" 형식으로 작성하세요.`;
+
+★ 중요 — 새벽/저녁 구분 규칙:
+- 표에 "새벽"이라고 표시된 행/섹션의 역할 → 반드시 "[새벽]역할명" 형식
+- 표에 "저녁"이라고 표시된 행/섹션의 역할 → 반드시 "[저녁]역할명" 형식
+- 같은 사람이 같은 날 새벽 설교와 저녁 설교를 모두 할 수 있음 → 두 개 모두 별도로 기록
+- 같은 날 새벽과 저녁 모두 설교하는 경우 → "[새벽/저녁]설교" 로 기록
+- 같은 날 새벽과 저녁 모두 인도하는 경우 → "[새벽/저녁]인도" 로 기록
+- 같은 날 새벽과 저녁 모두 건반인 경우 → "[새벽/저녁]건반" 으로 기록
+- 새벽과 저녁이 다른 역할이면 더 중요한 역할(설교>인도>건반>기타) 하나만 기록
+- 새벽만 있으면 "[새벽]역할명", 저녁만 있으면 "[저녁]역할명", 둘 다면 "[새벽/저녁]역할명"으로 기록`;
 
     // ★ Gemini API — Supabase Edge Function 프록시 사용
     let text = '';
