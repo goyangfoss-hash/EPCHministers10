@@ -182,7 +182,7 @@ async function doLoginWith(name, phone, birth, silent=false) {
       else if (user?.status==='pending') await refreshSchedules();
     }
     if (!user){if(!silent)showErr($('l-err'),'이름, 연락처, 생년월일을 다시 확인해주세요.');return false;}
-    if (user.status==='pending'){if(!silent){const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[name]));showErr($('l-err'),inS?`승인 대기 중입니다. 근무표에 '${name}'님의 일정이 있습니다.`:'관리자 승인 대기 중입니다.');}return false;}
+    if (user.status==='pending'){if(!silent){const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[name]));showErr($('l-err'),inS?`승인 대기 중입니다. 캘린더에 '${name}'님의 일정이 있습니다.`:'관리자 승인 대기 중입니다.');}return false;}
     if (user.status==='rejected'){if(!silent)showErr($('l-err'),'가입이 거절되었습니다.');return false;}
     cu=user;
     // ★ 로그인 유지: 체크박스가 체크되거나, 세션복원 경로(silent)면 저장
@@ -214,7 +214,7 @@ async function doRegister() {
   if(error) return showErr(errEl,'오류가 발생했습니다.');
   await refreshSchedules();
   const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[name]));
-  okEl.textContent=`'${name}'님의 가입 신청이 완료되었습니다.${inS?` 근무표에 '${name}'님의 일정이 있습니다. 관리자 승인 후 바로 확인하실 수 있습니다.`:' 관리자 승인 후 로그인 가능합니다.'}`;
+  okEl.textContent=`'${name}'님의 가입 신청이 완료되었습니다.${inS?` 캘린더에 '${name}'님의 일정이 있습니다. 관리자 승인 후 바로 확인하실 수 있습니다.`:' 관리자 승인 후 로그인 가능합니다.'}`;
   okEl.style.display='block'; ['r-name','r-phone','r-pw'].forEach(id=>$(id).value='');
 }
 
@@ -240,7 +240,7 @@ function enterApp() {
   updateHeaderAvatar();
   $('btn-admin').style.display=isAdmin()?'flex':'none';
   assignColors(collectAllTypes());
-  // 모든 이용자에게 내 근무만/전체 보기 토글 표시
+  // 모든 이용자에게 내 사역만/전체 보기 토글 표시
   const toggleWrap=$('view-toggle-wrap');
   if(toggleWrap){
     toggleWrap.innerHTML=`<button id="btn-my-ministry" onclick="toggleMyMinistry()" class="my-ministry-btn">🙋 내 사역 보기</button>`;
@@ -342,7 +342,7 @@ function startRealtime() {
         if($('tab-myshift')?.style.display!=='none') renderMyShift();
         if($('tab-search')?.style.display!=='none') renderSearchResult();
         if(isAdmin()) buildSchedPreview();
-        showToastMsg(`${year}년 ${month}월 근무표가 업데이트되었습니다.`);
+        showToastMsg(`${year}년 ${month}월 캘린더가 업데이트되었습니다.`);
       }catch{await refreshSchedules();}
     })
     .on('postgres_changes',{event:'*',schema:'public',table:'app_users'},async()=>{
@@ -481,7 +481,7 @@ async function requestNotifPermission(){
       updateAlarmBadge(); scheduleLocalAlarms();
       // 설정 패널 갱신
       setTimeout(()=>renderSettingsPanel(), 300);
-      setTimeout(()=>pushNotify('근무표 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.','shift'),800);
+      setTimeout(()=>pushNotify('캘린더 앱 알림 설정 완료','이제 근무 전날 알림을 기기에서 받을 수 있습니다.','shift'),800);
     } else {
       showToastMsg('알림이 거부되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
       localStorage.setItem('ws_notif_dismissed','1');
@@ -956,7 +956,7 @@ function renderDayModal(){
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 근무자</div>`;
   wHtml+=workers.length?workers.map(w=>{const c=tc(w.type);return`<div class="day-worker-row"><div style="display:flex;align-items:center;gap:9px"><div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div><span class="worker-nm">${w.name}</span></div><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">근무자가 없습니다</p>`;
   wHtml+='</div>';
-  // 알림 & 메모 (내 근무일만)
+  // 알림 & 메모 (내 사역일만)
   let alarmHtml='';
   if(myType){
     alarmHtml=`<div class="modal-section">
@@ -1003,9 +1003,9 @@ async function editComment(key,cid){
 }
 
 // ══════════════════════════════════════════════════
-//  내 근무 탭 (관리자도 본인 이름으로 조회)
+//  내 사역 탭 (관리자도 본인 이름으로 조회)
 // ══════════════════════════════════════════════════
-// ── 내 근무 탭 카테고리별 누적 통계 accordion ──────
+// ── 내 사역 탭 카테고리별 누적 통계 accordion ──────
 const MY_CAT_ORDER = ['주일','수요','금요','새벽','특새'];
 const MY_CAT_META  = {
   '주일': { icon:'☀️', label:'주일 예배', color:'#185FA5' },
@@ -1038,7 +1038,7 @@ function renderMyShift(){
   const myMonths=[];
   Object.entries(allSchedules).forEach(([y,ym])=>Object.entries(ym).forEach(([m,d])=>{if(d[cu.name])myMonths.push({y:parseInt(y),m:parseInt(m)});}));
   myMonths.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
-  if(!myMonths.length){el.innerHTML=`<div class="search-empty"><div style="font-size:36px;margin-bottom:12px">📅</div><div style="font-size:14px;font-weight:600;color:#888">등록된 근무 기록이 없습니다</div><div style="font-size:12px;color:#bbb;margin-top:6px;line-height:1.6">근무표에 '${cu.name}'님의 이름이<br>포함되면 여기서 확인할 수 있습니다</div></div>`;return;}
+  if(!myMonths.length){el.innerHTML=`<div class="search-empty"><div style="font-size:36px;margin-bottom:12px">📅</div><div style="font-size:14px;font-weight:600;color:#888">등록된 근무 기록이 없습니다</div><div style="font-size:12px;color:#bbb;margin-top:6px;line-height:1.6">캘린더에 '${cu.name}'님의 이름이<br>포함되면 여기서 확인할 수 있습니다</div></div>`;return;}
   if(!myMonths.find(x=>x.y===myShiftYear&&x.m===myShiftMonth)){myShiftYear=myMonths[0].y;myShiftMonth=myMonths[0].m;}
 
   const cumCount={};
@@ -1159,7 +1159,7 @@ function renderSearchResult(){
     Object.entries(ym).forEach(([m,d])=>{if(srchMonth&&parseInt(m)!==srchMonth)return;monthList.push({y:parseInt(y),m:parseInt(m),d});});
   });
   monthList.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
-  if(!monthList.length){el.innerHTML='<p class="empty-state">해당 기간에 근무표가 없습니다.</p>';return;}
+  if(!monthList.length){el.innerHTML='<p class="empty-state">해당 기간에 캘린더가 없습니다.</p>';return;}
 
   const nf=srchName.trim();
   // ── 카테고리별 누적 집계 ──
@@ -1674,7 +1674,7 @@ function toggleUploadSetting(key){
   showToastMsg('설정이 저장되었습니다.');
 }
 function updatePendingBadge(){const cnt=(window._pending||[]).length;let b=$('btn-admin').querySelector('.nav-badge');if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-admin').appendChild(b);}b.textContent=cnt;}else b?.remove();}
-function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">근무표 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
+function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">캘린더 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
 function renderMembers(){const el=$('member-list');if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}el.innerHTML=allMembers.map((u,i)=>{const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);const c=PALETTE[i%PALETTE.length];return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av" style="background:${c.bg};color:${c.text}">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name} <span class="role-tag">${rl}</span></div><div class="m-sub">연락처: ${u.phone} · 전체 ${total}건</div></div><svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;}).join('');}
 function openMemberModal(id){
   const u=allMembers.find(x=>x.id===id)||(window._pending||[]).find(x=>x.id===id);if(!u)return;
@@ -1708,7 +1708,7 @@ function openMemberModal(id){
       <div class="member-av-lg">${u.name[0]}</div>
       <div><div style="font-size:19px;font-weight:700">${u.name}</div>
         <div style="font-size:13px;color:#888;margin-top:2px">${rl} · ${sl}</div>
-        ${inS?'<span class="sched-match-tag" style="margin-top:4px;display:inline-block">근무표 등록됨</span>':''}
+        ${inS?'<span class="sched-match-tag" style="margin-top:4px;display:inline-block">캘린더 등록됨</span>':''}
       </div>
     </div>
     <div class="detail-table">
@@ -1829,10 +1829,10 @@ async function parseImageWithAI(file){
     // 이미지를 base64로 변환 (최대 5MB 압축)
     const base64 = await compressImageToBase64(file);
 
-    showAILoading(true, 'AI가 근무표를 분석 중입니다...');
+    showAILoading(true, 'AI가 캘린더를 분석 중입니다...');
 
     const memberNames = allMembers.map(u=>u.name).join(', ');
-    const prompt = `이 이미지는 교회 사역자 근무표입니다. 다음 규칙에 따라 분석해주세요:
+    const prompt = `이 이미지는 교회 사역자 캘린더입니다. 다음 규칙에 따라 분석해주세요:
 
 1. 날짜별로 근무자와 역할(근무유형)을 추출해주세요.
 2. 괄호 안에 사람 이름이 있으면 [기도] 역할입니다.
@@ -1933,7 +1933,7 @@ function showAILoading(show, msg){
     el=document.createElement('div');
     el.id='ai-loading';
     el.style.cssText='text-align:center;padding:24px 20px;color:#185FA5;font-size:13px;font-weight:600';
-    el.innerHTML=`<div class="spinner" style="margin:0 auto 12px;width:32px;height:32px;border-width:3px"></div><div id="ai-loading-msg">AI가 근무표를 분석하고 있습니다...</div><div style="font-size:11px;color:#aaa;margin-top:6px;line-height:1.5">근무표 이미지에 따라 10~30초 소요됩니다</div>`;
+    el.innerHTML=`<div class="spinner" style="margin:0 auto 12px;width:32px;height:32px;border-width:3px"></div><div id="ai-loading-msg">AI가 캘린더를 분석하고 있습니다...</div><div style="font-size:11px;color:#aaa;margin-top:6px;line-height:1.5">캘린더 이미지에 따라 10~30초 소요됩니다</div>`;
     $('upload-zone').after(el);
   }
   if(msg){const m=$('ai-loading-msg');if(m)m.textContent=msg;}
@@ -2166,10 +2166,10 @@ async function applyExcelSchedule(){
   if(settings.confirmUpload!==false){
     const actionLabel=isMerge?'병합':'덮어쓰기';
     const actionDesc=isMerge
-      ? `기존 ${MN[month]} 근무표에 추가됩니다.\n현재 등록된 근무자: ${existingNames.join(', ')||'없음'}`
+      ? `기존 ${MN[month]} 캘린더에 추가됩니다.\n현재 등록된 근무자: ${existingNames.join(', ')||'없음'}`
       : isSameFile
-        ? `기존 ${MN[month]} 근무표가 수정본으로 교체됩니다.`
-        : `${year}년 ${MN[month]} 근무표로 저장됩니다.`;
+        ? `기존 ${MN[month]} 캘린더가 수정본으로 교체됩니다.`
+        : `${year}년 ${MN[month]} 캘린더로 저장됩니다.`;
     const confirmed=confirm(`[${actionLabel}] ${fileName}\n\n${actionDesc}\n\n계속하시겠습니까?`);
     if(!confirmed) return;
   }
@@ -2211,7 +2211,7 @@ async function applyExcelSchedule(){
 
   // ★ 안전장치 2: 되돌리기 토스트
   if(settings.enableUndo!==false && undoData){
-    showUndoToast(isMerge?`'${fileName}' 병합 완료`:isSameFile?`'${fileName}' 수정본 적용`:`${year}년 ${MN[month]} 근무표 저장 완료`);
+    showUndoToast(isMerge?`'${fileName}' 병합 완료`:isSameFile?`'${fileName}' 수정본 적용`:`${year}년 ${MN[month]} 캘린더 저장 완료`);
   } else {
     toast('excel-toast');
   }
@@ -2235,7 +2235,7 @@ function showUndoToast(msg){
 async function doUndo(){
   if(!undoData){showToastMsg('되돌릴 데이터가 없습니다.');return;}
   const{year,month,data,files}=undoData;
-  if(!confirm('이전 근무표로 되돌리시겠습니까?'))return;
+  if(!confirm('이전 캘린더로 되돌리시겠습니까?'))return;
   if(!allSchedules[year])allSchedules[year]={};
   allSchedules[year][month]=data;
   if(uploadedFiles[year]?.[month]) uploadedFiles[year][month]=files;
@@ -2248,13 +2248,13 @@ async function doUndo(){
   if(undoTimer){clearTimeout(undoTimer);undoTimer=null;}
   undoData=null;
   renderCalendar();buildSchedPreview();
-  showToastMsg('이전 근무표로 되돌렸습니다.');
+  showToastMsg('이전 캘린더로 되돌렸습니다.');
 }
 function buildSchedPreview(){
   const el=$('sched-form'),allMonths=[];
   Object.entries(allSchedules).forEach(([y,ym])=>Object.keys(ym).forEach(m=>allMonths.push({y:parseInt(y),m:parseInt(m)})));
   allMonths.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
-  if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 근무표가 없습니다.</p>';return;}
+  if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 캘린더가 없습니다.</p>';return;}
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   let html='';
   allMonths.forEach(({y,m},idx)=>{
