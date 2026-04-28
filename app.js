@@ -609,6 +609,9 @@ function renderAlarmPanel(){
 function toggleShiftAlarm(y,m,d){
   const cur=getAlarm(y,m,d); setAlarm(y,m,d,{...cur,alarm:!cur.alarm});
   updateAlarmBadge(); renderAlarmPanel(); scheduleLocalAlarms();
+  // ★ 즉각 UI 반영
+  renderCalendar();
+  if($('tab-myshift')?.style.display!=='none') renderMyShift();
   showToastMsg(!cur.alarm?`${m}월 ${d}일 알림 설정됨`:`${m}월 ${d}일 알림 해제됨`);
 }
 function updateAlarmTime(y,m,d,time){const cur=getAlarm(y,m,d);setAlarm(y,m,d,{...cur,alarmTime:time});scheduleLocalAlarms();}
