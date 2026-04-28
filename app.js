@@ -736,7 +736,7 @@ function setCategoryFilter(catId){
 function renderLegend(){
   const el=$('cal-legend'); if(!el) return;
   const d=curData();
-  const myModeActive=calView==='mine'&&!isAdmin();
+  const myModeActive=calView==='mine';
 
   // 이번 달 활성 카테고리 계산
   const activeCats=new Set();
@@ -834,7 +834,7 @@ function renderCalendar(){
     const myType=myRaw[String(d)]||'';
     const myC=myType?tc(myType):null;
     const workers=fm[d]||[];
-    const myModeActive=calView==='mine'&&!isAdmin();
+    const myModeActive=calView==='mine';
     const myHasDay=fmMy.has(d);
     const alarm=isMy?getAlarm(curY,curM+1,d):null;
     const alarmOff=isMy&&alarm&&!alarm.alarm;
@@ -884,7 +884,7 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
   const key='shift-list-body';
   const isOpen=collapseState[key]===true;
   const MNlabel=MN[curM];
-  const myModeActive=calView==='mine'&&!isAdmin();
+  const myModeActive=calView==='mine';
 
   // 카테고리 필터가 적용된 내 사역 날짜 집합
   const {fmMy}=getFilteredMap(allMap,myRaw,myDays);
