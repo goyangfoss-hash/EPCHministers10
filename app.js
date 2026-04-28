@@ -1882,6 +1882,12 @@ async function parseImageWithAI(file){
 8. 연도와 월 정보를 이미지나 제목에서 최대한 추출하세요.
 9. 날짜 표기 규칙: "5/1"은 5월 1일, "4/27"은 4월 27일입니다. 슬래시(/) 앞 숫자가 월, 뒤 숫자가 일입니다.
 10. 표 상단이나 제목에 월 정보가 있으면 반드시 그 월로 인식하세요.
+11. 병합된 셀(merged cells) 처리 규칙:
+   - 열이 병합되어 있어도 반드시 각 날짜 열을 정확히 따라 내려오세요
+   - 병합된 행의 내용은 해당 열의 날짜에만 적용하세요
+   - 예: 4/30열과 5/1열이 나란히 있을 때, 싱어 행이 두 칸으로 나뉘어 있으면 왼쪽은 4/30, 오른쪽은 5/1 데이터입니다
+   - 열 경계를 정확히 추적해서 각 날짜에 맞는 사람을 기록하세요
+12. 싱어는 여러 명이 있을 수 있습니다. 쉼표로 구분해서 한 셀에 모두 기록하세요 (예: "김증인,박은혜,김용경")
 
 결과를 반드시 아래 JSON 형식으로만 응답하세요 (마크다운 코드블록, 설명 텍스트 없이 순수 JSON만):
 
@@ -2139,22 +2145,64 @@ function renderAIPreviewTable(){
   const allDays=[...new Set(names.flatMap(n=>Object.keys(data[n]).map(Number)))].sort((a,b)=>a-b);
 
   let th='<tr><th>이름 (클릭시 수정)</th>';
-  allDays.forEach(d=>th+=`<th>${d}</th>`);
+  allDays.forEach(d=>th+=`<th>${d}일</th>`);
   th+='</tr>';
 
-  const tb=names.map((name,idx)=>{
+  const tb=names.map((name)=>{
     const dd=data[name];
     let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap;cursor:pointer;color:#185FA5" onclick="editAIName('${esc(name)}')" title="클릭해서 이름 수정">✏️ ${esc(name)}</td>`;
     allDays.forEach(d=>{
       const v=dd[String(d)]||'';
       const c=v?tc(v):null;
-      r+=`<td ${c?`style="background:${c.bg};color:${c.text};font-weight:600"`:''} title="${v}">${v?v.replace(/[\[\]]/g,'').slice(0,5):''}</td>`;
+      r+=`<td ${c?`style="background:${c.bg};color:${c.text};font-weight:600;cursor:pointer"`:' style="cursor:pointer;color:#ddd"'}
+        onclick="editAICell('${esc(name)}',${d})"
+        title="${v?v:'클릭해서 추가'}">${v?v.replace(/[\[\]]/g,'').slice(0,6):'+'}</td>`;
     });
     return r+'</tr>';
   }).join('');
 
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
   $('parse-summary').innerHTML=`<b>근무자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...new Set(names.flatMap(n=>Object.values(data[n]||{})))].map(t=>{const c=tc(t);return`<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
+}
+
+function editAICell(name, day){
+  if(!parsedExcel?.data) return;
+  const current = parsedExcel.data[name]?.[String(day)] || '';
+  // 수정 모달
+  document.getElementById('ai-cell-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'ai-cell-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:18px;padding:22px;width:100%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;color:#185FA5;margin-bottom:4px">✏️ 사역 수정</div>
+      <div style="font-size:12px;color:#888;margin-bottom:14px">${esc(name)} · ${day}일</div>
+      <input id="ai-cell-input" type="text" value="${esc(current)}" placeholder="예: [새벽]설교 (비우면 삭제)"
+        style="width:100%;padding:10px 12px;border:1.5px solid #185FA5;border-radius:10px;font-size:14px;box-sizing:border-box;font-family:inherit">
+      <div style="font-size:11px;color:#aaa;margin:8px 0 14px;line-height:1.6">
+        예시: [새벽]설교 / [새벽]자막 / [저녁]설교 / [저녁]인도<br>비워두면 해당 날짜 사역이 삭제됩니다
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('ai-cell-modal').remove()" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;background:#fff;border-radius:10px;font-size:13px;font-weight:600;color:#888;cursor:pointer">취소</button>
+        <button onclick="saveAICell('${esc(name)}',${day})" style="flex:2;padding:11px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">저장</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+  setTimeout(()=>document.getElementById('ai-cell-input')?.focus(), 100);
+}
+
+function saveAICell(name, day){
+  const val = document.getElementById('ai-cell-input')?.value?.trim();
+  if(!parsedExcel?.data[name]) parsedExcel.data[name]={};
+  if(val){
+    parsedExcel.data[name][String(day)] = val;
+  } else {
+    delete parsedExcel.data[name][String(day)];
+  }
+  document.getElementById('ai-cell-modal')?.remove();
+  renderAIPreviewTable();
+  showToastMsg(val ? `${day}일 사역 수정됨` : `${day}일 사역 삭제됨`);
 }
 
 function editAIName(oldName){
