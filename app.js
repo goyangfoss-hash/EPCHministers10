@@ -1821,7 +1821,7 @@ function handleAnyFile(file){
 async function parseImageWithAI(file){
   // 이미지 타입 검증
   const allowedTypes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'];
-  const mediaType = file.type || 'image/jpeg';
+  const mediaType = 'image/jpeg'; // 압축 시 항상 JPEG로 변환됨
   if(!allowedTypes.includes(mediaType)){
     showExcelErr('jpg, png, gif, webp 이미지 파일만 분석할 수 있습니다.');
     return;
