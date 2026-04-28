@@ -2,7 +2,7 @@
 //  Service Worker (sw.js)
 //  PWA 캐시 + 오프라인 지원
 // ══════════════════════════════════════════════════
-const CACHE_NAME = 'epc-v10';
+const CACHE_NAME = 'epc-v11';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
