@@ -1853,7 +1853,8 @@ async function parseImageWithAI(file){
 
     // ★ Gemini API — Supabase Edge Function 프록시 사용
     let text = '';
-    const fnResp = await fetch(`${SUPABASE_URL}/functions/v1/gemini-parse`, {
+    // ★ Anthropic Claude API — Supabase Edge Function 프록시
+    const fnResp = await fetch(`${SUPABASE_URL}/functions/v1/ai-parse`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
