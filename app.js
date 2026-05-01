@@ -180,16 +180,35 @@ function initPullToRefresh(){
 async function refreshSchedules() {
   if (OFFLINE||!sb) return;
   try {
-    const {data,error}=await sb.from('schedules').select('year,month,data').order('year').order('month');
-    if (error) throw error;
+    const [schedRes, noticeRes, memberRes] = await Promise.all([
+      sb.from('schedules').select('year,month,data').order('year').order('month'),
+      sb.from('notices').select('*').order('created_at',{ascending:false}),
+      sb.from('app_users').select('*').eq('status','approved'),
+    ]);
+    if (schedRes.error) throw schedRes.error;
+
+    // 스케줄 갱신
     allSchedules={};
-    (data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};});
+    (schedRes.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};});
     assignColors(collectAllTypes());
+
+    // 공지 갱신
+    if(noticeRes.data) notices = noticeRes.data;
+
+    // 회원 프로필 갱신 (프로필 사진 포함)
+    if(memberRes.data) allMembers = memberRes.data;
+
+    // 알림 설정 서버 동기화
+    await loadAlarmsFromServer();
+
     renderCalendar();
     if($('tab-myshift')?.style.display!=='none') renderMyShift();
     if($('tab-search')?.style.display!=='none') renderSearchResult();
+    if($('tab-notice')?.style.display!=='none') renderNotices();
     if(isAdmin()&&$('tab-admin')?.style.display!=='none') buildSchedPreview();
-    if(cu) autoSetMyShiftAlarms(); // ★ 새 사역 등록 시 자동 알림
+    if(cu) autoSetMyShiftAlarms();
+    updateAlarmBadge();
+    updateNoticeBadge();
   } catch(e){console.warn('refreshSchedules:',e.message);}
 }
 
@@ -1253,7 +1272,15 @@ function renderSearchResult(){
     if(srchYear&&parseInt(y)!==srchYear)return;
     Object.entries(ym).forEach(([m,d])=>{if(srchMonth&&parseInt(m)!==srchMonth)return;monthList.push({y:parseInt(y),m:parseInt(m),d});});
   });
-  monthList.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
+  // 가까운 날짜부터 — 현재월 포함 미래 먼저, 그 다음 과거 역순
+  const nowY=now.getFullYear(), nowM=now.getMonth()+1;
+  monthList.sort((a,b)=>{
+    const aFuture=a.y>nowY||(a.y===nowY&&a.m>=nowM);
+    const bFuture=b.y>nowY||(b.y===nowY&&b.m>=nowM);
+    if(aFuture&&bFuture) return a.y!==b.y?a.y-b.y:a.m-b.m; // 미래: 오름차순
+    if(!aFuture&&!bFuture) return a.y!==b.y?b.y-a.y:b.m-a.m; // 과거: 내림차순
+    return aFuture?-1:1; // 미래 먼저
+  });
   if(!monthList.length){el.innerHTML='<p class="empty-state">해당 기간에 사역표가 없습니다.</p>';return;}
 
   const nf=srchName.trim();
@@ -1294,33 +1321,41 @@ function renderSearchResult(){
     html+='</div>';
   }
 
-  // ── 날짜순 단순 리스트 ──
-  const allEntries=[];
+  // ── 월별 접기/펼치기 + 가까운 날짜부터 ──
   monthList.forEach(({y,m,d})=>{
     const targets=nf?(d[nf]?{[nf]:d[nf]}:{}):d;
-    Object.entries(targets).forEach(([name,wd])=>{
-      Object.entries(wd||{}).forEach(([day,type])=>{
-        allEntries.push({y,m,name,day:parseInt(day),type});
-      });
-    });
-  });
-  allEntries.sort((a,b)=>a.y!==b.y?b.y-a.y:a.m!==b.m?b.m-a.m:b.day-a.day);
-  allEntries.forEach(({y,m,name,day,type})=>{
-    const c=tc(type),dow=new Date(y,m-1,day).getDay();
-    const past=new Date(y,m-1,day)<new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    const isMyShift=name===cu.name;
-    const alarm=isMyShift?getAlarm(y,m,day):null;
-    html+=`<div class="list-card${past?' past':''}" style="margin-bottom:6px" onclick="viewDayInCal(${y},${m-1},${day})">
-      <div class="list-card-header">
-        <div>
-          <span class="list-date">${y}년 ${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>
-          ${!nf?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}
+    const entries=Object.entries(targets).flatMap(([name,wd])=>
+      Object.entries(wd||{}).map(([day,type])=>({name,day:parseInt(day),type}))
+    ).sort((a,b)=>a.day-b.day); // 날짜 오름차순
+    if(!entries.length)return;
+    const mkey=`srch-month-${y}-${m}`;
+    // 현재 월이면 기본 펼침, 나머지 접힘
+    const isCurrentMonth=y===now.getFullYear()&&m===now.getMonth()+1;
+    const isOpen=collapseState[mkey]!==undefined?collapseState[mkey]:isCurrentMonth;
+    const rows=entries.map(({name,day,type})=>{
+      const c=tc(type),dow=new Date(y,m-1,day).getDay();
+      const past=new Date(y,m-1,day)<new Date(now.getFullYear(),now.getMonth(),now.getDate());
+      const isMyShift=name===cu.name;
+      const alarm=isMyShift?getAlarm(y,m,day):null;
+      return`<div class="list-card${past?' past':''}" style="margin-bottom:6px" onclick="viewDayInCal(${y},${m-1},${day})">
+        <div class="list-card-header">
+          <div>
+            <span class="list-date">${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>
+            ${!nf?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            ${alarm?.alarm?'<span style="font-size:14px">🔔</span>':''}
+            <span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>
+          </div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          ${alarm?.alarm?'<span>🔔</span>':''}
-          <span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>
-        </div>
+      </div>`;
+    }).join('');
+    html+=`<div style="margin-bottom:8px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #f0f0ea">
+      <div onclick="toggleCollapse('${mkey}',this.querySelector('.collapse-btn'),true)" style="display:flex;align-items:center;justify-content:space-between;padding:12px 15px;cursor:pointer;user-select:none">
+        <div style="font-size:13px;font-weight:700;color:#185FA5">${y}년 ${MN[m]} <span style="font-size:11px;color:#aaa;font-weight:400">(${entries.length}건)</span></div>
+        <button class="collapse-btn" style="border:none;background:#f5f5f0;color:#aaa;font-size:11px;cursor:pointer;padding:3px 8px;border-radius:6px">${isOpen?'▲ 접기':'▼ 펼치기'}</button>
       </div>
+      <div data-collapse="${mkey}" style="display:${isOpen?'block':'none'};padding:0 12px 12px">${rows}</div>
     </div>`;
   });
   el.innerHTML=html||'<p class="empty-state">조건에 맞는 사역 기록이 없습니다.</p>';
@@ -1789,7 +1824,20 @@ function toggleUploadSetting(key){
 }
 function updatePendingBadge(){const cnt=(window._pending||[]).length;let b=$('btn-admin').querySelector('.nav-badge');if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-admin').appendChild(b);}b.textContent=cnt;}else b?.remove();}
 function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">사역표 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
-function renderMembers(){const el=$('member-list');if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}el.innerHTML=allMembers.map((u,i)=>{const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);const c=PALETTE[i%PALETTE.length];return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av" style="background:${c.bg};color:${c.text}">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name} <span class="role-tag">${rl}</span></div><div class="m-sub">연락처: ${u.phone} · 전체 ${total}건</div></div><svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;}).join('');}
+function renderMembers(){
+  const el=$('member-list');
+  if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}
+  el.innerHTML=allMembers.map((u,i)=>{
+    const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';
+    const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
+    const c=PALETTE[i%PALETTE.length];
+    // ★ 프로필 사진 표시
+    const avHtml=u.profile_img
+      ?`<img src="${u.profile_img}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid #f0f0ea" alt="${u.name}">`
+      :`<div class="member-av" style="background:${c.bg};color:${c.text}">${u.name[0]}</div>`;
+    return`<div class="member-row" onclick="openMemberModal(${u.id})">${avHtml}<div class="member-info"><div class="m-name">${u.name} <span class="role-tag">${rl}</span></div><div class="m-sub">연락처: ${u.phone} · 전체 ${total}건</div></div><svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;
+  }).join('');
+}
 function openMemberModal(id){
   const u=allMembers.find(x=>x.id===id)||(window._pending||[]).find(x=>x.id===id);if(!u)return;
   const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';
@@ -2622,22 +2670,119 @@ function buildSchedPreview(){
   if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 사역표가 없습니다.</p>';return;}
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   let html='';
-  allMonths.forEach(({y,m},idx)=>{
+  allMonths.forEach(({y,m})=>{
     const d=getMonthData(y,m),names=Object.keys(d);
     const key=`sched-${y}-${m}`;
-    // 기본: 접힘 (collapseState에 없으면 false=접힘)
     const isOpen=collapseState[key]===true;
-    html+=`<div style="margin-bottom:8px;background:#f8f8f4;border-radius:10px;overflow:hidden">
-      <div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none">
-        <div style="font-size:13px;font-weight:700;color:#185FA5">${y}년 ${MN[m]} <span style="font-size:11px;color:#aaa;font-weight:400">(${names.length}명)</span></div>
-        <button class="collapse-btn" style="border:none;background:none;color:#aaa;font-size:12px;cursor:pointer;padding:2px 6px">${isOpen?'▲':'▼'}</button>
+    const totalDays=names.reduce((s,n)=>s+Object.keys(d[n]||{}).length,0);
+    html+=`<div style="margin-bottom:8px;background:#f8f8f4;border-radius:12px;overflow:hidden;border:1px solid #ececea">
+      <div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;user-select:none">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#185FA5">${y}년 ${MN[m]}</div>
+          <div style="font-size:11px;color:#aaa;margin-top:2px">사역자 ${names.length}명 · 총 ${totalDays}건</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="event.stopPropagation();editSchedMonth(${y},${m})" style="padding:5px 10px;background:#E6F1FB;color:#185FA5;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">✏️ 수정</button>
+          <button onclick="event.stopPropagation();deleteSchedMonth(${y},${m})" style="padding:5px 10px;background:#FDECEA;color:#e74c3c;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">🗑️ 삭제</button>
+          <button class="collapse-btn" style="border:none;background:none;color:#aaa;font-size:12px;cursor:pointer;padding:2px 6px">${isOpen?'▲':'▼'}</button>
+        </div>
       </div>
-      <div data-collapse="${key}" style="display:${isOpen?'block':'none'};padding:0 14px 10px">
-        ${names.map(name=>{const wd=d[name]||{},days=Object.keys(wd).map(Number).sort((a,b)=>a-b),approved=allMembers.some(u=>u.name===name);return`<div class="sched-preview-row"><span class="sched-name">${name}${!approved?` <span class="unregistered-tag">미가입</span>`:''}</span><span class="sched-days">${days.map(d2=>{const t=wd[String(d2)],c=t?tc(t):null;return c?`<span class="day-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}" title="${t}">${d2}</span>`:`<span class="day-chip">${d2}</span>`;}).join('')}</span></div>`;}).join('')}
+      <div data-collapse="${key}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
+        ${names.map(name=>{
+          const wd=d[name]||{},days=Object.keys(wd).map(Number).sort((a,b)=>a-b);
+          const approved=allMembers.some(u=>u.name===name);
+          return`<div class="sched-preview-row">
+            <span class="sched-name">${name}${!approved?` <span class="unregistered-tag">미가입</span>`:''}</span>
+            <span class="sched-days">${days.map(d2=>{
+              const t=wd[String(d2)],c=t?tc(t):null;
+              return c
+                ?`<span class="day-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border};cursor:pointer" title="${t}" onclick="editSchedCell('${name}',${y},${m},${d2},'${t}')">${d2}</span>`
+                :`<span class="day-chip">${d2}</span>`;
+            }).join('')}</span>
+          </div>`;
+        }).join('')}
+        <button onclick="addSchedRow(${y},${m})" style="margin-top:8px;padding:6px 14px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">+ 사역자 추가</button>
       </div>
     </div>`;
   });
   el.innerHTML=html;
+}
+
+// ★ 사역표 셀 수정
+function editSchedCell(name, y, m, day, currentType){
+  document.getElementById('sched-edit-modal')?.remove();
+  const modal=document.createElement('div');
+  modal.id='sched-edit-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:18px;padding:22px;width:100%;max-width:360px">
+      <div style="font-size:15px;font-weight:700;color:#185FA5;margin-bottom:4px">✏️ 사역 수정</div>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">${name} · ${y}년 ${m}월 ${day}일</div>
+      <input id="sched-edit-input" type="text" value="${esc(currentType)}"
+        style="width:100%;padding:10px 12px;border:1.5px solid #185FA5;border-radius:10px;font-size:14px;box-sizing:border-box;font-family:inherit">
+      <div style="font-size:11px;color:#aaa;margin:6px 0 14px">비우면 해당 사역 삭제</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('sched-edit-modal').remove()" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;background:#fff;border-radius:10px;font-size:13px;color:#888;cursor:pointer">취소</button>
+        <button onclick="saveSchedCell('${name}',${y},${m},${day})" style="flex:2;padding:11px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">저장</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  document.body.appendChild(modal);
+  setTimeout(()=>document.getElementById('sched-edit-input')?.focus(),100);
+}
+
+async function saveSchedCell(name,y,m,day){
+  const val=document.getElementById('sched-edit-input')?.value?.trim();
+  const data=getMonthData(y,m);
+  if(!data[name]) data[name]={};
+  if(val){ data[name][String(day)]=val; }
+  else { delete data[name][String(day)]; }
+  if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month'});
+  document.getElementById('sched-edit-modal')?.remove();
+  assignColors(collectAllTypes());
+  renderCalendar();
+  buildSchedPreview();
+  showToastMsg('수정되었습니다.');
+}
+
+// ★ 사역자 행 추가
+function addSchedRow(y,m){
+  const name=prompt('추가할 사역자 이름:'); if(!name?.trim()) return;
+  const data=getMonthData(y,m);
+  if(!data[name.trim()]) data[name.trim()]={};
+  buildSchedPreview();
+  showToastMsg(`${name} 추가됨. 날짜를 클릭해서 사역을 입력하세요.`);
+}
+
+// ★ 월 전체 삭제
+async function deleteSchedMonth(y,m){
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  if(!confirm(`${y}년 ${MN[m]} 사역표를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  if(allSchedules[y]) delete allSchedules[y][m];
+  if(!OFFLINE) await sb.from('schedules').delete().eq('year',y).eq('month',m);
+  renderCalendar();
+  buildSchedPreview();
+  showToastMsg(`${y}년 ${MN[m]} 사역표가 삭제되었습니다.`);
+}
+
+// ★ 월 전체 수정 (미리보기로 열기)
+function editSchedMonth(y,m){
+  const data=getMonthData(y,m);
+  parsedExcel={year:y,month:m,data:JSON.parse(JSON.stringify(data)),fileName:`${y}년 ${m}월 수정`};
+  $('upload-zone').style.display='none';
+  $('excel-preview').style.display='block';
+  $('excel-preview').querySelectorAll('.ai-summary-box').forEach(e=>e.remove());
+  $('excel-info').innerHTML=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:#888">${y}년 ${m}월 사역표 수정 중 —</span>
+    <span style="font-size:13px;font-weight:700;color:#185FA5">${y}년 ${m}월</span>
+  </div>`;
+  renderAIPreviewTable();
+  // 저장 버튼 텍스트 변경
+  const saveBtn=document.querySelector('[onclick="applyExcelSchedule()"]');
+  if(saveBtn) saveBtn.textContent='수정 내용 저장';
+  // 관리자 탭에서 스크롤
+  switchTab('admin',$('btn-admin'));
+  setTimeout(()=>$('excel-preview')?.scrollIntoView({behavior:'smooth'}),300);
 }
 
 // ══════════════════════════════════════════════════
