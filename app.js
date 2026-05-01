@@ -818,7 +818,8 @@ function getTypeColor(type){
 let filterCategory = 'all'; // 카테고리 필터
 
 function setCategoryFilter(catId){
-  filterCategory=catId;
+  // ★ 토글 방식: 같은 탭 누르면 OFF (전체로), 다른 탭 누르면 ON
+  filterCategory = filterCategory===catId ? 'all' : catId;
   filterType='';
   renderCalendar();
 }
@@ -836,7 +837,7 @@ function renderLegend(){
     });
   });
 
-  // 내 사역 모드일 때: 내가 사역하는 카테고리만 활성화
+  // 내 사역 모드: 내가 사역하는 카테고리
   const myRaw=d[cu?.name]||{};
   const myCats=new Set();
   if(myModeActive){
@@ -845,12 +846,14 @@ function renderLegend(){
     });
   }
 
+  // ★ '전체' 버튼 제거, 카테고리 탭만 토글로 표시
+  const visibleCats = CATEGORIES.filter(c=>c.id!=='all'&&activeCats.has(c.id));
+
   el.innerHTML=`<div class="cat-tab-wrap">
-    ${CATEGORIES.filter(c=>c.id==='all'||activeCats.has(c.id)).map(c=>{
-      // 내 사역 모드: 내 사역 없는 카테고리는 dimmed
-      const noMyShift=myModeActive&&c.id!=='all'&&!myCats.has(c.id);
-      const label=myModeActive&&c.id!=='all'?`내 ${c.label}`:c.label;
-      return `<button class="cat-tab-btn${filterCategory===c.id?' active':''}${noMyShift?' dimmed-cat':''}" onclick="setCategoryFilter('${c.id}')">${label}</button>`;
+    ${visibleCats.map(c=>{
+      const isActive=filterCategory===c.id;
+      const noMyShift=myModeActive&&!myCats.has(c.id);
+      return `<button class="cat-tab-btn${isActive?' active':''}${noMyShift?' dimmed-cat':''}" onclick="setCategoryFilter('${c.id}')">${c.label}</button>`;
     }).join('')}
   </div>`;
 }
