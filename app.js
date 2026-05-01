@@ -575,21 +575,144 @@ async function requestNotifPermission(){
 }
 function dismissNotifBanner(){ $('notif-banner')?.remove(); localStorage.setItem('ws_notif_dismissed','1'); }
 
-// ── 알림 기능 ─────────────────────────────────────
+// ── 알림 배지 (공지 미확인 + 메시지 미읽음 + 오늘/내일 사역) ──
 function updateAlarmBadge(){
-  const cnt=activeAlarmCount();
-  const btn=$('btn-alarm'); if(!btn)return;
+  const btn=$('btn-alarm'); if(!btn) return;
+  const cnt = getNotifCount();
   let b=btn.querySelector('.alarm-badge');
-  if(cnt>0){if(!b){b=document.createElement('div');b.className='alarm-badge';btn.appendChild(b);}b.textContent=cnt;}
-  else b?.remove();
+  if(cnt>0){
+    if(!b){b=document.createElement('div');b.className='alarm-badge';btn.appendChild(b);}
+    b.textContent=cnt;
+  } else b?.remove();
+}
+
+function getNotifCount(){
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const tomorrow=new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+
+  // ① 오늘/내일 사역 알림
+  let shiftCnt=0;
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    Object.entries(ym).forEach(([m,data])=>{
+      const myData=data[cu?.name]||{};
+      Object.entries(myData).forEach(([ds])=>{
+        const d=parseInt(ds);
+        const dt=new Date(parseInt(y),parseInt(m)-1,d);
+        if(dt.getTime()===today.getTime()||dt.getTime()===tomorrow.getTime()) shiftCnt++;
+      });
+    });
+  });
+
+  // ② 미확인 공지
+  const readIds=new Set(JSON.parse(localStorage.getItem('ws_read_notices')||'[]'));
+  const unreadNotices=(notices||[]).filter(n=>!readIds.has(n.id)).length;
+
+  // ③ 미읽은 DM
+  const unreadDM=Object.values(dmUnread||{}).reduce((s,v)=>s+(v?1:0),0);
+
+  return shiftCnt+unreadNotices+unreadDM;
+}
+
+function renderAlarmPanel(){
+  const el=$('alarm-panel-list');
+  const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const DN=['일','월','화','수','목','금','토'];
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const tomorrow=new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+
+  let html='<div style="padding:10px 14px 6px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:500;color:var(--color-text-secondary)">알림 센터</span><button onclick="markAllRead()" style="font-size:11px;color:#185FA5;background:none;border:none;cursor:pointer">모두 읽음</button></div>';
+
+  // ① 오늘/내일 사역
+  const shiftItems=[];
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    Object.entries(ym).forEach(([m,data])=>{
+      const myData=data[cu?.name]||{};
+      Object.entries(myData).forEach(([ds,type])=>{
+        const d=parseInt(ds);
+        const dt=new Date(parseInt(y),parseInt(m)-1,d);
+        if(dt.getTime()===today.getTime()||dt.getTime()===tomorrow.getTime()){
+          shiftItems.push({y:parseInt(y),m:parseInt(m),d,type,dt});
+        }
+      });
+    });
+  });
+  shiftItems.sort((a,b)=>a.dt-b.dt);
+
+  if(shiftItems.length){
+    html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">오늘/내일 사역</div>`;
+    html+=shiftItems.map(({y,m,d,type,dt})=>{
+      const c=tc(type);
+      const isToday=dt.getTime()===today.getTime();
+      const label=isToday?'오늘':'내일';
+      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
+        <div style="width:32px;height:32px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📅</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${label} 사역</div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${m}월 ${d}일(${DN[new Date(y,m-1,d).getDay()]}) <span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:10px">${type}</span></div>
+        </div>
+        <div style="width:6px;height:6px;border-radius:50%;background:#639922;flex-shrink:0"></div>
+      </div>`;
+    }).join('');
+  }
+
+  // ② 미확인 공지
+  const readIds=new Set(JSON.parse(localStorage.getItem('ws_read_notices')||'[]'));
+  const unreadNotices=(notices||[]).filter(n=>!readIds.has(n.id));
+  if(unreadNotices.length){
+    html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">새 공지</div>`;
+    html+=unreadNotices.slice(0,3).map(n=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#E6F1FB;cursor:pointer" onclick="switchTab('notice',$('btn-notice'));toggleAlarmPanel()">
+        <div style="width:32px;height:32px;border-radius:50%;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📢</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.title)}</div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${fmtDate(n.created_at)}</div>
+        </div>
+        <div style="width:6px;height:6px;border-radius:50%;background:#185FA5;flex-shrink:0"></div>
+      </div>`).join('');
+  }
+
+  // ③ 미읽은 DM
+  const unreadDMs=Object.entries(dmUnread||{}).filter(([,v])=>v);
+  if(unreadDMs.length){
+    html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">새 메시지</div>`;
+    html+=unreadDMs.slice(0,3).map(([uid])=>{
+      const u=allMembers.find(m=>m.id===parseInt(uid));
+      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EEEDFE;cursor:pointer" onclick="switchTab('feed',$('btn-feed'));toggleAlarmPanel()">
+        <div style="width:32px;height:32px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">💬</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${u?esc(u.name):'누군가'}님의 메시지</div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">새 메시지가 있습니다</div>
+        </div>
+        <div style="width:6px;height:6px;border-radius:50%;background:#534AB7;flex-shrink:0"></div>
+      </div>`;
+    }).join('');
+  }
+
+  // 아무것도 없을 때
+  if(!shiftItems.length&&!unreadNotices.length&&!unreadDMs.length){
+    html+='<div style="padding:24px 16px;text-align:center;font-size:13px;color:var(--color-text-tertiary)">새 알림이 없습니다</div>';
+  }
+
+  el.innerHTML=html;
+}
+
+function markAllRead(){
+  // 공지 모두 읽음
+  const ids=(notices||[]).map(n=>n.id);
+  localStorage.setItem('ws_read_notices',JSON.stringify(ids));
+  if(window.dmUnread) window.dmUnread={};
+  updateAlarmBadge();
+  renderAlarmPanel();
+  updateNoticeBadge();
 }
 
 function scheduleLocalAlarms(){
   const now=new Date();
-  // 모든 달의 본인 사역에 대해 알람 스케줄링
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
-      const myD=data[cu.name]||{};
+      const myD=data[cu?.name]||{};
       Object.entries(myD).forEach(([ds,type])=>{
         const d=parseInt(ds);
         const alarm=getAlarm(parseInt(y),parseInt(m),d);
@@ -597,13 +720,12 @@ function scheduleLocalAlarms(){
         const[h,mn]=(alarm.alarmTime||getDefaultAlarmTime()).split(':').map(Number);
         const alarmDt=new Date(parseInt(y),parseInt(m)-1,d-1,h,mn,0);
         const ms=alarmDt-now;
-        if(ms>0&&ms<24*60*60*1000) setTimeout(()=>pushNotify(`내일 사역 알림 (${type})`,`${y}년 ${m}월 ${d}일 사역가 내일입니다.`,'shift'),ms);
+        if(ms>0&&ms<24*60*60*1000) setTimeout(()=>pushNotify(`내일 사역 알림 (${type})`,`${y}년 ${m}월 ${d}일 사역이 내일입니다.`,'shift'),ms);
       });
     });
   });
 }
 
-// ★ 모든 패널 닫기 (상호 배타적)
 function closeAllPanels(){
   const ap=$('alarm-panel'), sp=$('settings-panel');
   if(ap) ap.style.display='none';
