@@ -396,10 +396,26 @@ function startRealtime() {
         showToastMsg(`${year}년 ${month}월 사역표가 업데이트되었습니다.`);
       }catch{await refreshSchedules();}
     })
-    .on('postgres_changes',{event:'*',schema:'public',table:'app_users'},async()=>{
+    .on('postgres_changes',{event:'*',schema:'public',table:'app_users'},async(payload)=>{
       const{data}=await sb.from('app_users').select('*');
-      if(data){allMembers=data.filter(u=>u.status==='approved');window._pending=data.filter(u=>u.status==='pending');}
+      if(data){
+        allMembers=data.filter(u=>u.status==='approved');
+        window._pending=data.filter(u=>u.status==='pending');
+        // ★ 본인 프로필이 변경된 경우 헤더 아바타 업데이트
+        const updatedMe=data.find(u=>u.id===cu?.id);
+        if(updatedMe&&updatedMe.profile_img!==cu?.profile_img){
+          cu.profile_img=updatedMe.profile_img;
+          const img=$('hdr-profile-img');
+          const av=$('hdr-avatar');
+          if(img&&av){
+            if(cu.profile_img){img.src=cu.profile_img;img.style.display='block';av.style.display='none';}
+            else{img.style.display='none';av.style.display='flex';}
+          }
+        }
+      }
+      // ★ 회원 목록 즉시 갱신 (프로필 사진 포함)
       if(isAdmin()){renderAdmin();updatePendingBadge();}
+      renderMembers(); // 관리자가 아니어도 소통탭 등에서 표시되는 멤버 정보 갱신
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'shift_comments'},payload=>{
       const row=payload.new, author=allMembers.find(u=>u.id===row.user_id);
