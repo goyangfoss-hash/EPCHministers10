@@ -915,7 +915,7 @@ function renderCalendar(){
 
     if(myModeActive){
       // ══ 내 사역 모드 ══
-      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay?' dimmed':'');
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay?' dimmed':'')+(isToday?' today-mine':'');
       if(myHasDay){
         // 내 사역 있는 날 — 색칠된 셀
         const bg=myC?myC.dot:'#185FA5';
@@ -928,9 +928,10 @@ function renderCalendar(){
           ${typeLabel}${cmtBadge}${todayRing}${alarmOffBadge}
         </div>`;
       } else {
-        // 내 사역 없는 날 — 흐린 빈 셀
+        // 내 사역 없는 날 — 흐린 셀 (오늘이면 날짜 강조)
+        const todayStyle=isToday?`style="color:#185FA5;font-weight:800;border:1.5px solid #185FA5;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px"`:``;
         html+=`<div class="${cls}" onclick="openDayModal(${d})">
-          <div class="day-num-wrap"><span class="day-num">${d}</span></div>
+          <div class="day-num-wrap"><span class="day-num" ${todayStyle}>${d}</span></div>
         </div>`;
       }
     } else {
