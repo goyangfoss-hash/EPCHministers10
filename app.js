@@ -763,50 +763,6 @@ function toggleSettingsPanel(){
   }
 }
 
-function renderAlarmPanel(){
-  const el=$('alarm-panel-list');
-  const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const DN=['일','월','화','수','목','금','토'];
-
-  // ★ 알림 설정된 사역만 표시 (전체 저장된 알람에서 alarm=true인 것)
-  const alarmDays=[];
-  Object.entries(shiftAlarms).forEach(([key,v])=>{
-    if(!v.alarm) return;
-    const[y,m,d]=key.split('-').map(Number);
-    // 본인 사역인지 확인
-    const myData=getMonthData(y,m)[cu.name]||{};
-    const type=myData[String(d)];
-    if(!type) return;
-    alarmDays.push({y,m,d,type,alarm:v});
-  });
-  alarmDays.sort((a,b)=>a.y!==b.y?a.y-b.y:a.m!==b.m?a.m-b.m:a.d-b.d);
-
-  if(!alarmDays.length){
-    el.innerHTML='<p style="font-size:13px;color:#bbb;padding:16px;text-align:center">설정된 알림이 없습니다<br><span style="font-size:11px">사역일을 탭해서 알림을 설정하세요</span></p>';
-    return;
-  }
-  el.innerHTML=alarmDays.map(({y,m,d,type,alarm})=>{
-    const c=type?tc(type):null;
-    const dow=new Date(y,m-1,d).getDay();
-    const now=new Date();
-    const isPast=new Date(y,m-1,d)<new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    return`<div class="alarm-item${isPast?' past-card':''}" onclick="viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
-      <div style="display:flex;align-items:center;gap:10px;flex:1">
-        <div class="alarm-day-num" ${c?`style="background:${c.bg};color:${c.dot}"`:''}>${d}</div>
-        <div>
-          <div style="font-size:13px;font-weight:600">${y}년 ${MN[m-1]} ${d}일 <span style="color:#aaa;font-weight:400">${DN[dow]}</span></div>
-          ${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}
-          <div style="font-size:11px;color:#888;margin-top:3px">⏰ ${alarm.alarmTime||'09:00'} 알림</div>
-          ${alarm.memo?`<div style="font-size:11px;color:#888;margin-top:2px">📝 ${esc(alarm.memo)}</div>`:''}
-        </div>
-      </div>
-      <div onclick="event.stopPropagation()">
-        <div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${y},${m},${d})"></div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
 function toggleShiftAlarm(y,m,d){
   const cur=getAlarm(y,m,d); setAlarm(y,m,d,{...cur,alarm:!cur.alarm});
   updateAlarmBadge(); renderAlarmPanel(); scheduleLocalAlarms();
