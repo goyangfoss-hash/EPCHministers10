@@ -65,11 +65,27 @@ function getDefaultAlarmTime(){ try{ return JSON.parse(localStorage.getItem('ws_
 function getAlarm(y,m,d) { return shiftAlarms[`${y}-${m}-${d}`] || { alarm: true, alarmTime: getDefaultAlarmTime(), memo: '' }; }
 function setAlarm(y,m,d,data) { shiftAlarms[`${y}-${m}-${d}`] = data; saveAlarms(); }
 function activeAlarmCount() {
+  if(!cu) return 0;
   const now = new Date();
-  return Object.entries(shiftAlarms).filter(([k,v]) => {
-    if (!v.alarm) return false;
-    const [y,m,d] = k.split('-').map(Number);
-    return new Date(y, m-1, d) >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // ★ 본인 사역 날짜만 카운트
+  const myDates = new Set();
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    Object.entries(ym).forEach(([m,data])=>{
+      const myData = data[cu.name]||{};
+      Object.keys(myData).forEach(ds=>{
+        const d=parseInt(ds);
+        const dt=new Date(parseInt(y),parseInt(m)-1,d);
+        if(dt>=today) myDates.add(`${y}-${m}-${d}`);
+      });
+    });
+  });
+
+  // 본인 사역 날짜 중 알람 ON인 것만 카운트
+  return [...myDates].filter(k=>{
+    const v=shiftAlarms[k];
+    return v?.alarm === true;
   }).length;
 }
 
