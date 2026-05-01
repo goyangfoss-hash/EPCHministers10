@@ -419,12 +419,12 @@ function startRealtime() {
         window._pending=data.filter(u=>u.status==='pending');
         // ★ 본인 프로필이 변경된 경우 헤더 아바타 업데이트
         const updatedMe=data.find(u=>u.id===cu?.id);
-        if(updatedMe&&updatedMe.profile_img!==cu?.profile_img){
-          cu.profile_img=updatedMe.profile_img;
+        if(updatedMe&&updatedMe.avatar!==cu?.avatar){
+          cu.avatar=updatedMe.avatar;
           const img=$('hdr-profile-img');
           const av=$('hdr-avatar');
           if(img&&av){
-            if(cu.profile_img){img.src=cu.profile_img;img.style.display='block';av.style.display='none';}
+            if(cu.avatar){img.src=cu.avatar;img.style.display='block';av.style.display='none';}
             else{img.style.display='none';av.style.display='flex';}
           }
         }
@@ -1865,8 +1865,8 @@ function renderMembers(){
     const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
     const c=PALETTE[i%PALETTE.length];
     // ★ 프로필 사진 표시
-    const avHtml=u.profile_img
-      ?`<img src="${u.profile_img}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid #f0f0ea" alt="${u.name}">`
+    const avHtml=u.avatar
+      ?`<img src="${u.avatar}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid #f0f0ea" alt="${u.name}">`
       :`<div class="member-av" style="background:${c.bg};color:${c.text}">${u.name[0]}</div>`;
     return`<div class="member-row" onclick="openMemberModal(${u.id})">${avHtml}<div class="member-info"><div class="m-name">${u.name} <span class="role-tag">${rl}</span></div><div class="m-sub">연락처: ${u.phone} · 전체 ${total}건</div></div><svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;
   }).join('');
@@ -1899,9 +1899,9 @@ function openMemberModal(id){
 
   // ★ 프로필 사진 표시 (공유)
   const isMe = u.id === cu.id;
-  const profileImg = u.profile_img
-    ? `<img src="${u.profile_img}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;cursor:pointer;border:2px solid #f0f0ea"
-        onclick="enlargeProfileImg('${u.profile_img}','${esc(u.name)}')" alt="${esc(u.name)}">`
+  const profileImg = u.avatar
+    ? `<img src="${u.avatar}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;cursor:pointer;border:2px solid #f0f0ea"
+        onclick="enlargeProfileImg('${u.avatar}','${esc(u.name)}')" alt="${esc(u.name)}">`
     : `<div class="member-av-lg" style="cursor:default">${u.name[0]}</div>`;
 
   $('member-modal-body').innerHTML=`
