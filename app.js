@@ -931,36 +931,43 @@ function renderCalendar(){
 
     if(myModeActive){
       // ══ 내 사역 모드 ══
-      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay?' dimmed':'')+(isToday?' today-mine':'');
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay?' dimmed':'');
       if(myHasDay){
-        // 내 사역 있는 날 — 색칠된 셀
+        // 내 사역 있는 날 — 사역색 배경
         const bg=myC?myC.dot:'#185FA5';
         const typeLabel=`<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
-        const todayRing=isToday?`<div style="position:absolute;inset:1px;border:2.5px solid rgba(255,255,255,.8);border-radius:6px;pointer-events:none"></div>`:'';
         const cmtBadge=cc?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff;border:none">${cc}</div>`:'';
         const alarmOffBadge=alarmOff?`<div style="position:absolute;bottom:2px;right:3px;font-size:10px;opacity:.8">🔕</div>`:'';
-        html+=`<div class="${cls}" style="background:${bg};border-color:${bg};position:relative" onclick="openDayModal(${d})">
+        // ★ 오늘+내사역: 사역색 배경 + 파란 이중 테두리
+        const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;outline:2px solid ${bg};outline-offset:1px;position:relative`:`background:${bg};border-color:${bg};position:relative`;
+        html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
           <div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div>
-          ${typeLabel}${cmtBadge}${todayRing}${alarmOffBadge}
+          ${typeLabel}${cmtBadge}${alarmOffBadge}
         </div>`;
       } else {
-        // 내 사역 없는 날 — 흐린 셀 (오늘이면 날짜 강조)
-        const todayStyle=isToday?`style="color:#185FA5;font-weight:800;border:1.5px solid #185FA5;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px"`:``;
-        html+=`<div class="${cls}" onclick="openDayModal(${d})">
-          <div class="day-num-wrap"><span class="day-num" ${todayStyle}>${d}</span></div>
+        // 내 사역 없는 날 — 흐린 셀 (오늘이면 파란 테두리)
+        const todayStyle=isToday?`border:2.5px solid #185FA5;border-radius:8px`:``;
+        const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:``;
+        html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
+          <div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>
         </div>`;
       }
     } else {
       // ══ 전체 사역 모드 ══
       const dimmed=filterCategory!=='all'&&!workers.length;
-      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(isToday?' today':'')+(dimmed?' dimmed':'');
-      const cellStyle=isMy&&myC?`background:${myC.bg};border-color:${myC.border}`:'';
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(dimmed?' dimmed':'');
+      // ★ 내 사역 배경 + 오늘 파란 테두리 분리
+      const hasMy=isMy&&myC;
+      const bgStyle=hasMy?`background:${myC.bg};border-color:${myC.border}`:'';
+      const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
+      const cellStyle=[bgStyle,todayBorder].filter(Boolean).join(';');
       const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'';
       const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
-      const myDot=isMy&&myC?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
+      const myDot=hasMy?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
+      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
-      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
   }
 
