@@ -931,7 +931,7 @@ function renderCalendar(){
 
     if(myModeActive){
       // ══ 내 사역 모드 ══
-      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay?' dimmed':'');
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay&&!isToday?' dimmed':'');
       if(myHasDay){
         // 내 사역 있는 날 — 사역색 배경
         const bg=myC?myC.dot:'#185FA5';
