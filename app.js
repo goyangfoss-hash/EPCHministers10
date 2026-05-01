@@ -609,7 +609,7 @@ function getNotifCount(){
   const unreadNotices=(notices||[]).filter(n=>!readIds.has(n.id)).length;
 
   // ③ 미읽은 DM
-  const unreadDM=Object.values(dmUnread||{}).reduce((s,v)=>s+(v?1:0),0);
+  const unreadDM=dmUnreadCount||0;
 
   return shiftCnt+unreadNotices+unreadDM;
 }
@@ -674,20 +674,16 @@ function renderAlarmPanel(){
   }
 
   // ③ 미읽은 DM
-  const unreadDMs=Object.entries(dmUnread||{}).filter(([,v])=>v);
-  if(unreadDMs.length){
+  if(dmUnreadCount>0){
     html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">새 메시지</div>`;
-    html+=unreadDMs.slice(0,3).map(([uid])=>{
-      const u=allMembers.find(m=>m.id===parseInt(uid));
-      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EEEDFE;cursor:pointer" onclick="switchTab('feed',$('btn-feed'));toggleAlarmPanel()">
-        <div style="width:32px;height:32px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">💬</div>
-        <div style="flex:1">
-          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${u?esc(u.name):'누군가'}님의 메시지</div>
-          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">새 메시지가 있습니다</div>
-        </div>
-        <div style="width:6px;height:6px;border-radius:50%;background:#534AB7;flex-shrink:0"></div>
-      </div>`;
-    }).join('');
+    html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EEEDFE;cursor:pointer" onclick="switchTab('feed',$('btn-feed'));toggleAlarmPanel()">
+      <div style="width:32px;height:32px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">💬</div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">새 메시지 ${dmUnreadCount}개</div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">소통 탭에서 확인하세요</div>
+      </div>
+      <div style="width:6px;height:6px;border-radius:50%;background:#534AB7;flex-shrink:0"></div>
+    </div>`;
   }
 
   // 아무것도 없을 때
@@ -702,7 +698,7 @@ function markAllRead(){
   // 공지 모두 읽음
   const ids=(notices||[]).map(n=>n.id);
   localStorage.setItem('ws_read_notices',JSON.stringify(ids));
-  if(window.dmUnread) window.dmUnread={};
+  dmUnreadCount=0;
   updateAlarmBadge();
   renderAlarmPanel();
   updateNoticeBadge();
