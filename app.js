@@ -2673,51 +2673,75 @@ async function applyExcelSchedule(){
   parsedExcel.month = editedMonth;
   const{year,month,data,fileName}=parsedExcel;
   const settings=getUploadSettings();
-  const isSpecial = currentUploadType === 'special'; // ★ 특별 사역표 여부
+  const isSpecial = currentUploadType === 'special';
 
   if(!allSchedules[year]) allSchedules[year]={};
   if(!uploadedFiles[year]) uploadedFiles[year]={};
   if(!uploadedFiles[year][month]) uploadedFiles[year][month]=new Set();
 
   const prevFiles=uploadedFiles[year][month];
-  const isFirstUpload=prevFiles.size===0;
-  const isSameFile=prevFiles.has(fileName);
-  // ★ 특별 사역표는 항상 병합, 상시는 기존 로직
-  const isMerge = isSpecial || (!isFirstUpload && !isSameFile);
-
+  const hasExisting = Object.keys(allSchedules[year]?.[month]||{}).length > 0;
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const existingNames=Object.keys(allSchedules[year]?.[month]||{});
 
-  // ★ 안전장치 1: 확인 팝업
-  if(settings.confirmUpload!==false){
-    const typeLabel = isSpecial ? '⭐ 특별 사역표 (병합)' : '📅 상시 사역표';
-    const actionLabel = isSpecial ? '병합' : (isMerge?'병합':'덮어쓰기');
-    const actionDesc = isSpecial
-      ? `특별 사역표가 기존 ${MN[month]} 상시 사역표와 병합됩니다.\n서로 덮어쓰지 않습니다.`
-      : isMerge
-        ? `기존 ${MN[month]} 사역표에 추가됩니다.\n현재 등록된 사역자: ${existingNames.join(', ')||'없음'}`
-        : isSameFile
-          ? `기존 ${MN[month]} 사역표가 수정본으로 교체됩니다.`
-          : `${year}년 ${MN[month]} 사역표로 저장됩니다.`;
-    const confirmed=confirm(`[${typeLabel}] ${fileName}\n\n${actionDesc}\n\n계속하시겠습니까?`);
-    if(!confirmed) return;
+  // ★ 기존 데이터가 있으면 병합/덮어쓰기 선택 모달 표시
+  if(hasExisting && !isSpecial){
+    document.getElementById('merge-choice-modal')?.remove();
+    const modal=document.createElement('div');
+    modal.id='merge-choice-modal';
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML=`
+      <div style="background:#fff;border-radius:18px;padding:22px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+        <div style="font-size:15px;font-weight:700;color:#185FA5;margin-bottom:6px">📅 ${year}년 ${MN[month]} 사역표</div>
+        <div style="font-size:12px;color:#888;margin-bottom:16px">기존 사역자: ${existingNames.slice(0,5).join(', ')}${existingNames.length>5?` 외 ${existingNames.length-5}명`:''}</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button onclick="doApplySchedule(${year},${month},true)" style="padding:14px;background:#E6F1FB;color:#185FA5;border:1.5px solid #185FA5;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;text-align:left">
+            ➕ 병합 저장
+            <div style="font-size:11px;font-weight:400;color:#378ADD;margin-top:3px">기존 사역표에 새 데이터를 추가합니다</div>
+          </button>
+          <button onclick="doApplySchedule(${year},${month},false)" style="padding:14px;background:#FDECEA;color:#e74c3c;border:1.5px solid #e74c3c;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;text-align:left">
+            🔄 덮어쓰기
+            <div style="font-size:11px;font-weight:400;color:#e74c3c;margin-top:3px">기존 사역표를 완전히 교체합니다</div>
+          </button>
+          <button onclick="document.getElementById('merge-choice-modal').remove()" style="padding:11px;background:#fff;color:#888;border:1.5px solid #e0e0e0;border-radius:12px;font-size:13px;cursor:pointer">취소</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    return; // 모달 선택 대기
   }
 
-  // ★ 안전장치 2: 되돌리기용 이전 상태 저장
+  // 특별 사역표이거나 기존 데이터 없으면 바로 처리
+  doApplySchedule(year, month, isSpecial || !hasExisting ? false : true);
+}
+
+async function doApplySchedule(year, month, isMerge){
+  document.getElementById('merge-choice-modal')?.remove();
+  if(!parsedExcel) return;
+
+  const{data,fileName}=parsedExcel;
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const settings=getUploadSettings();
+  const isSpecial = currentUploadType === 'special';
+
+  if(!allSchedules[year]) allSchedules[year]={};
+  if(!uploadedFiles[year]) uploadedFiles[year]={};
+  if(!uploadedFiles[year][month]) uploadedFiles[year][month]=new Set();
+  const prevFiles=uploadedFiles[year][month];
+
+  // 되돌리기용 이전 상태 저장
   if(settings.enableUndo!==false){
     undoData={year,month,data:JSON.parse(JSON.stringify(allSchedules[year]?.[month]||{})),files:new Set(prevFiles)};
   }
 
   let finalData;
   if(isMerge){
-    // ★ 특별 사역표: 같은 날짜/이름이 겹쳐도 덮어쓰지 않고 /로 병합
+    // 병합: 기존 데이터에 새 데이터 추가
     const existing=allSchedules[year][month]||{};
     finalData={...existing};
     Object.entries(data).forEach(([name,days])=>{
       if(!finalData[name]) finalData[name]={};
       Object.entries(days).forEach(([day,type])=>{
         if(finalData[name][day]){
-          // 이미 같은 사역이 있으면 스킵, 다른 사역이면 /로 합치기
           if(!finalData[name][day].includes(type)) finalData[name][day]+='/'+type;
         } else {
           finalData[name][day]=type;
