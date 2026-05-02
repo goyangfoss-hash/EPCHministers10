@@ -1763,8 +1763,12 @@ function renderFeedTab(){
       const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
       const last=msgs[msgs.length-1];
       const c=PALETTE[i%PALETTE.length];
+      // ★ 프로필 사진 표시
+      const avHtml=u.avatar
+        ?`<img src="${u.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #f0f0ea">`
+        :`<div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:${c.text};flex-shrink:0;border:2px solid ${c.border}">${u.name[0]}</div>`;
       html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${u.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-        <div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:${c.text};flex-shrink:0;border:2px solid ${c.border}">${u.name[0]}</div>
+        ${avHtml}
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
             <span style="font-size:14px;font-weight:700">${u.name}</span>
@@ -1789,7 +1793,9 @@ function renderFeedTab(){
     const last=msgs[msgs.length-1];
     let html='<div class="list-section-title">관리자와의 대화</div>';
     html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${admin.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-      <div style="width:42px;height:42px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;flex-shrink:0">${admin.name[0]}</div>
+      ${admin.avatar
+        ?`<img src="${admin.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #dbeafe">`
+        :`<div style="width:42px;height:42px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;flex-shrink:0">${admin.name[0]}</div>`}
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
           <span style="font-size:14px;font-weight:700">${admin.name} <span style="font-size:11px;color:#185FA5;font-weight:400">관리자</span></span>
