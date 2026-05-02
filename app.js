@@ -15,6 +15,17 @@ const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_
 // ══════════════════════════════════════════════════
 let cu = null, curY = new Date().getFullYear(), curM = new Date().getMonth();
 let calView = 'all', filterType = '', pollTimer = null, rtChannel = null;
+let calTeamView = false; // 내 팀 보기
+
+function toggleMyTeamView(){
+  calTeamView = !calTeamView;
+  if(calTeamView) calView='all';
+  const btn=$('btn-my-team');
+  const minBtn=$('btn-my-ministry');
+  if(btn){ btn.classList.toggle('active', calTeamView); btn.textContent=calTeamView?'👥 내 팀 보기 ✓':'👥 내 팀 보기'; }
+  if(calTeamView&&minBtn) minBtn.classList.remove('active');
+  renderCalendar();
+}
 let allSchedules = {};
 let currentUploadType = 'regular'; // 'regular' | 'special'
 let scheduleTypes = {}; // {year: {month: 'regular'|'special'}}
@@ -24,6 +35,8 @@ let allMembers = [], notices = [], feedPosts = [];
 let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
 let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth() + 1;
 let srchYear = 0, srchMonth = 0, srchName = '';
+let myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]'); // 내 팀 이름 배열
+let srchDept = 'team'; // 검색탭 선택 파트
 
 // 채팅 상태
 let chatMessages = {};   // { userId: [messages] }
@@ -331,7 +344,11 @@ function enterApp() {
   // 모든 이용자에게 내 사역만/전체 보기 토글 표시
   const toggleWrap=$('view-toggle-wrap');
   if(toggleWrap){
-    toggleWrap.innerHTML=`<button id="btn-my-ministry" onclick="toggleMyMinistry()" class="my-ministry-btn">🙋 내 사역 보기</button>`;
+    toggleWrap.innerHTML=`
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button id="btn-my-ministry" onclick="toggleMyMinistry()" class="my-ministry-btn">🙋 내 사역 보기</button>
+        <button id="btn-my-team" onclick="toggleMyTeamView()" class="my-ministry-btn">👥 내 팀 보기</button>
+      </div>`;
   }
   renderCalendar(); renderNotices(); updateAlarmBadge();
   updateFeedBadge();
@@ -1044,6 +1061,8 @@ function renderCalendar(){
     const myC=myType?tc(myType):null;
     const workers=fm[d]||[];
     const myModeActive=calView==='mine';
+    // ★ 내 팀 보기: 팀원들 사역만 표시
+    const teamNames = calTeamView && myTeam.length ? new Set(myTeam) : null;
     const myHasDay=fmMy.has(d);
     const alarm=isMy?getAlarm(curY,curM+1,d):null;
     const alarmOff=isMy&&alarm&&!alarm.alarm;
@@ -1080,7 +1099,7 @@ function renderCalendar(){
       const bgStyle=hasMy?`background:${myC.bg};border-color:${myC.border}`:'';
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
       const cellStyle=[bgStyle,todayBorder].filter(Boolean).join(';');
-      const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'';
+      const dots=workers.length?`<div class="shift-dots">${workers.filter(w=>!teamNames||teamNames.has(w.name)).slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'';
       const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
       const myDot=hasMy?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
@@ -1411,19 +1430,132 @@ function viewDayInCal(y,m0,d){curY=y;curM=m0;switchTab('cal',$('btn-cal'));rende
 // ══════════════════════════════════════════════════
 //  검색 탭
 // ══════════════════════════════════════════════════
+function saveMyTeam(){ localStorage.setItem('ws_my_team', JSON.stringify(myTeam)); }
+
 function renderSearchFilters(){
-  const years=[...new Set(Object.keys(allSchedules).map(Number))].sort((a,b)=>b-a);
-  const allNames=new Set();Object.values(allSchedules).forEach(ym=>Object.values(ym).forEach(d=>Object.keys(d).forEach(n=>allNames.add(n))));
-  const names=[...allNames].sort();
-  $('search-filters').innerHTML=`
-    <div class="filter-row"><div class="filter-label">연도</div><div class="filter-chips"><button class="filter-chip${srchYear===0?' active':''}" onclick="setSrch('y',0)">전체</button>${years.map(y=>`<button class="filter-chip${srchYear===y?' active':''}" onclick="setSrch('y',${y})">${y}년</button>`).join('')}</div></div>
-    <div class="filter-row"><div class="filter-label">월</div><div class="filter-chips"><button class="filter-chip${srchMonth===0?' active':''}" onclick="setSrch('m',0)">전체</button>${[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>`<button class="filter-chip${srchMonth===m?' active':''}" onclick="setSrch('m',${m})">${m}월</button>`).join('')}</div></div>
-    <div class="filter-row"><div class="filter-label">이름</div>
-      <div class="search-bar-wrap"><input id="search-input" class="search-input" placeholder="이름 입력 또는 선택" value="${esc(srchName)}" oninput="srchName=this.value;renderSearchResult()">${srchName?`<button class="search-clear-btn" onclick="setSrch('n','')">✕</button>`:''}</div>
-      <div class="filter-chips" style="margin-top:6px">${names.map(n=>`<button class="filter-chip${srchName===n?' active':''}" onclick="setSrch('n','${esc(n)}')">${n}</button>`).join('')}</div>
-    </div>`;
+  const DEPTS = ['team','담임목사','교구','청년국','교육국','행정/선교'];
+  const DEPT_LABELS = {team:'⭐ 내 팀', '담임목사':'담임목사', '교구':'교구', '청년국':'청년국', '교육국':'교육국', '행정/선교':'행정/선교'};
+
+  // 파트 탭
+  let tabHtml = `<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none">`;
+  DEPTS.forEach(d=>{
+    const isActive = srchDept===d;
+    const isTeam = d==='team';
+    tabHtml += `<button onclick="setSrchDept('${d}')" style="flex-shrink:0;padding:5px 12px;border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid ${isActive?(isTeam?'#3B6D11':'#185FA5'):'var(--color-border-secondary)'};background:${isActive?(isTeam?'#EAF3DE':'#185FA5'):'var(--color-background-primary)'};color:${isActive?(isTeam?'#3B6D11':'#fff'):'var(--color-text-secondary)'}">
+      ${DEPT_LABELS[d]}
+    </button>`;
+  });
+  tabHtml += `</div>`;
+
+  // 내 팀 박스
+  let teamBoxHtml = '';
+  if(srchDept==='team'){
+    const teamNames = myTeam.filter(n=>n);
+    teamBoxHtml = `
+      <div style="background:var(--color-background-primary);border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #C0DD97">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:500;color:#3B6D11">내 팀 ${teamNames.length}명</span>
+          <button onclick="openTeamEditModal()" style="font-size:10px;color:#185FA5;background:#E6F1FB;border:none;padding:3px 8px;border-radius:6px;cursor:pointer">✏️ 편집</button>
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${teamNames.length
+            ? teamNames.map(n=>{
+                const u=allMembers.find(m=>m.name===n);
+                const c=PALETTE[allMembers.indexOf(u)%PALETTE.length]||{bg:'#f0f0ea',text:'#888'};
+                return u?.avatar
+                  ?`<img src="${u.avatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1.5px solid #C0DD97" title="${n}">`
+                  :`<div style="width:28px;height:28px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:${c.text}" title="${n}">${n[0]}</div>`;
+              }).join('')
+            : `<span style="font-size:11px;color:var(--color-text-secondary)">팀원을 추가해주세요</span>`
+          }
+          <div onclick="openTeamEditModal()" style="width:28px;height:28px;border-radius:50%;border:1.5px dashed var(--color-border-secondary);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--color-text-secondary);cursor:pointer">+</div>
+        </div>
+      </div>`;
+  }
+
+  $('search-filters').innerHTML = tabHtml + teamBoxHtml;
 }
-function setSrch(key,v2){if(key==='y')srchYear=v2;else if(key==='m')srchMonth=v2;else{srchName=v2;const inp=$('search-input');if(inp)inp.value=v2;}renderSearchFilters();renderSearchResult();}
+
+function setSrchDept(dept){
+  srchDept = dept;
+  srchName = '';
+  renderSearchFilters();
+  renderSearchResult();
+}
+
+function setSrch(key,v2){
+  if(key==='y') srchYear=v2;
+  else if(key==='m') srchMonth=v2;
+  else { srchName=v2; const inp=$('search-input'); if(inp) inp.value=v2; }
+  renderSearchFilters();
+  renderSearchResult();
+}
+
+// ★ 내 팀 편집 모달
+function openTeamEditModal(){
+  document.getElementById('team-edit-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'team-edit-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+
+  const allNames = [...new Set(Object.values(allSchedules).flatMap(ym=>Object.values(ym).flatMap(d=>Object.keys(d))))].sort();
+  // app_users 기준으로도 추가
+  allMembers.forEach(u=>{ if(!allNames.includes(u.name)) allNames.push(u.name); });
+  allNames.sort();
+
+  const currentTeamHtml = myTeam.length
+    ? myTeam.map(n=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-background-secondary);border-radius:8px;margin-bottom:4px">
+          <div style="width:28px;height:28px;border-radius:50%;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#0C447C">${n[0]}</div>
+          <span style="flex:1;font-size:13px;font-weight:500">${n}</span>
+          <button onclick="removeFromTeam('${n}')" style="font-size:10px;color:#E24B4A;border:1px solid #F7C1C1;background:none;padding:2px 7px;border-radius:6px;cursor:pointer">삭제</button>
+        </div>`).join('')
+    : `<p style="font-size:12px;color:var(--color-text-secondary);text-align:center;padding:10px 0">아직 팀원이 없습니다</p>`;
+
+  const addListHtml = allNames
+    .filter(n=>!myTeam.includes(n))
+    .map(n=>`
+      <div id="add-row-${encodeURIComponent(n)}" style="display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:8px">
+        <div style="width:26px;height:26px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:#888">${n[0]}</div>
+        <span style="flex:1;font-size:12px">${n}</span>
+        <button onclick="addToTeam('${n}')" style="font-size:10px;color:#185FA5;border:1px solid #185FA5;background:none;padding:2px 7px;border-radius:6px;cursor:pointer">+ 추가</button>
+      </div>`).join('');
+
+  modal.innerHTML=`
+    <div style="background:var(--color-background-primary);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:85vh;overflow:hidden;display:flex;flex-direction:column">
+      <div style="padding:14px 16px 10px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:15px;font-weight:500">내 팀 편집</span>
+        <button onclick="document.getElementById('team-edit-modal').remove()" style="border:none;background:none;font-size:18px;color:var(--color-text-secondary);cursor:pointer">✕</button>
+      </div>
+      <div style="overflow-y:auto;padding:14px 16px;flex:1">
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:500">현재 팀원</div>
+        <div id="current-team-list">${currentTeamHtml}</div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin:14px 0 8px;font-weight:500">전체 사역자에서 추가</div>
+        <div>${addListHtml}</div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function addToTeam(name){
+  if(!myTeam.includes(name)){ myTeam.push(name); saveMyTeam(); }
+  document.getElementById('team-edit-modal')?.remove();
+  openTeamEditModal();
+  renderSearchFilters();
+  renderSearchResult();
+  renderCalendar(); // 캘린더도 즉시 반영
+}
+
+function removeFromTeam(name){
+  myTeam = myTeam.filter(n=>n!==name);
+  saveMyTeam();
+  document.getElementById('team-edit-modal')?.remove();
+  openTeamEditModal();
+  renderSearchFilters();
+  renderSearchResult();
+  renderCalendar();
+}
 function renderSearchResult(){
   const el=$('search-result'),MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],DN=['일','월','화','수','목','금','토'],now=new Date();
   const monthList=[];
@@ -1443,13 +1575,24 @@ function renderSearchResult(){
   if(!monthList.length){el.innerHTML='<p class="empty-state">해당 기간에 사역표가 없습니다.</p>';return;}
 
   const nf=srchName.trim();
+
+  // ★ 파트/팀 기준으로 표시할 이름 목록 결정
+  let targetNames = null; // null = 전체
+  if(srchDept === 'team'){
+    targetNames = new Set(myTeam);
+  } else if(srchDept !== 'all' && srchDept !== ''){
+    // 파트별 필터 — app_users의 department 기준
+    const deptMembers = allMembers.filter(u=>u.department===srchDept).map(u=>u.name);
+    targetNames = new Set(deptMembers);
+  }
+  if(nf) targetNames = new Set([nf]); // 이름 검색이 우선
   // ── 카테고리별 누적 집계 ──
   const cumByCat={};
   MY_CAT_ORDER.forEach(c=>cumByCat[c]={total:0,types:{}});
   let cumTotal=0;
   monthList.forEach(({y,m,d})=>{
-    const targets=nf?(d[nf]?{[nf]:d[nf]}:{}):d;
-    Object.entries(targets).forEach(([,wd])=>{
+    const filteredD = targetNames ? Object.fromEntries(Object.entries(d).filter(([n])=>targetNames.has(n))) : d;
+    Object.entries(filteredD).forEach(([,wd])=>{
       Object.entries(wd||{}).forEach(([ds,type])=>{
         if(!type) return;
         const cat=getCategory(type,y,m,parseInt(ds));
@@ -1482,8 +1625,8 @@ function renderSearchResult(){
 
   // ── 월별 접기/펼치기 + 가까운 날짜부터 ──
   monthList.forEach(({y,m,d})=>{
-    const targets=nf?(d[nf]?{[nf]:d[nf]}:{}):d;
-    const entries=Object.entries(targets).flatMap(([name,wd])=>
+    const filteredD2 = targetNames ? Object.fromEntries(Object.entries(d).filter(([n])=>targetNames.has(n))) : d;
+    const entries=Object.entries(filteredD2).flatMap(([name,wd])=>
       Object.entries(wd||{}).map(([day,type])=>({name,day:parseInt(day),type}))
     ).sort((a,b)=>a.day-b.day); // 날짜 오름차순
     if(!entries.length)return;
@@ -1500,7 +1643,7 @@ function renderSearchResult(){
         <div class="list-card-header">
           <div>
             <span class="list-date">${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>
-            ${!nf?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}
+            ${(targetNames&&targetNames.size>1)||(!targetNames&&!nf)?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}
           </div>
           <div style="display:flex;gap:6px;align-items:center">
             ${alarm?.alarm?'<span style="font-size:14px">🔔</span>':''}
