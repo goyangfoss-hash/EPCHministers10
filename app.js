@@ -206,7 +206,24 @@ async function refreshSchedules() {
 
     // 스케줄 갱신
     allSchedules={};
-    (schedRes.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};if(!scheduleTypes[r.year])scheduleTypes[r.year]={};scheduleTypes[r.year][r.month]=r.type||'regular';});
+    (schedRes.data||[]).forEach(r=>{
+    if(!allSchedules[r.year]) allSchedules[r.year]={};
+    if(!scheduleTypes[r.year]) scheduleTypes[r.year]={};
+    // ★ 같은 년월에 regular+special이 있으면 병합해서 표시
+    const existing = allSchedules[r.year][r.month] || {};
+    const merged = {...existing};
+    Object.entries(r.data||{}).forEach(([name,days])=>{
+      if(!merged[name]) merged[name]={};
+      Object.entries(days||{}).forEach(([day,type])=>{
+        if(merged[name][day]&&!merged[name][day].includes(type)) merged[name][day]+='/'+type;
+        else merged[name][day]=type;
+      });
+    });
+    allSchedules[r.year][r.month]=merged;
+    // type별 원본 데이터 보관 (관리자용)
+    if(!scheduleTypes[r.year][r.month]) scheduleTypes[r.year][r.month]={};
+    scheduleTypes[r.year][r.month][r.type||'regular']=r.data||{};
+  });
     assignColors(collectAllTypes());
 
     // 공지 갱신
@@ -2768,7 +2785,7 @@ async function doApplySchedule(year, month, isMerge){
   if(!OFFLINE){
     const{error}=await sb.from('schedules').upsert(
       {year,month,data:finalData,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},
-      {onConflict:'year,month'}
+      {onConflict:'year,month,type'}
     );
     if(error){showExcelErr('저장 오류: '+error.message);return;}
     await refreshSchedules();
@@ -2808,7 +2825,7 @@ async function doUndo(){
   if(uploadedFiles[year]?.[month]) uploadedFiles[year][month]=files;
   assignColors(collectAllTypes());filterType='';
   if(!OFFLINE){
-    await sb.from('schedules').upsert({year,month,data,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month'});
+    await sb.from('schedules').upsert({year,month,data,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
     await refreshSchedules();
   }
   $('undo-toast').style.display='none';
@@ -2819,17 +2836,17 @@ async function doUndo(){
 }
 function buildSchedPreview(){
   const el=$('sched-form'),allMonths=[];
-  const filterType = currentUploadType; // 현재 선택된 탭 (regular/special)
-  Object.entries(allSchedules).forEach(([y,ym])=>Object.keys(ym).forEach(m=>{
-    const type = scheduleTypes[y]?.[m] || 'regular';
-    if(type === filterType) allMonths.push({y:parseInt(y),m:parseInt(m)});
+  const filterType = currentUploadType;
+  // ★ 해당 타입의 원본 데이터가 있는 월만 표시
+  Object.entries(scheduleTypes).forEach(([y,ym])=>Object.entries(ym).forEach(([m,types])=>{
+    if(types[filterType]) allMonths.push({y:parseInt(y),m:parseInt(m)});
   }));
   allMonths.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
   if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 사역표가 없습니다.</p>';return;}
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   let html='';
   allMonths.forEach(({y,m})=>{
-    const d=getMonthData(y,m),names=Object.keys(d);
+    const d=scheduleTypes[y]?.[m]?.[filterType]||{},names=Object.keys(d);
     const key=`sched-${y}-${m}`;
     const isOpen=collapseState[key]===true;
     const totalDays=names.reduce((s,n)=>s+Object.keys(d[n]||{}).length,0);
@@ -2895,7 +2912,11 @@ async function saveSchedCell(name,y,m,day){
   if(!data[name]) data[name]={};
   if(val){ data[name][String(day)]=val; }
   else { delete data[name][String(day)]; }
-  if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month'});
+  // 해당 type 원본 업데이트
+  if(!scheduleTypes[y]) scheduleTypes[y]={};
+  if(!scheduleTypes[y][m]) scheduleTypes[y][m]={};
+  scheduleTypes[y][m][currentUploadType]=data;
+  if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
   document.getElementById('sched-edit-modal')?.remove();
   assignColors(collectAllTypes());
   renderCalendar();
@@ -2917,7 +2938,12 @@ async function deleteSchedMonth(y,m){
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   if(!confirm(`${y}년 ${MN[m]} 사역표를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
   if(allSchedules[y]) delete allSchedules[y][m];
-  if(!OFFLINE) await sb.from('schedules').delete().eq('year',y).eq('month',m);
+  if(!OFFLINE) await sb.from('schedules').delete().eq('year',y).eq('month',m).eq('type',currentUploadType);
+  // 메모리에서도 해당 type 제거
+  if(scheduleTypes[y]?.[m]) delete scheduleTypes[y][m][currentUploadType];
+  // allSchedules 재병합
+  const remaining=Object.values(scheduleTypes[y]?.[m]||{});
+  if(remaining.length){const merged={};remaining.forEach(d=>Object.entries(d).forEach(([n,days])=>{if(!merged[n])merged[n]={};Object.assign(merged[n],days);}));allSchedules[y][m]=merged;}else{delete allSchedules[y][m];}
   renderCalendar();
   buildSchedPreview();
   showToastMsg(`${y}년 ${MN[m]} 사역표가 삭제되었습니다.`);
