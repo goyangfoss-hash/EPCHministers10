@@ -351,10 +351,12 @@
     .upload-zone:hover,.upload-zone.drag{border-color:#185FA5;background:#f0f5fd}
     .upload-zone p{font-size:13px;color:#888;margin-bottom:4px;font-weight:500}
     .upload-zone span{font-size:11px;color:#bbb}
-    .preview-wrap{overflow-x:auto;max-height:200px;border:1px solid #ebebeb;border-radius:10px;margin-top:9px}
-    .preview-table{border-collapse:collapse;font-size:11px;min-width:100%}
-    .preview-table th{background:#f2f2f0;padding:6px 5px;text-align:center;border:1px solid #e0e0d8;font-weight:700;color:#666;white-space:nowrap}
-    .preview-table td{padding:5px;text-align:center;border:1px solid #ebebeb;color:#444;white-space:nowrap;max-width:55px;overflow:hidden;text-overflow:ellipsis}
+    .preview-wrap{overflow:auto;max-height:400px;height:400px;border:1px solid #ebebeb;border-radius:10px;margin-top:9px;position:relative;display:block}
+    .preview-table{border-collapse:collapse;font-size:11px;min-width:100%;table-layout:auto}
+    .preview-table thead tr th{background:#e8e8e4;padding:7px 6px;text-align:center;border:1px solid #e0e0d8;font-weight:700;color:#555;white-space:nowrap;position:sticky;top:0;z-index:2}
+    .preview-table thead tr th:first-child{position:sticky;top:0;left:0;z-index:3;background:#dcdcd8}
+    .preview-table td{padding:5px;text-align:center;border:1px solid #ebebeb;color:#444;white-space:nowrap;max-width:60px;overflow:hidden;text-overflow:ellipsis}
+    .preview-table tbody tr td:first-child{position:sticky;left:0;z-index:1;background:#f5f5f0;font-weight:600;color:#185FA5;min-width:70px}
     /* 당겨서 새로고침 */
     .ptr-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
     @keyframes spin{to{transform:rotate(360deg)}}
