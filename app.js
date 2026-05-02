@@ -17,6 +17,7 @@ let cu = null, curY = new Date().getFullYear(), curM = new Date().getMonth();
 let calView = 'all', filterType = '', pollTimer = null, rtChannel = null;
 let allSchedules = {};
 let currentUploadType = 'regular'; // 'regular' | 'special'
+let scheduleTypes = {}; // {year: {month: 'regular'|'special'}}
 const getMonthData = (y, m) => allSchedules[y]?.[m] || {};
 const curData = () => getMonthData(curY, curM + 1);
 let allMembers = [], notices = [], feedPosts = [];
@@ -197,7 +198,7 @@ async function refreshSchedules() {
   if (OFFLINE||!sb) return;
   try {
     const [schedRes, noticeRes, memberRes] = await Promise.all([
-      sb.from('schedules').select('year,month,data').order('year').order('month'),
+      sb.from('schedules').select('year,month,data,type').order('year').order('month'),
       sb.from('notices').select('*').order('created_at',{ascending:false}),
       sb.from('app_users').select('*'), // ★ 전체 (pending 포함)
     ]);
@@ -205,7 +206,7 @@ async function refreshSchedules() {
 
     // 스케줄 갱신
     allSchedules={};
-    (schedRes.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};});
+    (schedRes.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};if(!scheduleTypes[r.year])scheduleTypes[r.year]={};scheduleTypes[r.year][r.month]=r.type||'regular';});
     assignColors(collectAllTypes());
 
     // 공지 갱신
@@ -789,7 +790,7 @@ function saveShiftMemo(y,m,d){
 async function loadAll(){
   const[uR,sR,nR,fR,cR,rR]=await Promise.all([
     sb.from('app_users').select('*'),
-    sb.from('schedules').select('year,month,data').order('year').order('month'),
+    sb.from('schedules').select('year,month,data,type').order('year').order('month'),
     sb.from('notices').select('*').order('created_at',{ascending:false}),
     sb.from('feed_posts').select('*,app_users(name)').order('created_at',{ascending:false}),
     sb.from('shift_comments').select('*,app_users(name)').gte('year',new Date().getFullYear()-1),
@@ -2123,6 +2124,8 @@ function setUploadType(type){
     regBtn.style.background='#fff'; regBtn.style.color='#888'; regBtn.style.borderColor='#ddd';
     desc.innerHTML='<b>⭐ 특별 사역표</b> — 특별행사/축복성회 (상시 사역표와 병합, 덮어쓰기 안 함)<br>같은 날짜에 상시+특별 사역이 함께 표시됩니다.';
   }
+  // ★ 탭 전환 시 목록 갱신
+  buildSchedPreview();
 }
 function dragLeave(){$('upload-zone').classList.remove('drag');}
 function dropFile(e){e.preventDefault();$('upload-zone').classList.remove('drag');handleAnyFile(e.dataTransfer.files[0]);}
@@ -2764,7 +2767,7 @@ async function doApplySchedule(year, month, isMerge){
 
   if(!OFFLINE){
     const{error}=await sb.from('schedules').upsert(
-      {year,month,data:finalData,updated_by:cu.id,updated_at:new Date().toISOString()},
+      {year,month,data:finalData,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},
       {onConflict:'year,month'}
     );
     if(error){showExcelErr('저장 오류: '+error.message);return;}
@@ -2816,7 +2819,11 @@ async function doUndo(){
 }
 function buildSchedPreview(){
   const el=$('sched-form'),allMonths=[];
-  Object.entries(allSchedules).forEach(([y,ym])=>Object.keys(ym).forEach(m=>allMonths.push({y:parseInt(y),m:parseInt(m)})));
+  const filterType = currentUploadType; // 현재 선택된 탭 (regular/special)
+  Object.entries(allSchedules).forEach(([y,ym])=>Object.keys(ym).forEach(m=>{
+    const type = scheduleTypes[y]?.[m] || 'regular';
+    if(type === filterType) allMonths.push({y:parseInt(y),m:parseInt(m)});
+  }));
   allMonths.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
   if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 사역표가 없습니다.</p>';return;}
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
