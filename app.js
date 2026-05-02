@@ -2799,6 +2799,24 @@ async function doApplySchedule(year, month, isMerge){
   }
 
   prevFiles.add(fileName);
+
+  // ★ 변경된 사역자 감지 (알림 발송용)
+  const prevData = undoData?.data || {};
+  const changedWorkers = [];
+  const MN2=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const DN2=['일','월','화','수','목','금','토'];
+
+  Object.entries(finalData).forEach(([name, days])=>{
+    Object.entries(days||{}).forEach(([day, type])=>{
+      const prevType = prevData[name]?.[day];
+      if(prevType !== type){
+        // 새로 추가되거나 변경된 사역
+        const u = allMembers.find(m=>m.name===name);
+        if(u) changedWorkers.push({userId: u.id, name, day: parseInt(day), type, isNew: !prevType});
+      }
+    });
+  });
+
   allSchedules[year][month]=finalData;
   assignColors(collectAllTypes());filterType='';curY=year;curM=month-1;
 
@@ -2808,6 +2826,31 @@ async function doApplySchedule(year, month, isMerge){
       {onConflict:'year,month,type'}
     );
     if(error){showExcelErr('저장 오류: '+error.message);return;}
+
+    // ★ 변경된 사역자들에게 FCM 알림 발송
+    if(changedWorkers.length){
+      // 사역자별로 그룹핑
+      const byUser={};
+      changedWorkers.forEach(({userId,name,day,type,isNew})=>{
+        if(!byUser[userId]) byUser[userId]={userId,name,shifts:[]};
+        byUser[userId].shifts.push({day,type,isNew});
+      });
+
+      for(const {userId,name,shifts} of Object.values(byUser)){
+        const shiftDesc = shifts.slice(0,3).map(({day,type,isNew})=>{
+          const dow=DN2[new Date(year,month-1,day).getDay()];
+          return `${month}월 ${day}일(${dow}) ${type}`;
+        }).join(', ');
+        const title = shifts[0].isNew ? '📅 사역 등록 알림' : '📝 사역 변경 알림';
+        const body = shifts[0].isNew
+          ? `${shiftDesc} 사역이 등록되었습니다.`
+          : `${shiftDesc} 사역이 변경되었습니다.`;
+
+        sendPushToUsers([userId], title, body).catch(e=>console.warn('push err:', e));
+      }
+      console.log(`[알림] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
+    }
+
     await refreshSchedules();
   }
 
