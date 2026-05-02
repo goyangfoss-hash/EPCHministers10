@@ -199,7 +199,7 @@ async function refreshSchedules() {
     const [schedRes, noticeRes, memberRes] = await Promise.all([
       sb.from('schedules').select('year,month,data').order('year').order('month'),
       sb.from('notices').select('*').order('created_at',{ascending:false}),
-      sb.from('app_users').select('*').eq('status','approved'),
+      sb.from('app_users').select('*'), // ★ 전체 (pending 포함)
     ]);
     if (schedRes.error) throw schedRes.error;
 
@@ -211,8 +211,11 @@ async function refreshSchedules() {
     // 공지 갱신
     if(noticeRes.data) notices = noticeRes.data;
 
-    // 회원 프로필 갱신 (프로필 사진 포함)
-    if(memberRes.data) allMembers = memberRes.data;
+    // 회원 갱신 (approved/pending 분리)
+    if(memberRes.data){
+      allMembers = memberRes.data.filter(u=>u.status==='approved');
+      window._pending = memberRes.data.filter(u=>u.status==='pending');
+    }
 
     // 알림 설정 서버 동기화
     await loadAlarmsFromServer();
@@ -221,10 +224,11 @@ async function refreshSchedules() {
     if($('tab-myshift')?.style.display!=='none') renderMyShift();
     if($('tab-search')?.style.display!=='none') renderSearchResult();
     if($('tab-notice')?.style.display!=='none') renderNotices();
-    if(isAdmin()&&$('tab-admin')?.style.display!=='none') buildSchedPreview();
+    if(isAdmin()&&$('tab-admin')?.style.display!=='none') renderAdmin();
     if(cu) autoSetMyShiftAlarms();
     updateAlarmBadge();
     updateNoticeBadge();
+    if(isAdmin()) updatePendingBadge(); // ★ 가입 대기 배지 갱신
   } catch(e){console.warn('refreshSchedules:',e.message);}
 }
 
