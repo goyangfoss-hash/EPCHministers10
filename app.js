@@ -334,13 +334,21 @@ function enterApp() {
     toggleWrap.innerHTML=`<button id="btn-my-ministry" onclick="toggleMyMinistry()" class="my-ministry-btn">🙋 내 사역 보기</button>`;
   }
   renderCalendar(); renderNotices(); updateAlarmBadge();
-  if(isAdmin()) renderAdmin();
   updateFeedBadge();
   startRealtime();
-  if(!OFFLINE){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>refreshSchedules(),5*60*1000);}
+  if(!OFFLINE){
+    if(pollTimer)clearInterval(pollTimer);
+    pollTimer=setInterval(()=>refreshSchedules(),5*60*1000);
+    // ★ 데이터 로드 완료 후 관리자 탭 렌더링
+    refreshSchedules().then(()=>{
+      if(isAdmin()) renderAdmin();
+    });
+  } else {
+    if(isAdmin()) renderAdmin();
+  }
   scheduleLocalAlarms();
-  loadAlarmsFromServer().then(()=>{ // ★ 서버에서 알림 설정 불러오기
-    autoSetMyShiftAlarms(); // ★ 본인 사역 자동 알림 설정
+  loadAlarmsFromServer().then(()=>{
+    autoSetMyShiftAlarms();
   });
   checkNotifPermission();
   if('serviceWorker' in navigator){
