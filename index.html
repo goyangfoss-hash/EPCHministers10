@@ -83,7 +83,8 @@
     .alarm-badge{position:absolute;top:2px;right:2px;background:#e74c3c;color:#fff;font-size:9px;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;font-weight:700}
     .btn-logout{font-size:12px;color:#bbb;cursor:pointer;border:none;background:none;padding:5px 9px;border-radius:7px}
     .btn-logout:hover{background:#f2f2f0;color:#555}
-    .content{padding:16px;padding-bottom:90px}
+    .content{padding:16px;padding-bottom:90px;animation:tabFadeIn .2s ease}
+    @keyframes tabFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
     /* 알림 패널 */
     #alarm-panel{position:fixed;top:56px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#fff;border-bottom:1px solid #ebebeb;z-index:25;box-shadow:0 4px 20px rgba(0,0,0,.1);display:none;max-height:calc(100vh - 130px);overflow:hidden;flex-direction:column}
@@ -104,17 +105,16 @@
       padding-bottom:max(env(safe-area-inset-bottom), 4px);
     }
     .nav-btn{flex:1;
-      /* ★ 최소 터치 타겟 44px (Apple HIG 권장) */
       min-height:44px;
       padding:10px 2px 8px;
-      display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;border:none;background:none;font-size:10px;color:#bbb;transition:color .15s;position:relative;font-weight:500;
-      /* ★ 터치 영역 확장 */
+      display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;border:none;background:none;font-size:10px;color:#bbb;transition:all .2s;position:relative;font-weight:500;
       -webkit-tap-highlight-color:transparent;
       touch-action:manipulation;
     }
     .nav-btn.active{color:#185FA5}
-    .nav-btn svg{width:22px;height:22px;opacity:.45;transition:opacity .15s}
-    .nav-btn.active svg{opacity:1}
+    .nav-btn.active::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:28px;height:2.5px;background:#185FA5;border-radius:0 0 3px 3px}
+    .nav-btn svg{width:22px;height:22px;opacity:.4;transition:all .2s}
+    .nav-btn.active svg{opacity:1;transform:translateY(-1px)}
     /* ★ 작은 화면 (iPhone SE 등) */
     @media (max-height:680px){
       .nav-btn{padding:8px 2px 6px;font-size:9px;}
@@ -167,9 +167,10 @@
 
     /* 리스트 */
     .list-section-title{font-size:11px;font-weight:700;color:#aaa;margin:16px 0 10px;text-transform:uppercase;letter-spacing:.05em}
-    .list-card{background:#fff;border-radius:14px;padding:13px 15px;margin-bottom:8px;cursor:pointer;transition:all .15s;border:1px solid transparent}
-    .list-card:hover{border-color:#ddeeff;transform:translateY(-1px)}
-    .list-card.past{opacity:.5}
+    .list-card{background:#fff;border-radius:16px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;border:1px solid #f0f0ea;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+    .list-card:active{transform:scale(.98);box-shadow:none}
+    .list-card:hover{border-color:#ddeeff;box-shadow:0 3px 12px rgba(24,95,165,.08);transform:translateY(-1px)}
+    .list-card.past{opacity:.45}
     .list-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
     .list-date{font-size:14px;font-weight:700;color:#1a1a18}
     .list-dow{font-size:12px;color:#aaa;font-weight:400;margin-left:3px}
@@ -319,16 +320,17 @@
     .reply-btn{padding:9px 16px;background:#185FA5;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
 
     /* 관리자 */
-    .section-card{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px}
-    .section-card h3{font-size:15px;font-weight:700;margin-bottom:13px;padding-bottom:11px;border-bottom:1px solid #f2f2f0;display:flex;align-items:center;gap:8px}
+    .section-card{background:#fff;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 1px 6px rgba(0,0,0,.05);border:1px solid #f0f0ea}
+    .section-card h3{font-size:15px;font-weight:700;margin-bottom:13px;padding-bottom:11px;border-bottom:1px solid #f5f5f0;display:flex;align-items:center;gap:8px}
     .cnt-badge{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;background:#e74c3c;color:#fff;border-radius:10px;font-size:11px;padding:0 4px;font-weight:700}
     .a-input{width:100%;padding:10px 12px;border:1.5px solid #e8e8e0;border-radius:10px;font-size:13px;outline:none;margin-bottom:10px;background:#fff;color:#1a1a18}
     .a-input:focus{border-color:#185FA5}
     .a-textarea{width:100%;padding:10px 12px;border:1.5px solid #e8e8e0;border-radius:10px;font-size:13px;outline:none;margin-bottom:10px;background:#fff;color:#1a1a18;resize:vertical;min-height:75px;font-family:inherit}
     .a-textarea:focus{border-color:#185FA5}
-    .btn-admin{width:100%;padding:11px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px}
-    .btn-admin:hover{background:#0C447C}
-    .btn-admin.secondary{background:#f2f2f0;color:#555;border:1.5px solid #e0e0d8}
+    .btn-admin{width:100%;padding:13px;background:#185FA5;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;transition:all .2s;box-shadow:0 2px 8px rgba(24,95,165,.25)}
+    .btn-admin:active{transform:scale(.98);box-shadow:none}
+    .btn-admin:hover{background:#0C447C;box-shadow:0 4px 14px rgba(24,95,165,.35)}
+    .btn-admin.secondary{background:#f5f5f0;color:#555;border:1.5px solid #e8e8e0;box-shadow:none}
     .toast{font-size:12px;color:#1a5c2a;background:#f0fff4;border:1px solid #9de;padding:9px 12px;border-radius:9px;margin-top:9px;display:none;font-weight:500}
     .toast.err{color:#c0392b;background:#fff5f5;border-color:#fcc}
     .member-row{display:flex;align-items:center;padding:11px 0;border-bottom:1px solid #f5f5f0;gap:11px;cursor:pointer}

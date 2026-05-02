@@ -845,9 +845,20 @@ function initOfflineSample(){allSchedules={2026:{5:{'김동권':{'6':'[오전]�
 //  탭 전환
 // ══════════════════════════════════════════════════
 function switchTab(tab,btn){
-  closeAllPanels(); // ★ 탭 전환 시 모든 패널 닫기
+  closeAllPanels();
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  ['cal','myshift','search','notice','feed','admin'].forEach(t=>$(`tab-${t}`).style.display=t===tab?'block':'none');
+  ['cal','myshift','search','notice','feed','admin'].forEach(t=>{
+    const el=$(`tab-${t}`);
+    if(t===tab){
+      el.style.display='block';
+      // ★ 애니메이션 리셋
+      el.style.animation='none';
+      el.offsetHeight; // reflow
+      el.style.animation='';
+    } else {
+      el.style.display='none';
+    }
+  });
   $('hdr-title').textContent={cal:'캘린더',myshift:'내 사역',search:'사역 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
