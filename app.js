@@ -1432,48 +1432,54 @@ function viewDayInCal(y,m0,d){curY=y;curM=m0;switchTab('cal',$('btn-cal'));rende
 // ══════════════════════════════════════════════════
 function saveMyTeam(){ localStorage.setItem('ws_my_team', JSON.stringify(myTeam)); }
 
-function renderSearchFilters(){
-  const DEPTS = ['team','담임목사','교구','청년국','교육국','행정/선교'];
-  const DEPT_LABELS = {team:'⭐ 내 팀', '담임목사':'담임목사', '교구':'교구', '청년국':'청년국', '교육국':'교육국', '행정/선교':'행정/선교'};
+const DEPT_META = {
+  'team':       { icon:'⭐', label:'내 팀',     color:'#3B6D11', bg:'#EAF3DE', border:'#C0DD97' },
+  '담임목사':   { icon:'⛪', label:'담임목사',  color:'#185FA5', bg:'#E6F1FB', border:'#BFDBFE' },
+  '교구':       { icon:'🏘️', label:'교구',      color:'#633806', bg:'#FAEEDA', border:'#FCD9A0' },
+  '청년국':     { icon:'🔥', label:'청년국',    color:'#7C3AED', bg:'#EEEDFE', border:'#C4B5FD' },
+  '교육국':     { icon:'📚', label:'교육국',    color:'#0E7490', bg:'#E0F7FA', border:'#99E6F5' },
+  '행정/선교':  { icon:'⚙️', label:'행정/선교', color:'#374151', bg:'#F3F4F6', border:'#D1D5DB' },
+};
+const DEPT_ORDER = ['team','담임목사','교구','청년국','교육국','행정/선교'];
 
-  // 파트 탭
-  let tabHtml = `<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none">`;
-  DEPTS.forEach(d=>{
-    const isActive = srchDept===d;
-    const isTeam = d==='team';
-    tabHtml += `<button onclick="setSrchDept('${d}')" style="flex-shrink:0;padding:5px 12px;border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid ${isActive?(isTeam?'#3B6D11':'#185FA5'):'var(--color-border-secondary)'};background:${isActive?(isTeam?'#EAF3DE':'#185FA5'):'var(--color-background-primary)'};color:${isActive?(isTeam?'#3B6D11':'#fff'):'var(--color-text-secondary)'}">
-      ${DEPT_LABELS[d]}
+function renderSearchFilters(){
+  // 파트별 인원 수 계산
+  const deptCounts = {};
+  DEPT_ORDER.forEach(d => deptCounts[d] = 0);
+  deptCounts['team'] = myTeam.length;
+  allMembers.forEach(u => {
+    if(u.department && deptCounts[u.department] !== undefined) deptCounts[u.department]++;
+  });
+
+  let html = `<div style="margin-bottom:4px">
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:10px;font-weight:500">파트 선택</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`;
+
+  DEPT_ORDER.forEach((d, i) => {
+    const meta = DEPT_META[d];
+    const isActive = srchDept === d;
+    const isTeam = d === 'team';
+    const isWide = d === 'team' || d === '행정/선교';
+    const count = deptCounts[d] || 0;
+
+    html += `<button onclick="setSrchDept('${d}')"
+      style="grid-column:${isWide?'1/-1':'auto'};
+        padding:12px;border-radius:14px;border:1.5px solid ${isActive?meta.color:meta.border};
+        background:${isActive?meta.bg:'var(--color-background-primary)'};
+        cursor:pointer;text-align:left;transition:all .2s;
+        box-shadow:${isActive?`0 2px 8px ${meta.border}`:'none'}">
+      <div style="font-size:18px;margin-bottom:5px">${meta.icon}</div>
+      <div style="font-size:13px;font-weight:700;color:${isActive?meta.color:'var(--color-text-primary)'}">
+        ${meta.label}
+      </div>
+      <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">
+        ${isTeam ? `${count}명 등록됨` : `${count}명`}
+      </div>
     </button>`;
   });
-  tabHtml += `</div>`;
 
-  // 내 팀 박스
-  let teamBoxHtml = '';
-  if(srchDept==='team'){
-    const teamNames = myTeam.filter(n=>n);
-    teamBoxHtml = `
-      <div style="background:var(--color-background-primary);border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #C0DD97">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <span style="font-size:12px;font-weight:500;color:#3B6D11">내 팀 ${teamNames.length}명</span>
-          <button onclick="openTeamEditModal()" style="font-size:10px;color:#185FA5;background:#E6F1FB;border:none;padding:3px 8px;border-radius:6px;cursor:pointer">✏️ 편집</button>
-        </div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap">
-          ${teamNames.length
-            ? teamNames.map(n=>{
-                const u=allMembers.find(m=>m.name===n);
-                const c=PALETTE[allMembers.indexOf(u)%PALETTE.length]||{bg:'#f0f0ea',text:'#888'};
-                return u?.avatar
-                  ?`<img src="${u.avatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1.5px solid #C0DD97" title="${n}">`
-                  :`<div style="width:28px;height:28px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:${c.text}" title="${n}">${n[0]}</div>`;
-              }).join('')
-            : `<span style="font-size:11px;color:var(--color-text-secondary)">팀원을 추가해주세요</span>`
-          }
-          <div onclick="openTeamEditModal()" style="width:28px;height:28px;border-radius:50%;border:1.5px dashed var(--color-border-secondary);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--color-text-secondary);cursor:pointer">+</div>
-        </div>
-      </div>`;
-  }
-
-  $('search-filters').innerHTML = tabHtml + teamBoxHtml;
+  html += `</div></div>`;
+  $('search-filters').innerHTML = html;
 }
 
 function setSrchDept(dept){
@@ -1486,8 +1492,7 @@ function setSrchDept(dept){
 function setSrch(key,v2){
   if(key==='y') srchYear=v2;
   else if(key==='m') srchMonth=v2;
-  else { srchName=v2; const inp=$('search-input'); if(inp) inp.value=v2; }
-  renderSearchFilters();
+  else { srchName=v2; }
   renderSearchResult();
 }
 
@@ -1557,110 +1562,163 @@ function removeFromTeam(name){
   renderCalendar();
 }
 function renderSearchResult(){
-  const el=$('search-result'),MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'],DN=['일','월','화','수','목','금','토'],now=new Date();
-  const monthList=[];
-  Object.entries(allSchedules).forEach(([y,ym])=>{
-    if(srchYear&&parseInt(y)!==srchYear)return;
-    Object.entries(ym).forEach(([m,d])=>{if(srchMonth&&parseInt(m)!==srchMonth)return;monthList.push({y:parseInt(y),m:parseInt(m),d});});
-  });
-  // 가까운 날짜부터 — 현재월 포함 미래 먼저, 그 다음 과거 역순
-  const nowY=now.getFullYear(), nowM=now.getMonth()+1;
-  monthList.sort((a,b)=>{
-    const aFuture=a.y>nowY||(a.y===nowY&&a.m>=nowM);
-    const bFuture=b.y>nowY||(b.y===nowY&&b.m>=nowM);
-    if(aFuture&&bFuture) return a.y!==b.y?a.y-b.y:a.m-b.m; // 미래: 오름차순
-    if(!aFuture&&!bFuture) return a.y!==b.y?b.y-a.y:b.m-a.m; // 과거: 내림차순
-    return aFuture?-1:1; // 미래 먼저
-  });
-  if(!monthList.length){el.innerHTML='<p class="empty-state">해당 기간에 사역표가 없습니다.</p>';return;}
+  const el=$('search-result');
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const DN=['일','월','화','수','목','금','토'];
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
 
-  const nf=srchName.trim();
-
-  // ★ 파트/팀 기준으로 표시할 이름 목록 결정
-  let targetNames = null; // null = 전체
-  if(srchDept === 'team'){
-    targetNames = new Set(myTeam);
-  } else if(srchDept !== 'all' && srchDept !== ''){
-    // 파트별 필터 — app_users의 department 기준
-    const deptMembers = allMembers.filter(u=>u.department===srchDept).map(u=>u.name);
-    targetNames = new Set(deptMembers);
+  // 표시할 이름 목록 결정
+  let targetNames=[];
+  if(srchDept==='team'){
+    targetNames=myTeam.filter(n=>n);
+  } else {
+    // 지정된 순서대로
+    const DEPT_NAMES = {
+      '담임목사': ['박지현'],
+      '교구': ['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수'],
+      '청년국': ['허남홍','서동빈','손우성'],
+      '교육국': ['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경'],
+      '행정/선교': ['김동권','최성은'],
+    };
+    targetNames = DEPT_NAMES[srchDept] || allMembers.map(u=>u.name).sort();
   }
-  if(nf) targetNames = new Set([nf]); // 이름 검색이 우선
-  // ── 카테고리별 누적 집계 ──
-  const cumByCat={};
-  MY_CAT_ORDER.forEach(c=>cumByCat[c]={total:0,types:{}});
-  let cumTotal=0;
-  monthList.forEach(({y,m,d})=>{
-    const filteredD = targetNames ? Object.fromEntries(Object.entries(d).filter(([n])=>targetNames.has(n))) : d;
-    Object.entries(filteredD).forEach(([,wd])=>{
-      Object.entries(wd||{}).forEach(([ds,type])=>{
-        if(!type) return;
-        const cat=getCategory(type,y,m,parseInt(ds));
-        const key=MY_CAT_ORDER.includes(cat)?cat:'특새';
-        if(!cumByCat[key]) cumByCat[key]={total:0,types:{}};
-        cumByCat[key].total++;
-        cumByCat[key].types[type]=(cumByCat[key].types[type]||0)+1;
-        cumTotal++;
+
+  if(!targetNames.length){
+    el.innerHTML=`<div style="text-align:center;padding:30px 0;color:var(--color-text-secondary);font-size:13px">
+      ${srchDept==='team'?'팀원을 추가해주세요.<br><button onclick="openTeamEditModal()" style="margin-top:8px;padding:6px 16px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer">+ 팀원 추가</button>':'사역자가 없습니다.'}
+    </div>`;
+    return;
+  }
+
+  // 각 이름별 사역 집계
+  const meta = DEPT_META[srchDept] || DEPT_META['교구'];
+
+  // 내 팀이면 편집 버튼 표시
+  const teamEditBtn = srchDept==='team'
+    ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:12px;font-weight:500;color:${meta.color}">내 팀 ${targetNames.length}명</span>
+        <button onclick="openTeamEditModal()" style="font-size:11px;color:#185FA5;background:#E6F1FB;border:none;padding:4px 10px;border-radius:8px;cursor:pointer">✏️ 팀 편집</button>
+      </div>` : `<div style="font-size:12px;font-weight:500;color:${meta.color};margin-bottom:10px">${meta.icon} ${meta.label} · ${targetNames.length}명</div>`;
+
+  let listHtml = `<div style="background:var(--color-background-primary);border-radius:16px;overflow:hidden;border:1px solid ${meta.border}">`;
+
+  targetNames.forEach((name, idx) => {
+    // 해당 이름의 전체 사역 집계
+    const shifts = [];
+    Object.entries(allSchedules).forEach(([y,ym])=>{
+      Object.entries(ym).forEach(([m,d])=>{
+        const days = d[name]||{};
+        Object.entries(days).forEach(([day,type])=>{
+          if(type) shifts.push({y:parseInt(y),m:parseInt(m),d:parseInt(day),type});
+        });
+      });
+    });
+    const totalCount = shifts.length;
+    const futureCount = shifts.filter(s=>new Date(s.y,s.m-1,s.d)>=today).length;
+
+    // 이용자 상태 확인
+    const u = allMembers.find(m=>m.name===name);
+    const isPending = !u; // 미가입 이용자
+    const c = u ? PALETTE[allMembers.indexOf(u)%PALETTE.length] : {bg:'#f0f0ea',text:'#888'};
+
+    const avHtml = u?.avatar
+      ? `<img src="${u.avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+      : `<div style="width:36px;height:36px;border-radius:50%;background:${isPending?'#f0f0ea':c.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:${isPending?'#bbb':c.text};flex-shrink:0">${name[0]}</div>`;
+
+    listHtml += `<div onclick="${isPending?'':'openPersonStats(\''+name+'\')' }"
+      style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:${idx<targetNames.length-1?'0.5px solid var(--color-border-tertiary)':'none'};cursor:${isPending?'default':'pointer'};${isPending?'opacity:.4':''}">
+      ${avHtml}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${name}</div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">
+          ${isPending
+            ? '<span style="background:#f0f0ea;color:#aaa;padding:1px 6px;border-radius:4px;font-size:10px">준비중</span>'
+            : `전체 ${totalCount}건 · 남은 ${futureCount}건`}
+        </div>
+      </div>
+      ${!isPending?`<span style="font-size:16px;color:var(--color-text-secondary)">›</span>`:''}
+    </div>`;
+  });
+
+  listHtml += `</div>`;
+  el.innerHTML = teamEditBtn + listHtml;
+}
+
+// ★ 개인 통계 화면
+function openPersonStats(name){
+  const el=$('search-result');
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const DN=['일','월','화','수','목','금','토'];
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+
+  const u=allMembers.find(m=>m.name===name);
+  const deptKey=u?.department||'';
+  const meta=DEPT_META[deptKey]||{color:'#185FA5',bg:'#E6F1FB',border:'#BFDBFE',label:deptKey};
+  const c=u?PALETTE[allMembers.indexOf(u)%PALETTE.length]:{bg:'#f0f0ea',text:'#888'};
+
+  // 전체 사역 집계
+  const shifts=[];
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    Object.entries(ym).forEach(([m,d])=>{
+      const days=d[name]||{};
+      Object.entries(days).forEach(([day,type])=>{
+        if(type) shifts.push({y:parseInt(y),m:parseInt(m),d:parseInt(day),type,dt:new Date(parseInt(y),parseInt(m)-1,parseInt(day))});
       });
     });
   });
+  shifts.sort((a,b)=>a.dt-b.dt);
 
-  let html='';
-  const activeCats=MY_CAT_ORDER.filter(c=>cumByCat[c]?.total>0);
-  if(activeCats.length){
-    const yearLabel=srchYear?`${srchYear}년 `:'전체 ';
-    const monthLabel=srchMonth?`${srchMonth}월 `:'';
-    const nameLabel=nf?`· ${nf} `:'';
-    html+=`<div class="stat-section-card" style="margin-bottom:12px"><div class="stat-section-title">${yearLabel}${monthLabel}${nameLabel}사역 현황 (${cumTotal}건)</div>`;
-    activeCats.forEach(cat=>{
-      const meta=MY_CAT_META[cat]||{icon:'📋',label:cat,color:'#888'};
-      const {total,types}=cumByCat[cat];
-      const ckey=`srch-cat-${cat}`;
-      const isOpen=collapseState[ckey]===true;
-      const typeItems=Object.entries(types).sort((a,b)=>b[1]-a[1]).map(([type,cnt])=>{const c=tc(type);return`<div class="type-stat-block" style="background:${c.bg};border:1px solid ${c.border}"><div class="type-stat-name" style="color:${c.text}">${type}</div><div class="type-stat-big" style="color:${c.dot}">${cnt}</div><div class="type-stat-sub" style="color:${c.text}">회</div></div>`;}).join('');
-      html+=`<div style="border-radius:10px;overflow:hidden;border:1.5px solid #f0f0ea;margin-bottom:6px"><div onclick="toggleCollapse('${ckey}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;cursor:pointer;user-select:none;background:#fafaf8"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">${meta.icon}</span><span style="font-size:13px;font-weight:700;color:${meta.color}">${meta.label}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px;font-weight:800;color:${meta.color}">${total}</span><button class="collapse-btn" style="border:none;background:#ececea;color:#aaa;font-size:10px;cursor:pointer;padding:2px 6px;border-radius:5px">${isOpen?'▲':'▼'}</button></div></div><div data-collapse="${ckey}" style="display:${isOpen?'block':'none'};padding:10px 13px 12px"><div class="type-stat-grid">${typeItems}</div></div></div>`;
-    });
-    html+='</div>';
-  }
+  const future=shifts.filter(s=>s.dt>=today);
+  const past=shifts.filter(s=>s.dt<today);
+  const months=new Set(shifts.map(s=>`${s.y}-${s.m}`)).size;
 
-  // ── 월별 접기/펼치기 + 가까운 날짜부터 ──
-  monthList.forEach(({y,m,d})=>{
-    const filteredD2 = targetNames ? Object.fromEntries(Object.entries(d).filter(([n])=>targetNames.has(n))) : d;
-    const entries=Object.entries(filteredD2).flatMap(([name,wd])=>
-      Object.entries(wd||{}).map(([day,type])=>({name,day:parseInt(day),type}))
-    ).sort((a,b)=>a.day-b.day); // 날짜 오름차순
-    if(!entries.length)return;
-    const mkey=`srch-month-${y}-${m}`;
-    // 현재 월이면 기본 펼침, 나머지 접힘
-    const isCurrentMonth=y===now.getFullYear()&&m===now.getMonth()+1;
-    const isOpen=collapseState[mkey]!==undefined?collapseState[mkey]:isCurrentMonth;
-    const rows=entries.map(({name,day,type})=>{
-      const c=tc(type),dow=new Date(y,m-1,day).getDay();
-      const past=new Date(y,m-1,day)<new Date(now.getFullYear(),now.getMonth(),now.getDate());
-      const isMyShift=name===cu.name;
-      const alarm=isMyShift?getAlarm(y,m,day):null;
-      return`<div class="list-card${past?' past':''}" style="margin-bottom:6px" onclick="viewDayInCal(${y},${m-1},${day})">
-        <div class="list-card-header">
-          <div>
-            <span class="list-date">${MN[m]} ${day}일 <span class="list-dow">${DN[dow]}</span></span>
-            ${(targetNames&&targetNames.size>1)||(!targetNames&&!nf)?`<span style="font-size:12px;color:#888;margin-left:6px">${name}</span>`:''}
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            ${alarm?.alarm?'<span style="font-size:14px">🔔</span>':''}
-            <span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-    html+=`<div style="margin-bottom:8px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #f0f0ea">
-      <div onclick="toggleCollapse('${mkey}',this.querySelector('.collapse-btn'),true)" style="display:flex;align-items:center;justify-content:space-between;padding:12px 15px;cursor:pointer;user-select:none">
-        <div style="font-size:13px;font-weight:700;color:#185FA5">${y}년 ${MN[m]} <span style="font-size:11px;color:#aaa;font-weight:400">(${entries.length}건)</span></div>
-        <button class="collapse-btn" style="border:none;background:#f5f5f0;color:#aaa;font-size:11px;cursor:pointer;padding:3px 8px;border-radius:6px">${isOpen?'▲ 접기':'▼ 펼치기'}</button>
-      </div>
-      <div data-collapse="${mkey}" style="display:${isOpen?'block':'none'};padding:0 12px 12px">${rows}</div>
+  const avHtml=u?.avatar
+    ?`<img src="${u.avatar}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid ${meta.border}">`
+    :`<div style="width:44px;height:44px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:${c.text}">${name[0]}</div>`;
+
+  const shiftRows = [...future, ...past].slice(0,20).map(({y,m,d,type,dt})=>{
+    const tc2=tc(type);
+    const isPast=dt<today;
+    const dow=new Date(y,m-1,d).getDay();
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:0.5px solid var(--color-border-tertiary);${isPast?'opacity:.4':''}">
+      <span style="font-size:12px;color:var(--color-text-secondary)">${m}월 ${d}일 (${DN[dow]})</span>
+      <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:${tc2.bg};color:${tc2.text};border:1px solid ${tc2.border}">${type}</span>
     </div>`;
-  });
-  el.innerHTML=html||'<p class="empty-state">조건에 맞는 사역 기록이 없습니다.</p>';
+  }).join('');
+
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="renderSearchResult()" style="border:none;background:var(--color-background-primary);border-radius:8px;padding:6px 10px;font-size:13px;color:#185FA5;cursor:pointer;border:1px solid var(--color-border-secondary)">‹ 목록</button>
+      <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${name} 사역</span>
+    </div>
+    <div style="background:var(--color-background-primary);border-radius:16px;overflow:hidden;border:1px solid ${meta.border}">
+      <div style="padding:14px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;gap:12px">
+        ${avHtml}
+        <div>
+          <div style="font-size:15px;font-weight:600">${name}</div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${meta.label}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr">
+        <div style="padding:12px;text-align:center;border-right:0.5px solid var(--color-border-tertiary)">
+          <div style="font-size:22px;font-weight:600;color:#185FA5">${shifts.length}</div>
+          <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">전체 사역</div>
+        </div>
+        <div style="padding:12px;text-align:center;border-right:0.5px solid var(--color-border-tertiary)">
+          <div style="font-size:22px;font-weight:600;color:#3B6D11">${future.length}</div>
+          <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">남은 사역</div>
+        </div>
+        <div style="padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:600;color:#BA7517">${months}</div>
+          <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">사역 개월</div>
+        </div>
+      </div>
+      <div style="border-top:0.5px solid var(--color-border-tertiary)">
+        ${shiftRows||`<div style="padding:16px;text-align:center;color:var(--color-text-secondary);font-size:12px">등록된 사역이 없습니다</div>`}
+      </div>
+    </div>`;
 }
 
 // ══════════════════════════════════════════════════
