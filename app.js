@@ -1496,52 +1496,78 @@ function setSrch(key,v2){
   renderSearchResult();
 }
 
-// ★ 내 팀 편집 모달
+// ★ 내 팀 편집 모달 (개선)
 function openTeamEditModal(){
   document.getElementById('team-edit-modal')?.remove();
   const modal = document.createElement('div');
   modal.id = 'team-edit-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
 
-  const allNames = [...new Set(Object.values(allSchedules).flatMap(ym=>Object.values(ym).flatMap(d=>Object.keys(d))))].sort();
-  // app_users 기준으로도 추가
-  allMembers.forEach(u=>{ if(!allNames.includes(u.name)) allNames.push(u.name); });
-  allNames.sort();
+  // 전체 사역자 (파트 순서대로)
+  const allOrderedNames = [
+    '박지현',
+    '안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수',
+    '허남홍','서동빈','손우성',
+    '김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경',
+    '김동권','최성은'
+  ];
+  // DB에 있는 추가 이용자
+  allMembers.forEach(u=>{ if(!allOrderedNames.includes(u.name)) allOrderedNames.push(u.name); });
 
   const currentTeamHtml = myTeam.length
-    ? myTeam.map(n=>`
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--color-background-secondary);border-radius:8px;margin-bottom:4px">
-          <div style="width:28px;height:28px;border-radius:50%;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#0C447C">${n[0]}</div>
-          <span style="flex:1;font-size:13px;font-weight:500">${n}</span>
-          <button onclick="removeFromTeam('${n}')" style="font-size:10px;color:#E24B4A;border:1px solid #F7C1C1;background:none;padding:2px 7px;border-radius:6px;cursor:pointer">삭제</button>
-        </div>`).join('')
-    : `<p style="font-size:12px;color:var(--color-text-secondary);text-align:center;padding:10px 0">아직 팀원이 없습니다</p>`;
+    ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+        ${myTeam.map(n=>`
+          <div style="display:flex;align-items:center;gap:5px;background:#EAF3DE;border:1px solid #C0DD97;border-radius:20px;padding:4px 8px 4px 6px">
+            <span style="font-size:12px;font-weight:500;color:#3B6D11">${n}</span>
+            <button onclick="removeFromTeam('${n}')" style="border:none;background:none;color:#E24B4A;cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>
+          </div>`).join('')}
+      </div>`
+    : `<p style="font-size:12px;color:var(--color-text-secondary);padding:8px 0">아직 팀원이 없어요</p>`;
 
-  const addListHtml = allNames
+  const addListHtml = allOrderedNames
     .filter(n=>!myTeam.includes(n))
-    .map(n=>`
-      <div id="add-row-${encodeURIComponent(n)}" style="display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:8px">
-        <div style="width:26px;height:26px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:#888">${n[0]}</div>
-        <span style="flex:1;font-size:12px">${n}</span>
-        <button onclick="addToTeam('${n}')" style="font-size:10px;color:#185FA5;border:1px solid #185FA5;background:none;padding:2px 7px;border-radius:6px;cursor:pointer">+ 추가</button>
-      </div>`).join('');
+    .map(n=>{
+      const u = allMembers.find(m=>m.name===n);
+      const isPending = !u;
+      const titleText = u?.title || '';
+      const deptKey = u?.department || '';
+      const dMeta = DEPT_META[deptKey] || {color:'#888',bg:'#f0f0ea'};
+      return`<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:0.5px solid var(--color-border-tertiary);${isPending?'opacity:.4':''}">
+        <div style="width:32px;height:32px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:${dMeta.color};flex-shrink:0">${n[0]}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500">${n}</div>
+          ${titleText?`<div style="font-size:10px;color:var(--color-text-secondary)">${titleText}</div>`:''}
+        </div>
+        ${!isPending
+          ?`<button onclick="addToTeam('${n}')" style="flex-shrink:0;padding:5px 12px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:500;cursor:pointer">추가</button>`
+          :`<span style="font-size:10px;color:#bbb">준비중</span>`}
+      </div>`;
+    }).join('');
 
   modal.innerHTML=`
-    <div style="background:var(--color-background-primary);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:85vh;overflow:hidden;display:flex;flex-direction:column">
-      <div style="padding:14px 16px 10px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:15px;font-weight:500">내 팀 편집</span>
-        <button onclick="document.getElementById('team-edit-modal').remove()" style="border:none;background:none;font-size:18px;color:var(--color-text-secondary);cursor:pointer">✕</button>
+    <div style="background:var(--color-background-primary);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.2)">
+      <div style="padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:0.5px solid var(--color-border-tertiary)">
+        <div>
+          <div style="font-size:15px;font-weight:600">내 팀 편집</div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">팀원을 추가하면 캘린더에서도 함께 확인돼요</div>
+        </div>
+        <button onclick="document.getElementById('team-edit-modal').remove()" style="border:none;background:var(--color-background-secondary);width:28px;height:28px;border-radius:50%;font-size:16px;color:var(--color-text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
       </div>
-      <div style="overflow-y:auto;padding:14px 16px;flex:1">
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;font-weight:500">현재 팀원</div>
-        <div id="current-team-list">${currentTeamHtml}</div>
-        <div style="font-size:11px;color:var(--color-text-secondary);margin:14px 0 8px;font-weight:500">전체 사역자에서 추가</div>
-        <div>${addListHtml}</div>
+      <div style="overflow-y:auto;flex:1">
+        <div style="padding:12px 16px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary)">
+          <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:8px">현재 팀원 ${myTeam.length}명</div>
+          <div id="current-team-list">${currentTeamHtml}</div>
+        </div>
+        <div>
+          <div style="padding:10px 16px 6px;font-size:11px;font-weight:600;color:var(--color-text-secondary)">추가하기</div>
+          ${addListHtml}
+        </div>
       </div>
     </div>`;
   modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
   document.body.appendChild(modal);
 }
+
 
 function addToTeam(name){
   if(!myTeam.includes(name)){ myTeam.push(name); saveMyTeam(); }
@@ -1561,27 +1587,33 @@ function removeFromTeam(name){
   renderSearchResult();
   renderCalendar();
 }
+// 파트별 고정 순서
+const DEPT_NAMES = {
+  '담임목사': ['박지현'],
+  '교구': ['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수'],
+  '청년국': ['허남홍','서동빈','손우성'],
+  '교육국': ['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경'],
+  '행정/선교': ['김동권','최성은'],
+};
+
+let srchOpenPerson = null; // 현재 열린 사람 이름
+
 function renderSearchResult(){
   const el=$('search-result');
-  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const DN=['일','월','화','수','목','금','토'];
   const now=new Date();
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
 
-  // 표시할 이름 목록 결정
+  // 파트가 선택 안 됐으면 빈 화면
+  if(!srchDept){
+    el.innerHTML='<p class="empty-state">위에서 파트를 선택해주세요.</p>';
+    return;
+  }
+
   let targetNames=[];
   if(srchDept==='team'){
     targetNames=myTeam.filter(n=>n);
   } else {
-    // 지정된 순서대로
-    const DEPT_NAMES = {
-      '담임목사': ['박지현'],
-      '교구': ['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수'],
-      '청년국': ['허남홍','서동빈','손우성'],
-      '교육국': ['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경'],
-      '행정/선교': ['김동권','최성은'],
-    };
-    targetNames = DEPT_NAMES[srchDept] || allMembers.map(u=>u.name).sort();
+    targetNames = DEPT_NAMES[srchDept] || [];
   }
 
   if(!targetNames.length){
@@ -1593,60 +1625,108 @@ function renderSearchResult(){
 
   // 각 이름별 사역 집계
   const meta = DEPT_META[srchDept] || DEPT_META['교구'];
+  const DN=['일','월','화','수','목','금','토'];
 
-  // 내 팀이면 편집 버튼 표시
   const teamEditBtn = srchDept==='team'
     ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="font-size:12px;font-weight:500;color:${meta.color}">내 팀 ${targetNames.length}명</span>
+        <span style="font-size:12px;font-weight:600;color:${meta.color}">⭐ 내 팀 ${targetNames.length}명</span>
         <button onclick="openTeamEditModal()" style="font-size:11px;color:#185FA5;background:#E6F1FB;border:none;padding:4px 10px;border-radius:8px;cursor:pointer">✏️ 팀 편집</button>
-      </div>` : `<div style="font-size:12px;font-weight:500;color:${meta.color};margin-bottom:10px">${meta.icon} ${meta.label} · ${targetNames.length}명</div>`;
+      </div>`
+    : `<div style="font-size:12px;font-weight:600;color:${meta.color};margin-bottom:10px">${meta.icon} ${meta.label} · ${targetNames.length}명</div>`;
 
   let listHtml = `<div style="background:var(--color-background-primary);border-radius:16px;overflow:hidden;border:1px solid ${meta.border}">`;
 
   targetNames.forEach((name, idx) => {
-    // 해당 이름의 전체 사역 집계
+    const u = allMembers.find(m=>m.name===name);
+    const isPending = !u;
+    const c = u ? PALETTE[allMembers.indexOf(u)%PALETTE.length] : {bg:'#f0f0ea',text:'#888'};
+    const isOpen = srchOpenPerson === name;
+
+    // 사역 집계
     const shifts = [];
     Object.entries(allSchedules).forEach(([y,ym])=>{
       Object.entries(ym).forEach(([m,d])=>{
         const days = d[name]||{};
         Object.entries(days).forEach(([day,type])=>{
-          if(type) shifts.push({y:parseInt(y),m:parseInt(m),d:parseInt(day),type});
+          if(type) shifts.push({y:parseInt(y),m:parseInt(m),d:parseInt(day),type,dt:new Date(parseInt(y),parseInt(m)-1,parseInt(day))});
         });
       });
     });
+    shifts.sort((a,b)=>a.dt-b.dt);
     const totalCount = shifts.length;
-    const futureCount = shifts.filter(s=>new Date(s.y,s.m-1,s.d)>=today).length;
-
-    // 이용자 상태 확인
-    const u = allMembers.find(m=>m.name===name);
-    const isPending = !u; // 미가입 이용자
-    const c = u ? PALETTE[allMembers.indexOf(u)%PALETTE.length] : {bg:'#f0f0ea',text:'#888'};
+    const futureCount = shifts.filter(s=>s.dt>=today).length;
+    const months = new Set(shifts.map(s=>`${s.y}-${s.m}`)).size;
 
     const avHtml = u?.avatar
-      ? `<img src="${u.avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+      ? `<img src="${u.avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${meta.border}">`
       : `<div style="width:36px;height:36px;border-radius:50%;background:${isPending?'#f0f0ea':c.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:${isPending?'#bbb':c.text};flex-shrink:0">${name[0]}</div>`;
 
-    listHtml += `<div onclick="${isPending?'':'openPersonStats(\''+name+'\')' }"
-      style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:${idx<targetNames.length-1?'0.5px solid var(--color-border-tertiary)':'none'};cursor:${isPending?'default':'pointer'};${isPending?'opacity:.4':''}">
-      ${avHtml}
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${name}</div>
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">
-          ${isPending
-            ? '<span style="background:#f0f0ea;color:#aaa;padding:1px 6px;border-radius:4px;font-size:10px">준비중</span>'
-            : `전체 ${totalCount}건 · 남은 ${futureCount}건`}
+    const titleText = u?.title
+      ? `<span style="font-size:10px;color:var(--color-text-secondary);background:var(--color-background-secondary);padding:1px 5px;border-radius:4px;margin-left:5px">${u.title}</span>`
+      : '';
+
+    // 통계+사역 리스트 (펼쳐질 때)
+    let statsHtml = '';
+    if(isOpen && !isPending){
+      const future = shifts.filter(s=>s.dt>=today);
+      const shiftRows = shifts.slice(0,20).map(({y,m,d,type,dt})=>{
+        const c2=tc(type); const isPastShift=dt<today; const dow=new Date(y,m-1,d).getDay();
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-top:0.5px solid var(--color-border-tertiary);${isPastShift?'opacity:.4':''}">
+          <span style="font-size:11px;color:var(--color-text-secondary)">${m}월 ${d}일 (${DN[dow]})</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:5px;background:${c2.bg};color:${c2.text};border:1px solid ${c2.border}">${type}</span>
+        </div>`;
+      }).join('');
+
+      statsHtml = `
+        <div style="border-top:0.5px solid ${meta.border}">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:${meta.bg}">
+            <div style="padding:10px;text-align:center;border-right:0.5px solid ${meta.border}">
+              <div style="font-size:18px;font-weight:700;color:${meta.color}">${totalCount}</div>
+              <div style="font-size:9px;color:var(--color-text-secondary)">전체</div>
+            </div>
+            <div style="padding:10px;text-align:center;border-right:0.5px solid ${meta.border}">
+              <div style="font-size:18px;font-weight:700;color:#3B6D11">${futureCount}</div>
+              <div style="font-size:9px;color:var(--color-text-secondary)">예정</div>
+            </div>
+            <div style="padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:700;color:#BA7517">${months}</div>
+              <div style="font-size:9px;color:var(--color-text-secondary)">개월</div>
+            </div>
+          </div>
+          ${shiftRows||`<div style="text-align:center;font-size:12px;color:var(--color-text-secondary);padding:12px">등록된 사역 없음</div>`}
+        </div>`;
+    }
+
+    listHtml += `
+      <div style="border-bottom:${idx<targetNames.length-1?'0.5px solid var(--color-border-tertiary)':'none'}">
+        <div onclick="${isPending?'void(0)':'togglePersonStats(\''+name+'\''+')'}"
+          style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:${isPending?'default':'pointer'};background:${isOpen?meta.bg:'transparent'};transition:background .15s;${isPending?'opacity:.45':''}">
+          ${avHtml}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);display:flex;align-items:center;flex-wrap:wrap;gap:2px">
+              ${name}${titleText}
+            </div>
+            <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">
+              ${isPending
+                ? '<span style="background:#f0f0ea;color:#aaa;padding:1px 6px;border-radius:4px;font-size:10px">준비중</span>'
+                : `전체 ${totalCount}건 · 남은 ${futureCount}건`}
+            </div>
+          </div>
+          ${!isPending?`<span style="font-size:16px;color:${isOpen?meta.color:'var(--color-text-secondary)'};transition:transform .2s;display:inline-block;transform:${isOpen?'rotate(90deg)':'rotate(0deg)'}">${isOpen?'∨':'›'}</span>`:''}
         </div>
-      </div>
-      ${!isPending?`<span style="font-size:16px;color:var(--color-text-secondary)">›</span>`:''}
-    </div>`;
+        ${statsHtml}
+      </div>`;
   });
 
   listHtml += `</div>`;
   el.innerHTML = teamEditBtn + listHtml;
 }
 
-// ★ 개인 통계 화면
-function openPersonStats(name){
+function togglePersonStats(name){
+  srchOpenPerson = srchOpenPerson===name ? null : name;
+  renderSearchResult();
+}
+
   const el=$('search-result');
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const DN=['일','월','화','수','목','금','토'];
@@ -1719,7 +1799,6 @@ function openPersonStats(name){
         ${shiftRows||`<div style="padding:16px;text-align:center;color:var(--color-text-secondary);font-size:12px">등록된 사역이 없습니다</div>`}
       </div>
     </div>`;
-}
 
 // ══════════════════════════════════════════════════
 //  공지
@@ -2193,26 +2272,77 @@ function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empt
 function renderMembers(){
   const el=$('member-list');
   if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}
-  el.innerHTML=allMembers.map((u,i)=>{
-    const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';
-    const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
-    const c=PALETTE[i%PALETTE.length];
-    // ★ 프로필 사진 표시
-    const avHtml=u.avatar
-      ?`<img src="${u.avatar}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid #f0f0ea" alt="${u.name}">`
-      :`<div class="member-av" style="background:${c.bg};color:${c.text}">${u.name[0]}</div>`;
-    return`<div class="member-row" onclick="openMemberModal(${u.id})">${avHtml}<div class="member-info"><div class="m-name">${u.name} <span class="role-tag">${rl}</span></div><div class="m-sub">연락처: ${u.phone} · 전체 ${total}건</div></div><svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;
-  }).join('');
+
+  const DEPT_SECTIONS=[
+    {label:'담임목사',names:['박지현']},
+    {label:'교구',names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
+    {label:'청년국',names:['허남홍','서동빈','손우성']},
+    {label:'교육국',names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
+    {label:'행정/선교',names:['김동권','최성은']},
+  ];
+
+  let html='';
+  DEPT_SECTIONS.forEach(sec=>{
+    const dMeta=DEPT_META[sec.label]||{color:'#888',bg:'#f0f0ea',border:'#e0e0e0'};
+    const secMembers=sec.names.map(n=>allMembers.find(u=>u.name===n)).filter(Boolean);
+    const pendingNames=sec.names.filter(n=>!allMembers.find(u=>u.name===n));
+    if(!secMembers.length&&!pendingNames.length)return;
+
+    html+=`<div style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;color:${dMeta.color};padding:4px;letter-spacing:.8px;text-transform:uppercase">${sec.label}</div>
+      <div style="background:var(--color-background-primary);border-radius:14px;overflow:hidden;border:1px solid ${dMeta.border}">`;
+
+    secMembers.forEach((u,i)=>{
+      const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
+      const avHtml=u.avatar
+        ?`<img src="${u.avatar}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid ${dMeta.border}" alt="${u.name}">`
+        :`<div style="width:38px;height:38px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:${dMeta.color}">${u.name[0]}</div>`;
+      html+=`<div class="member-row" onclick="openMemberModal(${u.id})" style="border-bottom:${i<secMembers.length-1||pendingNames.length?'0.5px solid var(--color-border-tertiary)':'none'}">
+        ${avHtml}
+        <div class="member-info">
+          <div class="m-name">${u.name}
+            ${u.title?`<span style="font-size:10px;color:${dMeta.color};background:${dMeta.bg};padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:400">${u.title}</span>`:''}
+          </div>
+          <div class="m-sub">전체 ${total}건</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>`;
+    });
+    pendingNames.forEach(n=>{
+      html+=`<div style="display:flex;align-items:center;gap:10px;padding:11px 14px;opacity:.35;border-top:0.5px solid var(--color-border-tertiary)">
+        <div style="width:38px;height:38px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:14px;color:#bbb">${n[0]}</div>
+        <div><div style="font-size:13px;color:#aaa">${n}</div><div style="font-size:11px;color:#ccc">준비중</div></div>
+      </div>`;
+    });
+    html+=`</div></div>`;
+  });
+
+  const listedNames=DEPT_SECTIONS.flatMap(s=>s.names);
+  const others=allMembers.filter(u=>!listedNames.includes(u.name));
+  if(others.length){
+    html+=`<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:#888;padding:4px">기타</div>
+      <div style="background:var(--color-background-primary);border-radius:14px;overflow:hidden;border:1px solid var(--color-border-tertiary)">
+        ${others.map((u,i)=>{
+          const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
+          return`<div class="member-row" onclick="openMemberModal(${u.id})" style="border-bottom:${i<others.length-1?'0.5px solid var(--color-border-tertiary)':'none'}">
+            <div style="width:38px;height:38px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:14px;color:#888">${u.name[0]}</div>
+            <div class="member-info"><div class="m-name">${u.name}</div><div class="m-sub">전체 ${total}건</div></div>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>`;
+        }).join('')}
+      </div></div>`;
+  }
+  el.innerHTML=html;
 }
 function openMemberModal(id){
   const u=allMembers.find(x=>x.id===id)||(window._pending||[]).find(x=>x.id===id);if(!u)return;
-  const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'직원';
+  const rl=u.role==='superadmin'?'최고관리자':u.role==='admin'?'관리자':'사역자';
   const sl=u.status==='approved'?'승인됨':u.status==='pending'?'가입 대기':'거절됨';
   const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));
   let act='';
   if(isAdmin()&&u.id!==cu.id){
     if(u.status==='pending'){act=`<button class="detail-btn promote" onclick="approveUser(${u.id});closeModalById('member-modal')">승인</button><button class="detail-btn reject-btn" onclick="rejectUser(${u.id});closeModalById('member-modal')">거절</button>`;}
-    else{if(u.role==='employee')act+=`<button class="detail-btn promote" onclick="changeRole(${u.id},'admin');openMemberModal(${u.id})">관리자 지정</button>`;if(u.role==='admin')act+=`<button class="detail-btn demote" onclick="changeRole(${u.id},'employee');openMemberModal(${u.id})">직원으로 변경</button>`;if(u.role!=='superadmin')act+=`<button class="detail-btn reject-btn" onclick="if(confirm('삭제?')){removeUser(${u.id});closeModalById('member-modal')}">삭제</button>`;}
+    else{if(u.role==='employee')act+=`<button class="detail-btn promote" onclick="changeRole(${u.id},'admin');openMemberModal(${u.id})">관리자 지정</button>`;if(u.role==='admin')act+=`<button class="detail-btn demote" onclick="changeRole(${u.id},'employee');openMemberModal(${u.id})">사역자로 변경</button>`;if(u.role!=='superadmin')act+=`<button class="detail-btn reject-btn" onclick="if(confirm('삭제?')){removeUser(${u.id});closeModalById('member-modal')}">삭제</button>`;}
   }
 
   const chatBtn = u.id!==cu.id
@@ -2251,6 +2381,12 @@ function openMemberModal(id){
       <div class="detail-row"><span>연락처 뒷자리</span><span>${u.phone}</span></div>
       <div class="detail-row"><span>생년월일</span><span>${u.birth}</span></div>
       <div class="detail-row"><span>가입일</span><span>${fmtDate(u.created_at)}</span></div>
+      ${isAdmin()?`<div class="detail-row"><span>직분</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span id="title-display-${u.id}">${u.title||'미설정'}</span>
+          <button onclick="editMemberTitle(${u.id})" style="font-size:10px;color:#185FA5;background:#E6F1FB;border:none;padding:2px 7px;border-radius:5px;cursor:pointer">수정</button>
+        </div>
+      </div>`:''}
     </div>
     ${chatBtn}
     ${memoSection}`;
@@ -2277,6 +2413,18 @@ async function saveMemo(uid){const memo=$(`memo-${uid}`)?.value||'';const u=allM
 async function approveUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'approved'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);const{data}=await sb.from('app_users').select('*');if(data){allMembers=data.filter(u=>u.status==='approved');window._pending=data.filter(u=>u.status==='pending');}renderAdmin();}
 async function rejectUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'rejected'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);renderPending();}
 async function changeRole(id,role){const u=allMembers.find(x=>x.id===id);if(!u)return;u.role=role;if(!OFFLINE)await sb.from('app_users').update({role}).eq('id',id);renderMembers();}
+
+async function editMemberTitle(id){
+  const u=allMembers.find(x=>x.id===id); if(!u) return;
+  const newTitle=prompt(`${u.name} 직분 수정:`, u.title||'');
+  if(newTitle===null) return;
+  u.title=newTitle.trim();
+  if(!OFFLINE) await sb.from('app_users').update({title:u.title}).eq('id',id);
+  const el=document.getElementById(`title-display-${id}`);
+  if(el) el.textContent=u.title||'미설정';
+  renderMembers();
+  showToastMsg('직분이 수정되었습니다.');
+}
 async function removeUser(id){allMembers=allMembers.filter(x=>x.id!==id);if(!OFFLINE)await sb.from('app_users').delete().eq('id',id);renderAdmin();}
 function renderAdminFeed(){
   const el=$('admin-feed-list');
