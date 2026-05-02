@@ -207,6 +207,7 @@ async function refreshSchedules() {
     // 스케줄 갱신
     allSchedules={};
     (schedRes.data||[]).forEach(r=>{
+    const rType = r.type || 'regular';
     if(!allSchedules[r.year]) allSchedules[r.year]={};
     if(!scheduleTypes[r.year]) scheduleTypes[r.year]={};
     // ★ 같은 년월에 regular+special이 있으면 병합해서 표시
@@ -222,7 +223,7 @@ async function refreshSchedules() {
     allSchedules[r.year][r.month]=merged;
     // type별 원본 데이터 보관 (관리자용)
     if(!scheduleTypes[r.year][r.month]) scheduleTypes[r.year][r.month]={};
-    scheduleTypes[r.year][r.month][r.type||'regular']=r.data||{};
+    scheduleTypes[r.year][r.month][rType]=r.data||{};
   });
     assignColors(collectAllTypes());
 
