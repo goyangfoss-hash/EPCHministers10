@@ -1,66 +1,71 @@
-// ══════════════════════════════════════════════════
-//  Service Worker (sw.js) v12
-//  index.html은 항상 네트워크에서 가져옴 (캐시 안 함)
-// ══════════════════════════════════════════════════
-const CACHE_NAME = 'epc-v12';
+// sw.js
+// 캐시 관리 + 자동 업데이트 — 은평교회 사역스케줄러
+// 버전은 index.html이 ?v=타임스탬프 로 자동 전달 — 수동으로 올릴 필요 없음
+const CACHE_VERSION = new URL(location.href).searchParams.get('v') || 'v1';
+const CACHE_NAME = `epch-minister-${CACHE_VERSION}`;
 
-// ── 설치: 캐시 초기화만 ─────────────────────────────
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-});
+// 오프라인에서도 동작할 핵심 파일들
+const PRECACHE_URLS = [
+  '/',
+  '/index.html',
+  '/app.js',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+];
 
-// ── 활성화: 이전 캐시 전부 삭제 ─────────────────────
-self.addEventListener('activate', (event) => {
+// ── 설치: 핵심 파일 캐시 ──
+self.addEventListener('install', event => {
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())  // 즉시 활성화 (대기 없이)
   );
 });
 
-// ── fetch: index.html은 항상 네트워크, 나머지는 Network First ──
-self.addEventListener('fetch', (event) => {
+// ── 활성화: 이전 버전 캐시 삭제 ──
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys
+          .filter(key => key.startsWith('epch-minister-') && key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())  // 모든 탭에 즉시 적용
+  );
+});
+
+// ── fetch: 네트워크 우선, 실패 시 캐시 ──
+self.addEventListener('fetch', event => {
+  // POST 요청, Supabase API, Firebase, CDN은 캐시 안 함
   const url = event.request.url;
-
-  // API 요청은 캐시 안 함
   if (
+    event.request.method !== 'GET' ||
     url.includes('supabase.co') ||
-    url.includes('firebaseio.com') ||
-    url.includes('googleapis.com') ||
-    url.includes('anthropic.com') ||
-    url.includes('generativelanguage') ||
-    event.request.method !== 'GET'
-  ) return;
-
-  // ★ index.html은 항상 네트워크에서 가져옴 (절대 캐시 안 함)
-  if (url.endsWith('/') || url.includes('index.html')) {
-    event.respondWith(fetch(event.request));
+    url.includes('firebase') ||
+    url.includes('gstatic.com') ||
+    url.includes('cdn.jsdelivr') ||
+    url.includes('googleapis')
+  ) {
     return;
   }
 
-  // 나머지: Network First
   event.respondWith(
     fetch(event.request)
-      .then((res) => {
-        if (res && res.status === 200) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      .then(response => {
+        // 유효한 응답이면 캐시 업데이트
+        if (response && response.status === 200 && response.type === 'basic') {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
         }
-        return res;
+        return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => caches.match(event.request))  // 오프라인 시 캐시 제공
   );
 });
 
-// ── 알림 클릭 ───────────────────────────────────────
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if ('focus' in client) return client.focus();
-      }
-      if (clients.openWindow) return clients.openWindow('/');
-    })
-  );
+// ── 새 버전 감지 시 클라이언트에 알림 ──
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
