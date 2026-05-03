@@ -33,13 +33,19 @@ const getMonthData = (y, m) => allSchedules[y]?.[m] || {};
 const curData = () => getMonthData(curY, curM + 1);
 let allMembers = [], notices = [], feedPosts = [];
 
-// department 표기 정규화 — '담임목사님' → '담임목사' 등 동의어 통일
+// ── 표기 정규화: '담임목사님' ↔ '담임목사' 동일 처리 ──
+function normalizeStr(s){ return (s||'').replace(/담임목사님/g,'담임목사'); }
 function normalizeMember(u){
   if(!u) return u;
-  if(u.department === '담임목사님') u = {...u, department:'담임목사'};
-  return u;
+  return {
+    ...u,
+    department: normalizeStr(u.department),
+    title: normalizeStr(u.title),
+  };
 }
 function normalizeMembers(arr){ return (arr||[]).map(normalizeMember); }
+// 사역 타입 문자열도 정규화 (예: '[담임목사님]설교' → '[담임목사]설교')
+function normalizeType(t){ return normalizeStr(t); }
 let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
 let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth() + 1;
 let srchYear = 0, srchMonth = 0, srchName = '';
@@ -153,7 +159,7 @@ const PALETTE = [
 let typeColorMap = {};
 function assignColors(types){ (types||[]).forEach(t=>{if(t&&!typeColorMap[t])typeColorMap[t]=getTypeColor(t);}); }
 function resetTypeColors(){ typeColorMap={}; assignColors(collectAllTypes()); }
-const tc = t => typeColorMap[t] || getTypeColor(t);
+const tc = t => { const nt=normalizeType(t); return typeColorMap[nt] || getTypeColor(nt); };
 function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEach(ym=>Object.values(ym).forEach(nm=>Object.values(nm).forEach(dm=>Object.values(dm).forEach(t=>t&&s.add(t))))); return[...s]; }
 
 // ══════════════════════════════════════════════════
@@ -907,6 +913,7 @@ const CATEGORIES = [
 
 // ★ 요일 + 사역유형으로 카테고리 판별
 function getCategory(type, year, month, day){
+  type = normalizeType(type);
   if(!type) return 'all';
   // ★ 새벽/저녁 통합 유형 처리
   const isCombined = type.includes('새벽/저녁') || type.includes('새벽+저녁');
@@ -1194,7 +1201,7 @@ function openDayModal(day){
 function renderDayModal(){
   if(!modalDate)return;
   const{year,month,day}=modalDate,key=`${year}-${month}-${day}`,d=getMonthData(year,month);
-  const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:d[n][String(day)]}));
+  const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:normalizeType(d[n][String(day)])}));
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
 
   // 사역자 목록
