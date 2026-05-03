@@ -40,8 +40,9 @@ let srchDept = 'team'; // 검색탭 선택 파트
 
 // 채팅 상태
 let chatMessages = {};   // { userId: [messages] }
-let chatTarget = null;   // 현재 채팅 상대
+let chatTarget = null;   // 현재 채팅 상대 (관리자↔이용자)
 let dmUnreadCount = 0;
+let userDmTarget = null; // 이용자↔이용자 채팅 상대
 
 // ── 알림 & 메모 (Supabase + localStorage 이중 저장) ──
 let shiftAlarms = {};
@@ -353,6 +354,8 @@ function enterApp() {
   }
   renderCalendar(); renderNotices(); updateAlarmBadge();
   updateFeedBadge();
+  // ★ 이용자↔이용자 채팅 모달 동적 생성 (없으면)
+  if(!$('user-dm-modal')) injectUserDmModal();
   startRealtime();
   if(!OFFLINE){
     if(pollTimer)clearInterval(pollTimer);
@@ -525,11 +528,17 @@ function startRealtime() {
       if(!chatMessages[otherId].find(x=>x.id===m.id)){
         chatMessages[otherId].push(m);
       }
-      // 채팅창 열려있으면 즉시 렌더 + 읽음 처리
+      // 관리자↔이용자 채팅창 열려있으면 즉시 렌더 + 읽음 처리
       if(chatTarget?.id===otherId){
         m.is_read=true;
         if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
         renderChatMessages();
+      }
+      // 이용자↔이용자 채팅창 열려있으면 즉시 렌더 + 읽음 처리
+      if(userDmTarget?.id===otherId){
+        m.is_read=true;
+        if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
+        renderUserDmMessages();
       }
       // 배지 업데이트
       updateFeedBadge();
@@ -736,7 +745,7 @@ function renderAlarmPanel(){
   }
 
   // 아무것도 없을 때
-  if(!shiftItems.length&&!unreadNotices.length&&!unreadDMs.length){
+  if(!shiftItems.length&&!unreadNotices.length&&!dmUnreadCount){
     html+='<div style="padding:24px 16px;text-align:center;font-size:13px;color:var(--color-text-tertiary)">새 알림이 없습니다</div>';
   }
 
@@ -2068,21 +2077,43 @@ function toggleKeepLogin(toggleEl){
   }
 }
 // ══════════════════════════════════════════════════
-let feedTab = 'members'; // 'members' | 'chat'
+let feedTab = 'members'; // 'members' | 'chat' | 'dm'
 
 function renderFeedTab(){
   const el=$('feed-list'); if(!el) return;
 
+  // 이용자끼리 읽지 않은 메시지 수 (관리자 제외 상대방)
+  const userDmUnread = Object.entries(chatMessages).reduce((sum,[otherId,msgs])=>{
+    const other = allMembers.find(u=>u.id===parseInt(otherId));
+    if(!other || isAdminRole(other)) return sum;
+    return sum + msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  }, 0);
+  // 관리자↔이용자 읽지 않은 수
+  const adminChatUnread = Object.entries(chatMessages).reduce((sum,[otherId,msgs])=>{
+    const other = allMembers.find(u=>u.id===parseInt(otherId));
+    if(!other) return sum;
+    if(isAdmin() ? isAdminRole(other) : !isAdminRole(other)) return sum;
+    return sum + msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  }, 0);
+
+  const tabStyle = (t) => `flex:1;padding:7px 4px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;background:${feedTab===t?'var(--color-background-primary)':'transparent'};color:${feedTab===t?'#185FA5':'var(--color-text-secondary)'};position:relative`;
+
+  const chatBadge = adminChatUnread > 0 ? `<span style="position:absolute;top:2px;right:4px;background:#e11d48;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;line-height:1">${adminChatUnread}</span>` : '';
+  const dmBadge   = userDmUnread > 0   ? `<span style="position:absolute;top:2px;right:4px;background:#e11d48;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;line-height:1">${userDmUnread}</span>` : '';
+
   const segHtml=`
     <div style="display:flex;gap:0;background:var(--color-background-secondary);border-radius:8px;padding:2px;margin-bottom:14px">
-      <button onclick="setFeedTab('members')" style="flex:1;padding:7px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;background:${feedTab==='members'?'var(--color-background-primary)':'transparent'};color:${feedTab==='members'?'#185FA5':'var(--color-text-secondary)'}">사역자 목록</button>
-      <button onclick="setFeedTab('chat')" style="flex:1;padding:7px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;background:${feedTab==='chat'?'var(--color-background-primary)':'transparent'};color:${feedTab==='chat'?'#185FA5':'var(--color-text-secondary)'}">관리자 메시지</button>
+      <button onclick="setFeedTab('members')" style="${tabStyle('members')}">사역자 목록</button>
+      <button onclick="setFeedTab('chat')"    style="${tabStyle('chat')};position:relative">관리자 메시지${chatBadge}</button>
+      <button onclick="setFeedTab('dm')"      style="${tabStyle('dm')};position:relative">멤버 채팅${dmBadge}</button>
     </div>`;
 
   if(feedTab==='members'){
     el.innerHTML = segHtml + renderMemberListHtml();
-  } else {
+  } else if(feedTab==='chat'){
     el.innerHTML = segHtml + renderChatListHtml();
+  } else {
+    el.innerHTML = segHtml + renderUserDmListHtml();
   }
 }
 
@@ -2122,12 +2153,17 @@ function renderMemberListHtml(){
           ? `<button onclick="event.stopPropagation();removeFromTeam('${name}',this)" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #3B6D11;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:12px;color:#3B6D11;cursor:pointer;transition:transform .15s">✓</button>`
           : `<button onclick="event.stopPropagation();addToTeam('${name}',this)" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #185FA5;background:none;display:flex;align-items:center;justify-content:center;font-size:16px;color:#185FA5;cursor:pointer;transition:transform .15s">+</button>`;
 
+      const dmBtn = (!isPending && u && u.id !== cu.id)
+        ? `<button onclick="event.stopPropagation();setFeedTab('dm');switchTab('feed',$('btn-feed'));setTimeout(()=>openUserDm(${u.id}),100)" title="메시지 보내기" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #d1d5db;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s;flex-shrink:0"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 2.5h12v7a1 1 0 01-1 1H2a1 1 0 01-1-1v-7z" stroke="#888" stroke-width="1.2"/><path d="M1 2.5l6 4.5 6-4.5" stroke="#888" stroke-width="1.2"/></svg></button>`
+        : '';
+
       html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:${idx<sec.names.length-1?'0.5px solid var(--color-border-tertiary)':'none'};${isPending?'opacity:.4':''}">
         ${avHtml}
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${name}</div>
           <div style="font-size:10px;color:var(--color-text-secondary);margin-top:1px">${u?.title||(isPending?'준비중':'')}</div>
         </div>
+        ${dmBtn}
         ${teamBtn}
       </div>`;
     });
@@ -2193,7 +2229,111 @@ function renderChatListHtml(){
   return html;
 }
 
-function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
+// ★ 이용자↔이용자 채팅 목록
+function renderUserDmListHtml(){
+  // 자신을 제외한 전체 멤버 목록 (관리자 포함 모두 가능)
+  const others = allMembers.filter(u => u.id !== cu.id);
+  if(!others.length) return '<p class="empty-state">대화 가능한 멤버가 없습니다.</p>';
+
+  const DEPT_SECTIONS=[
+    {label:'담임목사님',names:['박지현']},
+    {label:'교구',names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
+    {label:'청년국',names:['허남홍','서동빈','손우성']},
+    {label:'교육국',names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
+    {label:'행정/선교',names:['김동권','최성은']},
+  ];
+
+  // 최근 대화가 있는 멤버를 상단에 정렬
+  const withMsg = others.filter(u=>chatMessages[u.id]?.length>0)
+    .sort((a,b)=>{
+      const la=chatMessages[a.id]?.slice(-1)[0]?.created_at||'';
+      const lb=chatMessages[b.id]?.slice(-1)[0]?.created_at||'';
+      return lb.localeCompare(la);
+    });
+  const withMsgIds = new Set(withMsg.map(u=>u.id));
+
+  let html='';
+
+  // 최근 대화 섹션
+  if(withMsg.length){
+    html+=`<div style="font-size:10px;font-weight:500;color:#185FA5;padding:4px 2px 6px;letter-spacing:.5px">최근 대화</div>`;
+    withMsg.forEach(u=>{
+      html += buildUserDmRow(u);
+    });
+  }
+
+  // 전체 멤버 섹션 (대화 없는 사람 포함)
+  html+=`<div style="font-size:10px;font-weight:500;color:#888;padding:${withMsg.length?'12px':'4px'} 2px 6px;letter-spacing:.5px">전체 멤버</div>`;
+  DEPT_SECTIONS.forEach(sec=>{
+    const dMeta=DEPT_META[sec.label]||{color:'#888',bg:'#f0f0ea',border:'#e0e0e0'};
+    const secMembers=sec.names.map(n=>allMembers.find(u=>u.name===n&&u.id!==cu.id)).filter(Boolean);
+    if(!secMembers.length) return;
+    html+=`<div style="font-size:10px;font-weight:400;color:${dMeta.color};padding:3px 2px 3px;letter-spacing:.3px">${sec.label}</div>
+    <div style="background:var(--color-background-primary);border-radius:12px;overflow:hidden;border:1px solid ${dMeta.border};margin-bottom:8px">`;
+    secMembers.forEach((u,idx)=>{
+      html += buildUserDmRowInner(u, idx < secMembers.length-1, dMeta);
+    });
+    html+=`</div>`;
+  });
+
+  // 섹션에 없는 기타 멤버
+  const listedNames=DEPT_SECTIONS.flatMap(s=>s.names);
+  const otherMembers=others.filter(u=>!listedNames.includes(u.name)&&u.id!==cu.id);
+  if(otherMembers.length){
+    html+=`<div style="font-size:10px;font-weight:400;color:#888;padding:3px 2px 3px">기타</div>
+    <div style="background:var(--color-background-primary);border-radius:12px;overflow:hidden;border:1px solid var(--color-border-tertiary);margin-bottom:8px">`;
+    otherMembers.forEach((u,idx)=>{
+      html += buildUserDmRowInner(u, idx<otherMembers.length-1, {color:'#888',bg:'#f0f0ea',border:'#e0e0e0'});
+    });
+    html+=`</div>`;
+  }
+
+  return html;
+}
+
+function buildUserDmRow(u){
+  const msgs = chatMessages[u.id] || [];
+  const unread = msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  const last = msgs[msgs.length-1];
+  const c = PALETTE[allMembers.indexOf(u) % PALETTE.length];
+  const avHtml = u.avatar
+    ?`<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${esc(u.name)}')" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea;cursor:pointer">`
+    :`<div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:${c.text};flex-shrink:0">${u.name[0]}</div>`;
+  const adminTag = isAdminRole(u) ? `<span style="font-size:10px;color:#185FA5;font-weight:400;margin-left:3px">관리자</span>` : '';
+  return `<div class="list-card${unread?' feed-card-new':''}" onclick="openUserDm(${u.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+    ${avHtml}
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:14px;font-weight:500">${esc(u.name)}${adminTag}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${unread?`<span class="cnt-badge">${unread}</span>`:''}
+          ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'대화를 시작해보세요'}
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildUserDmRowInner(u, hasBorder, dMeta){
+  const msgs = chatMessages[u.id] || [];
+  const unread = msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  const last = msgs[msgs.length-1];
+  const avHtml = u.avatar
+    ?`<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${esc(u.name)}')" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${dMeta.border};cursor:pointer">`
+    :`<div style="width:36px;height:36px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:${dMeta.color};flex-shrink:0">${u.name[0]}</div>`;
+  const adminTag = isAdminRole(u) ? `<span style="font-size:10px;color:#185FA5;font-weight:400;margin-left:3px">관리자</span>` : '';
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:${hasBorder?'0.5px solid var(--color-border-tertiary)':'none'};cursor:pointer${unread?';background:rgba(83,74,183,.04)':''}" onclick="openUserDm(${u.id})">
+    <div style="position:relative;flex-shrink:0">${avHtml}${unread?`<span style="position:absolute;top:-2px;right:-2px;background:#e11d48;border:1.5px solid #fff;border-radius:50%;width:14px;height:14px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">${unread}</span>`:''}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:${unread?600:500};color:var(--color-text-primary)">${esc(u.name)}${adminTag}</div>
+      <div style="font-size:11px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'대화 시작하기'}</div>
+    </div>
+    ${last?`<span style="font-size:10px;color:var(--color-text-tertiary);flex-shrink:0">${fmtTime(last.created_at)}</span>`:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'}
+  </div>`;
+}
 
 // 배지: 받은 읽지 않은 DM 수
 function updateFeedBadge(){
@@ -2286,6 +2426,139 @@ function closeChatModal(){
   // ★ 채팅창 닫을 때 소통 탭 목록 갱신 → 배지 사라짐
   if($('tab-feed')?.style.display!=='none') renderFeedTab();
   updateFeedBadge();
+}
+
+// ══════════════════════════════════════════════════
+//  이용자↔이용자 채팅
+// ══════════════════════════════════════════════════
+function openUserDm(userId){
+  const user = allMembers.find(u=>u.id===userId);
+  if(!user) return;
+  userDmTarget = user;
+
+  // 읽음 처리
+  const msgs = chatMessages[userId] || [];
+  const unreadIds = msgs.filter(m=>m.to_id===cu.id&&!m.is_read).map(m=>m.id);
+  msgs.forEach(m=>{ if(m.to_id===cu.id) m.is_read=true; });
+  if(!OFFLINE && unreadIds.length>0){
+    sb.from('direct_messages').update({is_read:true}).eq('to_id',cu.id).eq('from_id',userId)
+      .then(({error})=>{ if(error) console.warn('UserDM read error:',error.message); });
+  }
+  updateFeedBadge();
+
+  // 모달 열기 (관리자 채팅 모달 재활용 or 별도 모달)
+  const modal = $('user-dm-modal');
+  if(modal){
+    $('user-dm-target-name').textContent = user.name + (isAdminRole(user)?' (관리자)':'');
+    modal.style.display='flex';
+    renderUserDmMessages();
+    setTimeout(()=>{ const el=$('user-dm-messages'); if(el) el.scrollTop=el.scrollHeight; },50);
+  }
+}
+
+function renderUserDmMessages(){
+  const el=$('user-dm-messages'); if(!el||!userDmTarget) return;
+  const msgs = chatMessages[userDmTarget.id] || [];
+  if(!msgs.length){
+    el.innerHTML='<p style="text-align:center;color:#ccc;font-size:13px;padding:20px">첫 메시지를 보내보세요 👋</p>';
+    return;
+  }
+  // 날짜 구분선 포함 렌더
+  let lastDate='';
+  el.innerHTML = msgs.map(m=>{
+    const isMine = m.from_id===cu.id;
+    const d = new Date(m.created_at);
+    const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+    let dateDivider='';
+    if(dateStr !== lastDate){
+      lastDate = dateStr;
+      dateDivider=`<div style="text-align:center;margin:10px 0 8px;"><span style="font-size:10px;color:#bbb;background:var(--color-background-secondary);padding:3px 10px;border-radius:10px">${dateStr}</span></div>`;
+    }
+    const sender = isMine ? null : allMembers.find(u=>u.id===m.from_id);
+    const senderAvHtml = (!isMine && sender?.avatar)
+      ? `<img src="${sender.avatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-top:2px">`
+      : (!isMine ? `<div style="width:28px;height:28px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:11px;color:#888;flex-shrink:0;margin-top:2px">${(userDmTarget.name||'?')[0]}</div>` : '');
+    return `${dateDivider}<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:8px">
+      <div style="display:flex;align-items:flex-end;gap:6px;flex-direction:${isMine?'row-reverse':'row'}">
+        ${isMine?'':senderAvHtml}
+        <div style="max-width:72%;padding:9px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.08)">${esc(m.content)}</div>
+      </div>
+      <div style="font-size:10px;color:#bbb;margin-top:3px;${isMine?'':'margin-left:34px'}">${fmtTime(m.created_at)}</div>
+    </div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+let userDmSending = false;
+async function sendUserDm(){
+  if(userDmSending) return;
+  const input = $('user-dm-input');
+  const txt = input?.value.trim();
+  if(!txt || !userDmTarget) return;
+  userDmSending = true;
+
+  const msg = {
+    id: Date.now(),
+    from_id: cu.id,
+    to_id: userDmTarget.id,
+    content: txt,
+    is_read: false,
+    created_at: new Date().toISOString()
+  };
+  if(!chatMessages[userDmTarget.id]) chatMessages[userDmTarget.id]=[];
+  chatMessages[userDmTarget.id].push(msg);
+  input.value='';
+  renderUserDmMessages();
+
+  if(!OFFLINE){
+    const {data} = await sb.from('direct_messages')
+      .insert({from_id:cu.id, to_id:userDmTarget.id, content:txt})
+      .select('*').single();
+    if(data){
+      const idx = chatMessages[userDmTarget.id].findIndex(m=>m.id===msg.id);
+      if(idx>=0) chatMessages[userDmTarget.id][idx]=data;
+      // 푸시 알림
+      sendPushToUsers([userDmTarget.id], `💬 ${cu.name}`, txt);
+    }
+  }
+  userDmSending = false;
+}
+
+function closeUserDmModal(){
+  const modal=$('user-dm-modal');
+  if(modal) modal.style.display='none';
+  userDmTarget=null;
+  if($('tab-feed')?.style.display!=='none') renderFeedTab();
+  updateFeedBadge();
+}
+
+// ★ 이용자↔이용자 채팅 모달 DOM 생성
+function injectUserDmModal(){
+  if($('user-dm-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'user-dm-modal';
+  modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:500;flex-direction:column;background:var(--color-background-primary)';
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 10px;background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-secondary);position:sticky;top:0;z-index:1">
+      <button onclick="closeUserDmModal()" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <div style="flex:1">
+        <div id="user-dm-target-name" style="font-size:15px;font-weight:600;color:var(--color-text-primary)"></div>
+        <div style="font-size:11px;color:var(--color-text-secondary)">개인 메시지</div>
+      </div>
+    </div>
+    <div id="user-dm-messages" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;background:var(--color-background-secondary)"></div>
+    <div style="padding:10px 12px 16px;background:var(--color-background-primary);border-top:0.5px solid var(--color-border-secondary);display:flex;gap:8px;align-items:flex-end">
+      <textarea id="user-dm-input" rows="1" placeholder="메시지 입력..."
+        style="flex:1;padding:10px 13px;border:1.5px solid var(--color-border-secondary);border-radius:20px;font-size:14px;resize:none;max-height:100px;overflow-y:auto;background:var(--color-background-secondary);color:var(--color-text-primary);font-family:inherit;line-height:1.4;outline:none"
+        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendUserDm();}"></textarea>
+      <button onclick="sendUserDm()" style="width:38px;height:38px;border-radius:50%;background:#185FA5;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:transform .1s" onmousedown="this.style.transform='scale(.93)'" onmouseup="this.style.transform=''">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-5-5 12-2-4.5L2 8z" fill="#fff"/></svg>
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
 }
 
 function fmtTime(s){
