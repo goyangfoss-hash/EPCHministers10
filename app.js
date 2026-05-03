@@ -32,6 +32,14 @@ let scheduleTypes = {}; // {year: {month: 'regular'|'special'}}
 const getMonthData = (y, m) => allSchedules[y]?.[m] || {};
 const curData = () => getMonthData(curY, curM + 1);
 let allMembers = [], notices = [], feedPosts = [];
+
+// department 표기 정규화 — '담임목사님' → '담임목사' 등 동의어 통일
+function normalizeMember(u){
+  if(!u) return u;
+  if(u.department === '담임목사님') u = {...u, department:'담임목사'};
+  return u;
+}
+function normalizeMembers(arr){ return (arr||[]).map(normalizeMember); }
 let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
 let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth() + 1;
 let srchYear = 0, srchMonth = 0, srchName = '';
@@ -245,7 +253,7 @@ async function refreshSchedules() {
 
     // 회원 갱신 (approved/pending 분리)
     if(memberRes.data){
-      allMembers = memberRes.data.filter(u=>u.status==='approved');
+      allMembers = normalizeMembers(memberRes.data.filter(u=>u.status==='approved'));
       window._pending = memberRes.data.filter(u=>u.status==='pending');
     }
 
@@ -369,9 +377,7 @@ function enterApp() {
   });
   checkNotifPermission();
   if('serviceWorker' in navigator){
-    // ?v= 파라미터로 캐시 버전 자동 갱신 — 배포할 때마다 새 버전 적용됨
-    const swVer = '%%BUILD_TIME%%';
-    navigator.serviceWorker.register(`sw.js?v=${swVer}`).catch(()=>{});
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
     navigator.serviceWorker.register('firebase-messaging-sw.js').catch(()=>{});
   }
   initFCM();
@@ -465,7 +471,7 @@ function startRealtime() {
     .on('postgres_changes',{event:'*',schema:'public',table:'app_users'},async(payload)=>{
       const{data}=await sb.from('app_users').select('*');
       if(data){
-        allMembers=data.filter(u=>u.status==='approved');
+        allMembers=normalizeMembers(data.filter(u=>u.status==='approved'));
         window._pending=data.filter(u=>u.status==='pending');
         // ★ 본인 프로필이 변경된 경우 헤더 아바타 업데이트
         const updatedMe=data.find(u=>u.id===cu?.id);
@@ -843,7 +849,7 @@ async function loadAll(){
     sb.from('notice_reads').select('notice_id').eq('user_id', cu?.id || 0),
   ]);
   const all=uR.data||[];
-  allMembers=all.filter(u=>u.status==='approved'); window._pending=all.filter(u=>u.status==='pending');
+  allMembers=normalizeMembers(all.filter(u=>u.status==='approved')); window._pending=all.filter(u=>u.status==='pending');
   allSchedules={};
   (sR.data||[]).forEach(r=>{if(!allSchedules[r.year])allSchedules[r.year]={};allSchedules[r.year][r.month]=r.data||{};});
   assignColors(collectAllTypes());
@@ -2474,7 +2480,7 @@ function enlargeProfileImg(src, name){
   document.body.appendChild(modal);
 }
 async function saveMemo(uid){const memo=$(`memo-${uid}`)?.value||'';const u=allMembers.find(x=>x.id===uid);if(!u)return;u.memo=memo;if(!OFFLINE)await sb.from('app_users').update({memo}).eq('id',uid);showToastMsg('저장되었습니다.');}
-async function approveUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'approved'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);const{data}=await sb.from('app_users').select('*');if(data){allMembers=data.filter(u=>u.status==='approved');window._pending=data.filter(u=>u.status==='pending');}renderAdmin();}
+async function approveUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'approved'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);const{data}=await sb.from('app_users').select('*');if(data){allMembers=normalizeMembers(data.filter(u=>u.status==='approved'));window._pending=data.filter(u=>u.status==='pending');}renderAdmin();}
 async function rejectUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'rejected'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);renderPending();}
 async function changeRole(id,role){const u=allMembers.find(x=>x.id===id);if(!u)return;u.role=role;if(!OFFLINE)await sb.from('app_users').update({role}).eq('id',id);renderMembers();}
 
