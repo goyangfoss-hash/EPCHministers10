@@ -337,8 +337,7 @@ function isAdmin(){return cu?.role==='admin'||cu?.role==='superadmin';}
 function enterApp() {
   showScreen('main-screen');
   $('hdr-name').textContent=cu.name;
-  // 자기 자신이 내 팀에 포함되어 있으면 제거
-  if(myTeam.includes(cu.name)){ myTeam=myTeam.filter(n=>n!==cu.name); saveMyTeam(); }
+  if(myTeam.includes(cu.name)){myTeam=myTeam.filter(n=>n!==cu.name);saveMyTeam();}
   // ★ 프로필 이미지 or 이름 첫 글자
   updateHeaderAvatar();
   $('btn-admin').style.display=isAdmin()?'flex':'none';
@@ -1190,48 +1189,16 @@ function renderDayModal(){
   const{year,month,day}=modalDate,key=`${year}-${month}-${day}`,d=getMonthData(year,month);
   const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:d[n][String(day)]}));
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
-  const SHIFT_ORDER={
-    0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],
-    1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
-    2:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
-    3:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],
-    4:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
-    5:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],
-    6:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
-  };
-  const dow=new Date(year,month-1,day).getDay();
-  const orderList=SHIFT_ORDER[dow]||[];
-  function shiftRank(type){
-    const t=(type||'').replace(/\s/g,'');
-    const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);
-    if(ei!==-1)return ei;
-    const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});
-    return pi===-1?999:pi;
-  }
+  const SHIFT_ORDER={0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],2:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],3:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],4:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],5:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],6:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송']};
+  const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
+  function shiftRank(type){const t=(type||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});return pi===-1?999:pi;}
   const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
-  wHtml+=sorted.length?sorted.map(w=>{
-    const c=tc(w.type);
-    return `<div class="day-worker-row">
-      <span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="worker-nm">${w.name}</span>
-        <div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div>
-      </div>
-    </div>`;
-  }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
+  wHtml+=sorted.length?sorted.map(w=>{const c=tc(w.type);return `<div class="day-worker-row"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span><div style="display:flex;align-items:center;gap:8px"><span class="worker-nm">${w.name}</span><div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div></div></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
   let alarmHtml='';
-  if(myType){
-    alarmHtml=`<div class="modal-section">
-      <div class="modal-section-title">알림 설정</div>
-      <div class="alarm-setting-row">
-        <div><div style="font-size:13px;font-weight:600">전날 알림 받기</div><div style="font-size:11px;color:#aaa;margin-top:2px">사역 전날 ${alarm.alarmTime||'18:30'}에 알림</div></div>
-        <div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${year},${month},${day});renderDayModal();updateAlarmBadge()"></div>
-      </div>
-      ${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}
-    </div>`;
-  }
+  if(myType){alarmHtml=`<div class="modal-section"><div class="modal-section-title">알림 설정</div><div class="alarm-setting-row"><div><div style="font-size:13px;font-weight:600">전날 알림 받기</div><div style="font-size:11px;color:#aaa;margin-top:2px">사역 전날 ${alarm.alarmTime||'18:30'}에 알림</div></div><div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${year},${month},${day});renderDayModal();updateAlarmBadge()"></div></div>${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}
+    </div>`;}
   $('modal-body').innerHTML=wHtml+alarmHtml;
 }
 function closeModalById(id){$(id).style.display='none';if(id==='comment-modal')modalDate=null;}
@@ -1573,8 +1540,7 @@ function teamRemoveAsk(btn,name){
   const row=document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
   if(!row||row.dataset.confirming)return;
   row.dataset.confirming='1';row.style.background='#FFF5F5';btn.style.display='none';
-  const c=document.createElement('div');
-  c.style.cssText='display:flex;align-items:center;gap:7px;flex-shrink:0';
+  const c=document.createElement('div');c.style.cssText='display:flex;align-items:center;gap:7px;flex-shrink:0';
   c.innerHTML=`<span style="font-size:11px;color:#E24B4A;font-weight:500;white-space:nowrap">제거할까요?</span>
     <button onclick="teamRemoveCancel(this,'${name}')" style="padding:5px 11px;border-radius:8px;border:1px solid #e0e0e0;background:#f7f7f7;font-size:11px;color:#555;cursor:pointer">취소</button>
     <button onclick="teamRemoveConfirm(this,'${name}')" style="padding:5px 11px;border-radius:8px;border:none;background:#E24B4A;font-size:11px;color:#fff;cursor:pointer;font-weight:600">제거</button>`;
@@ -1582,8 +1548,7 @@ function teamRemoveAsk(btn,name){
 }
 function teamRemoveCancel(btn,name){
   const row=document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
-  if(!row)return;
-  delete row.dataset.confirming;row.style.background='#fff';
+  if(!row)return;delete row.dataset.confirming;row.style.background='#fff';
   btn.closest('div').remove();
   const x=row.querySelector('button[onclick*="teamRemoveAsk"]');if(x)x.style.display='';
 }
@@ -1609,7 +1574,6 @@ function addToTeam(name,btnEl){
     btnEl.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});
   }
 }
-
 function removeFromTeam(name,btnEl){
   myTeam=myTeam.filter(n=>n!==name);saveMyTeam();
   renderSearchFilters();renderSearchResult();renderCalendar();
@@ -1653,7 +1617,7 @@ function renderSearchResult(){
 
   if(!targetNames.length){
     el.innerHTML=`<div style="text-align:center;padding:30px 0;color:var(--color-text-secondary);font-size:13px">
-      ${srchDept==='team'?'팀원을 추가해주세요.<br><button onclick="openTeamEditModal()" style="margin-top:8px;padding:6px 16px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer">+ 팀원 추가</button>':'사역자가 없습니다.'}
+      ${srchDept==='team'?'팀원을 추가해주세요.<br><button onclick="openTeamEditModal()" style="margin-top:8px;padding:6px 16px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer">✏️ 팀원 보기</button>':'사역자가 없습니다.'}
     </div>`;
     return;
   }
@@ -1693,7 +1657,7 @@ function renderSearchResult(){
     const months = new Set(shifts.map(s=>`${s.y}-${s.m}`)).size;
 
     const avHtml = u?.avatar
-      ? `<img src="${u.avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${meta.border}">`
+      ? `<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${u.name}')" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${meta.border};cursor:pointer">`
       : `<div style="width:36px;height:36px;border-radius:50%;background:${isPending?'#f0f0ea':c.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:${isPending?'#bbb':c.text};flex-shrink:0">${name[0]}</div>`;
 
     const titleText = u?.title
@@ -1790,7 +1754,7 @@ function togglePersonStats(name){
   const months=new Set(shifts.map(s=>`${s.y}-${s.m}`)).size;
 
   const avHtml=u?.avatar
-    ?`<img src="${u.avatar}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid ${meta.border}">`
+    ?`<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${u.name}')" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid ${meta.border};cursor:pointer">`
     :`<div style="width:44px;height:44px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:${c.text}">${name[0]}</div>`;
 
   const shiftRows = [...future, ...past].slice(0,20).map(({y,m,d,type,dt})=>{
@@ -2149,7 +2113,7 @@ function renderMemberListHtml(){
       const isPending=!u||isSelf;
       const isInTeam=myTeam.includes(name);
       const avHtml=u?.avatar
-        ?`<img src="${u.avatar}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${dMeta.border}">`
+        ?`<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${name}')" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${dMeta.border};cursor:pointer">`
         :`<div style="width:34px;height:34px;border-radius:50%;background:${isPending?'#f0f0ea':dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:${isPending?'#bbb':dMeta.color};flex-shrink:0">${name[0]}</div>`;
 
       const teamBtn = isPending
@@ -2184,7 +2148,7 @@ function renderChatListHtml(){
       const last=msgs[msgs.length-1];
       const c=PALETTE[i%PALETTE.length];
       const avHtml=u.avatar
-        ?`<img src="${u.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea">`
+        ?`<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${u.name}')" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea;cursor:pointer">`
         :`<div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:${c.text};flex-shrink:0">${u.name[0]}</div>`;
       html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${u.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
         ${avHtml}
@@ -2210,7 +2174,7 @@ function renderChatListHtml(){
     const last=msgs[msgs.length-1];
     html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${admin.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
       ${admin.avatar
-        ?`<img src="${admin.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #dbeafe">`
+        ?`<img src="${admin.avatar}" onclick="event.stopPropagation();openAvatarViewer('${admin.avatar}','${admin.name}')" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #dbeafe;cursor:pointer">`
         :`<div style="width:42px;height:42px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:#fff;flex-shrink:0">${admin.name[0]}</div>`}
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
@@ -2393,7 +2357,7 @@ function renderMembers(){
     secMembers.forEach((u,i)=>{
       const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
       const avHtml=u.avatar
-        ?`<img src="${u.avatar}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid ${dMeta.border}" alt="${u.name}">`
+        ?`<img src="${u.avatar}" onclick="openAvatarViewer('${u.avatar}','${u.name}')" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1.5px solid ${dMeta.border};cursor:pointer" alt="${u.name}">`
         :`<div style="width:38px;height:38px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:${dMeta.color}">${u.name[0]}</div>`;
       html+=`<div class="member-row" onclick="openMemberModal(${u.id})" style="border-bottom:${i<secMembers.length-1||pendingNames.length?'0.5px solid var(--color-border-tertiary)':'none'}">
         ${avHtml}
@@ -3605,3 +3569,29 @@ function showToastMsg(msg){let el=$('g-toast');if(!el){el=document.createElement
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function escNl(s){return esc(s).replace(/\n/g,"<br>").replace(/\r/g,"");}
 function fmtDate(s){if(!s)return'';try{const d=new Date(s);return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;}catch{return'';}}
+
+// ── 프로필 사진 크게 보기 ──
+function openAvatarViewer(src, name){
+  const existing = document.getElementById('avatar-viewer-overlay');
+  if(existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'avatar-viewer-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(6px)';
+  overlay.onclick = () => overlay.remove();
+
+  overlay.innerHTML = `
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:14px">
+      <img src="${src}" style="width:220px;height:220px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,.3);box-shadow:0 8px 40px rgba(0,0,0,.5)">
+      <span style="font-size:16px;font-weight:600;color:#fff">${name}</span>
+      <span style="font-size:12px;color:rgba(255,255,255,.5)">탭하면 닫힙니다</span>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  // 페이드인
+  overlay.style.opacity = '0';
+  requestAnimationFrame(() => {
+    overlay.style.transition = 'opacity .2s';
+    overlay.style.opacity = '1';
+  });
+}
