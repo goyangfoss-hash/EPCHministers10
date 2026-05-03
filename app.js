@@ -1504,59 +1504,59 @@ function openTeamEditModal(){
   // ── 오버레이 (배경 탭으로 닫기) ──
   const overlay = document.createElement('div');
   overlay.id = 'team-edit-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;backdrop-filter:blur(2px);transition:opacity .25s';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:9998;backdrop-filter:blur(3px);transition:opacity .25s';
   overlay.addEventListener('click', closeTeamEditPanel);
   document.body.appendChild(overlay);
 
-  // ── 팀원 행 렌더 함수 ──
+  // ── 현재 팀원 행 렌더 ──
   function buildRows(){
     if(!myTeam.length){
-      return `<div style="padding:32px 16px;text-align:center">
-        <div style="font-size:28px;margin-bottom:8px">👥</div>
-        <div style="font-size:13px;color:var(--color-text-secondary)">아직 팀원이 없어요</div>
-        <div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">소통 탭에서 팀원을 추가해보세요</div>
+      return `<div style="padding:36px 16px;text-align:center">
+        <div style="font-size:30px;margin-bottom:10px">👥</div>
+        <div style="font-size:13px;color:#888">아직 팀원이 없어요</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">소통 탭에서 팀원을 추가해보세요</div>
       </div>`;
     }
     return myTeam.map(name => {
       const u = allMembers.find(m=>m.name===name);
       const deptKey = u?.department || '';
       const dMeta = DEPT_META[deptKey] || {color:'#888', bg:'#f0f0f0'};
-      return `<div id="team-row-${name.replace(/\s/g,'_')}" style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:0.5px solid var(--color-border-tertiary);transition:background .15s">
-        <div style="width:34px;height:34px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:${dMeta.color};flex-shrink:0">${name[0]}</div>
-        <span style="flex:1;font-size:14px;font-weight:400;color:var(--color-text-primary)">${name}</span>
+      return `<div id="team-row-${name.replace(/\s/g,'_')}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:0.5px solid #f0f0f0;transition:background .15s;background:#fff">
+        <div style="width:36px;height:36px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:${dMeta.color};flex-shrink:0">${name[0]}</div>
+        <span style="flex:1;font-size:14px;font-weight:400;color:#1a1a1a">${name}</span>
         <button onclick="teamRemoveAsk(this,'${name}')"
-          style="width:26px;height:26px;border-radius:50%;border:1.5px solid #E24B4A;background:none;color:#E24B4A;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s">×</button>
+          style="width:28px;height:28px;border-radius:50%;border:1.5px solid #E24B4A;background:none;color:#E24B4A;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">×</button>
       </div>`;
     }).join('');
   }
 
-  // ── 패널 ──
+  // ── 패널 — 배경 완전 흰색 고정 ──
   const panel = document.createElement('div');
   panel.id = 'team-edit-modal';
   panel.style.cssText = [
     'position:fixed;bottom:0;left:50%;',
     'transform:translateX(-50%) translateY(100%);',
     'width:100%;max-width:480px;',
-    'background:var(--color-background-primary);',
-    'border-radius:16px 16px 0 0;',
-    'box-shadow:0 -6px 32px rgba(0,0,0,.18);',
+    'background:#ffffff;',          // ← 완전 흰색 고정 (CSS 변수 아님)
+    'border-radius:20px 20px 0 0;',
+    'box-shadow:0 -8px 40px rgba(0,0,0,.22);',
     'z-index:9999;display:flex;flex-direction:column;',
     'transition:transform .28s cubic-bezier(.32,1,.28,1);',
-    'max-height:70vh;',
+    'max-height:72vh;',
   ].join('');
 
   panel.innerHTML = `
-    <div style="display:flex;justify-content:center;padding:10px 0 4px;flex-shrink:0;cursor:pointer" onclick="closeTeamEditPanel()">
-      <div style="width:36px;height:4px;background:var(--color-border-secondary);border-radius:2px"></div>
+    <div style="display:flex;justify-content:center;padding:12px 0 4px;flex-shrink:0;cursor:pointer" onclick="closeTeamEditPanel()">
+      <div style="width:40px;height:4px;background:#e0e0e0;border-radius:2px"></div>
     </div>
-    <div style="padding:6px 16px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:0.5px solid var(--color-border-tertiary)">
+    <div style="padding:6px 18px 13px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid #f0f0f0">
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:15px;font-weight:600;color:var(--color-text-primary)">내 팀</span>
-        <span id="team-edit-count" style="font-size:12px;color:var(--color-text-secondary);background:var(--color-background-secondary);padding:2px 8px;border-radius:10px">${myTeam.length}명</span>
+        <span style="font-size:16px;font-weight:700;color:#1a1a1a">내 팀</span>
+        <span id="team-edit-count" style="font-size:12px;color:#666;background:#f4f4f4;padding:2px 9px;border-radius:12px;font-weight:500">${myTeam.length}명</span>
       </div>
-      <button onclick="closeTeamEditPanel()" style="border:none;background:none;font-size:13px;font-weight:500;color:#185FA5;cursor:pointer;padding:4px 0">완료</button>
+      <button onclick="closeTeamEditPanel()" style="border:none;background:none;font-size:14px;font-weight:600;color:#185FA5;cursor:pointer;padding:4px 2px">완료</button>
     </div>
-    <div id="team-edit-list" style="overflow-y:auto;flex:1;padding-bottom:env(safe-area-inset-bottom,12px)">
+    <div id="team-edit-list" style="overflow-y:auto;flex:1;background:#fff;padding-bottom:env(safe-area-inset-bottom,16px)">
       ${buildRows()}
     </div>`;
 
@@ -1578,69 +1578,61 @@ function closeTeamEditPanel(){
   }
 }
 
-// ── × 누르면 인라인 확인 UI로 전환 ──
+// ── × 누르면 인라인 확인 UI ──
 function teamRemoveAsk(btn, name){
   const row = document.getElementById('team-edit-modal')
     ?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
-  if(!row) return;
-
-  // 이미 확인 중이면 무시
-  if(row.dataset.confirming) return;
+  if(!row || row.dataset.confirming) return;
   row.dataset.confirming = '1';
-
-  // 행 배경을 연한 빨강으로
-  row.style.background = '#FFF0F0';
-
-  // × 버튼 숨기고 확인 UI 삽입
+  row.style.background = '#FFF5F5';
   btn.style.display = 'none';
   const confirm = document.createElement('div');
-  confirm.style.cssText = 'display:flex;align-items:center;gap:6px;flex-shrink:0';
+  confirm.style.cssText = 'display:flex;align-items:center;gap:7px;flex-shrink:0';
   confirm.innerHTML = `
-    <span style="font-size:11px;color:#E24B4A;font-weight:500">제거할까요?</span>
+    <span style="font-size:11px;color:#E24B4A;font-weight:500;white-space:nowrap">제거할까요?</span>
     <button onclick="teamRemoveCancel(this,'${name}')"
-      style="padding:4px 10px;border-radius:8px;border:1px solid var(--color-border-secondary);background:var(--color-background-secondary);font-size:11px;color:var(--color-text-secondary);cursor:pointer">취소</button>
+      style="padding:5px 11px;border-radius:8px;border:1px solid #e0e0e0;background:#f7f7f7;font-size:11px;color:#555;cursor:pointer;font-weight:500">취소</button>
     <button onclick="teamRemoveConfirm(this,'${name}')"
-      style="padding:4px 10px;border-radius:8px;border:none;background:#E24B4A;font-size:11px;color:#fff;font-weight:500;cursor:pointer">제거</button>`;
+      style="padding:5px 11px;border-radius:8px;border:none;background:#E24B4A;font-size:11px;color:#fff;cursor:pointer;font-weight:600">제거</button>`;
   row.appendChild(confirm);
 }
 
-// ── 취소 → 원상복구 ──
+// ── 취소 ──
 function teamRemoveCancel(btn, name){
   const row = document.getElementById('team-edit-modal')
     ?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
   if(!row) return;
   delete row.dataset.confirming;
-  row.style.background = '';
+  row.style.background = '#fff';
   btn.closest('div').remove();
-  row.querySelector('button[onclick*="teamRemoveAsk"]').style.display = '';
+  const xBtn = row.querySelector('button[onclick*="teamRemoveAsk"]');
+  if(xBtn) xBtn.style.display = '';
 }
 
-// ── 확인 → 실제 제거 ──
+// ── 확인 제거 ──
 function teamRemoveConfirm(btn, name){
-  // 행 애니메이션 후 제거
   const row = document.getElementById('team-edit-modal')
     ?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
   if(row){
     row.style.transition = 'opacity .18s, transform .18s';
     row.style.opacity = '0';
-    row.style.transform = 'translateX(20px)';
-    setTimeout(()=>row.remove(), 180);
+    row.style.transform = 'translateX(24px)';
+    setTimeout(()=>row.remove(), 190);
   }
-  // 데이터 업데이트
   myTeam = myTeam.filter(n=>n!==name);
   saveMyTeam();
   renderSearchFilters(); renderSearchResult(); renderCalendar();
-  // 카운트 업데이트
   const countEl = document.getElementById('team-edit-count');
   if(countEl) countEl.textContent = `${myTeam.length}명`;
-  // 팀이 비었으면 빈 상태 표시
   if(!myTeam.length){
-    const list = document.getElementById('team-edit-list');
-    if(list) list.innerHTML = `<div style="padding:32px 16px;text-align:center">
-      <div style="font-size:28px;margin-bottom:8px">👥</div>
-      <div style="font-size:13px;color:var(--color-text-secondary)">아직 팀원이 없어요</div>
-      <div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">소통 탭에서 팀원을 추가해보세요</div>
-    </div>`;
+    setTimeout(()=>{
+      const list = document.getElementById('team-edit-list');
+      if(list) list.innerHTML = `<div style="padding:36px 16px;text-align:center">
+        <div style="font-size:30px;margin-bottom:10px">👥</div>
+        <div style="font-size:13px;color:#888">아직 팀원이 없어요</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">소통 탭에서 팀원을 추가해보세요</div>
+      </div>`;
+    }, 200);
   }
 }
 
