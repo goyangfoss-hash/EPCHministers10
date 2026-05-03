@@ -1189,12 +1189,41 @@ function renderDayModal(){
   const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:d[n][String(day)]}));
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
 
-  // 사역자 목록
+  // ── 요일별 사역 순서 ──
+  const SHIFT_ORDER={
+    0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],
+    1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    2:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    3:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],
+    4:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    5:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],
+    6:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+  };
+  const dow=new Date(year,month-1,day).getDay();
+  const orderList=SHIFT_ORDER[dow]||[];
+  function shiftRank(type){
+    const t=(type||'').replace(/\s/g,'');
+    const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);
+    if(ei!==-1)return ei;
+    const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});
+    return pi===-1?999:pi;
+  }
+  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
+
+  // ── 사역내용 왼쪽, 이름+아바타 오른쪽 ──
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
-  wHtml+=workers.length?workers.map(w=>{const c=tc(w.type);return `<div class="day-worker-row"><div style="display:flex;align-items:center;gap:9px"><div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div><span class="worker-nm">${w.name}</span></div><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
+  wHtml+=sorted.length?sorted.map(w=>{
+    const c=tc(w.type);
+    return `<div class="day-worker-row">
+      <span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="worker-nm">${w.name}</span>
+        <div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div>
+      </div>
+    </div>`;
+  }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
 
-  // 알림 설정 (내 사역일만)
   let alarmHtml='';
   if(myType){
     alarmHtml=`<div class="modal-section">
@@ -1206,7 +1235,6 @@ function renderDayModal(){
       ${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}
     </div>`;
   }
-
   $('modal-body').innerHTML=wHtml+alarmHtml;
 }
 function closeModalById(id){$(id).style.display='none';if(id==='comment-modal')modalDate=null;}
