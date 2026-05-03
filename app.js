@@ -1189,12 +1189,36 @@ function renderDayModal(){
   const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:d[n][String(day)]}));
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
 
-  // 사역자 목록
+  const SHIFT_ORDER = {
+    '주일': ['[주일새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[기도]설교'],
+    '수요': ['[수요]설교','[수요]사회','[수요]자막','[수요]영상'],
+    '금요': ['[금요]설교','[금요]기도','[금요]자막','[금요]영상'],
+    '새벽': ['[새벽]설교','[새벽]인도','[새벽]방송'],
+  };
+  const dow = new Date(year, month-1, day).getDay();
+  const dayCat = dow===0?'주일': dow===3?'수요': dow===5?'금요':'새벽';
+  const orderList = SHIFT_ORDER[dayCat] || [];
+  function shiftRank(type){
+    const exactIdx = orderList.indexOf(type);
+    if(exactIdx !== -1) return exactIdx;
+    const idx = orderList.findIndex(o => type.includes(o) || o.includes(type));
+    return idx === -1 ? 999 : idx;
+  }
+  const sorted = [...workers].sort((a,b) => shiftRank(a.type) - shiftRank(b.type));
+
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
-  wHtml+=workers.length?workers.map(w=>{const c=tc(w.type);return `<div class="day-worker-row"><div style="display:flex;align-items:center;gap:9px"><div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div><span class="worker-nm">${w.name}</span></div><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
+  wHtml+=sorted.length?sorted.map(w=>{
+    const c=tc(w.type);
+    return `<div class="day-worker-row">
+      <span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="worker-nm">${w.name}</span>
+        <div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div>
+      </div>
+    </div>`;
+  }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
 
-  // 알림 설정 (내 사역일만)
   let alarmHtml='';
   if(myType){
     alarmHtml=`<div class="modal-section">
@@ -1501,14 +1525,12 @@ function openTeamEditModal(){
   document.getElementById('team-edit-modal')?.remove();
   document.getElementById('team-edit-overlay')?.remove();
 
-  // ── 오버레이 (배경 탭으로 닫기) ──
   const overlay = document.createElement('div');
   overlay.id = 'team-edit-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:9998;backdrop-filter:blur(3px);transition:opacity .25s';
   overlay.addEventListener('click', closeTeamEditPanel);
   document.body.appendChild(overlay);
 
-  // ── 현재 팀원 행 렌더 ──
   function buildRows(){
     if(!myTeam.length){
       return `<div style="padding:36px 16px;text-align:center">
@@ -1530,14 +1552,13 @@ function openTeamEditModal(){
     }).join('');
   }
 
-  // ── 패널 — 배경 완전 흰색 고정 ──
   const panel = document.createElement('div');
   panel.id = 'team-edit-modal';
   panel.style.cssText = [
     'position:fixed;bottom:0;left:50%;',
     'transform:translateX(-50%) translateY(100%);',
     'width:100%;max-width:480px;',
-    'background:#ffffff;',          // ← 완전 흰색 고정 (CSS 변수 아님)
+    'background:#ffffff;',
     'border-radius:20px 20px 0 0;',
     'box-shadow:0 -8px 40px rgba(0,0,0,.22);',
     'z-index:9999;display:flex;flex-direction:column;',
@@ -1564,24 +1585,15 @@ function openTeamEditModal(){
   requestAnimationFrame(()=>{ panel.style.transform='translateX(-50%) translateY(0)'; });
 }
 
-// ── 패널 + 오버레이 닫기 ──
 function closeTeamEditPanel(){
   const panel = document.getElementById('team-edit-modal');
   const overlay = document.getElementById('team-edit-overlay');
-  if(panel){
-    panel.style.transform='translateX(-50%) translateY(100%)';
-    setTimeout(()=>panel.remove(), 280);
-  }
-  if(overlay){
-    overlay.style.opacity='0';
-    setTimeout(()=>overlay.remove(), 280);
-  }
+  if(panel){ panel.style.transform='translateX(-50%) translateY(100%)'; setTimeout(()=>panel.remove(),280); }
+  if(overlay){ overlay.style.opacity='0'; setTimeout(()=>overlay.remove(),280); }
 }
 
-// ── × 누르면 인라인 확인 UI ──
 function teamRemoveAsk(btn, name){
-  const row = document.getElementById('team-edit-modal')
-    ?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
+  const row = document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
   if(!row || row.dataset.confirming) return;
   row.dataset.confirming = '1';
   row.style.background = '#FFF5F5';
@@ -1597,10 +1609,8 @@ function teamRemoveAsk(btn, name){
   row.appendChild(confirm);
 }
 
-// ── 취소 ──
 function teamRemoveCancel(btn, name){
-  const row = document.getElementById('team-edit-modal')
-    ?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
+  const row = document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
   if(!row) return;
   delete row.dataset.confirming;
   row.style.background = '#fff';
@@ -1609,18 +1619,14 @@ function teamRemoveCancel(btn, name){
   if(xBtn) xBtn.style.display = '';
 }
 
-// ── 확인 제거 ──
 function teamRemoveConfirm(btn, name){
-  const row = document.getElementById('team-edit-modal')
-    ?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
+  const row = document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
   if(row){
     row.style.transition = 'opacity .18s, transform .18s';
-    row.style.opacity = '0';
-    row.style.transform = 'translateX(24px)';
+    row.style.opacity = '0'; row.style.transform = 'translateX(24px)';
     setTimeout(()=>row.remove(), 190);
   }
-  myTeam = myTeam.filter(n=>n!==name);
-  saveMyTeam();
+  myTeam = myTeam.filter(n=>n!==name); saveMyTeam();
   renderSearchFilters(); renderSearchResult(); renderCalendar();
   const countEl = document.getElementById('team-edit-count');
   if(countEl) countEl.textContent = `${myTeam.length}명`;
@@ -1647,9 +1653,7 @@ function addToTeam(name, btnEl){
     btnEl.style.cssText='width:24px;height:24px;border-radius:50%;border:none;background:#3B6D11;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
     btnEl.setAttribute('onclick', `event.stopPropagation();removeFromTeam('${name}',this)`);
     btnEl.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});
-  } else {
-    renderFeedTab?.();
-  }
+  } else { renderFeedTab?.(); }
 }
 
 function removeFromTeam(name, btnEl){
@@ -1662,9 +1666,7 @@ function removeFromTeam(name, btnEl){
     btnEl.style.cssText='width:24px;height:24px;border-radius:50%;border:1.5px solid #185FA5;background:none;color:#185FA5;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
     btnEl.setAttribute('onclick', `event.stopPropagation();addToTeam('${name}',this)`);
     btnEl.animate([{transform:'scale(1)'},{transform:'scale(.75)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
-  } else {
-    renderFeedTab?.();
-  }
+  } else { renderFeedTab?.(); }
 }
 // 파트별 고정 순서
 const DEPT_NAMES = {
