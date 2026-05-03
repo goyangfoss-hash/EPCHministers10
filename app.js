@@ -331,6 +331,7 @@ function doLogout() {
 function showLoginCard(){$('reg-card').style.display='none';$('login-card').style.display='block';}
 function showRegCard(){$('login-card').style.display='none';$('reg-card').style.display='block';}
 function isAdmin(){return cu?.role==='admin'||cu?.role==='superadmin';}
+function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 
 // ══════════════════════════════════════════════════
 //  앱 진입
