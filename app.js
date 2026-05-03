@@ -1498,10 +1498,8 @@ function setSrch(key,v2){
 
 // ★ 내 팀 편집 모달 (개선)
 function openTeamEditModal(){
-  // 기존 패널 제거
   document.getElementById('team-edit-modal')?.remove();
 
-  // ── 부서별 사역자 정의 ──
   const DEPT_SECTIONS_EDIT = [
     { label:'담임목사', names:['박지현'] },
     { label:'교구',     names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수'] },
@@ -1509,12 +1507,10 @@ function openTeamEditModal(){
     { label:'교육국',   names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경'] },
     { label:'행정/선교',names:['김동권','최성은'] },
   ];
-  // DB에만 있는 추가 이용자
   const known = DEPT_SECTIONS_EDIT.flatMap(s=>s.names);
   const extra = allMembers.filter(u=>!known.includes(u.name)).map(u=>u.name);
   if(extra.length) DEPT_SECTIONS_EDIT.push({ label:'기타', names:extra });
 
-  // ── 각 행 렌더 ──
   function renderRow(name){
     const u = allMembers.find(m=>m.name===name);
     const isPending = !u;
@@ -1522,13 +1518,13 @@ function openTeamEditModal(){
     const dMeta = DEPT_META[deptKey] || { color:'#888', bg:'#f0f0ea', border:'#e0e0e0' };
     const inTeam = myTeam.includes(name);
     const rowBg = inTeam ? 'background:#EAF3DE;' : '';
+    const btnStyle = inTeam
+      ? 'width:24px;height:24px;border-radius:50%;border:none;background:#3B6D11;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s'
+      : 'width:24px;height:24px;border-radius:50%;border:1.5px solid #185FA5;background:none;color:#185FA5;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
+    const btnContent = inTeam ? '✓' : '+';
     const btnHtml = isPending
       ? `<span style="font-size:10px;color:var(--color-text-secondary)">준비중</span>`
-      : inTeam
-        ? `<button data-name="${name}" onclick="teamRowToggle(this)"
-             style="width:24px;height:24px;border-radius:50%;border:none;background:#3B6D11;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s">✓</button>`
-        : `<button data-name="${name}" onclick="teamRowToggle(this)"
-             style="width:24px;height:24px;border-radius:50%;border:1.5px solid #185FA5;background:none;color:#185FA5;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s">+</button>`;
+      : `<button data-name="${name}" onclick="teamRowToggle(this)" style="${btnStyle}">${btnContent}</button>`;
     return `<div data-row="${name}" style="display:flex;align-items:center;gap:10px;padding:9px 14px;${rowBg}border-top:0.5px solid var(--color-border-tertiary);transition:background .2s">
       <div style="width:30px;height:30px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:${dMeta.color};flex-shrink:0;${isPending?'opacity:.4':''}">${name[0]}</div>
       <span style="flex:1;font-size:13px;font-weight:${inTeam?'500':'400'};color:var(--color-text-primary);${isPending?'opacity:.4':''}">${name}</span>
@@ -1536,7 +1532,6 @@ function openTeamEditModal(){
     </div>`;
   }
 
-  // ── 부서별 섹션 HTML ──
   const sectionsHtml = DEPT_SECTIONS_EDIT.map(sec=>{
     const dMeta = DEPT_META[sec.label] || { color:'#888' };
     return `<div>
@@ -1545,19 +1540,19 @@ function openTeamEditModal(){
     </div>`;
   }).join('');
 
-  // ── 패널 생성 (position:fixed 아님 — 페이지 하단에 슬라이드) ──
   const panel = document.createElement('div');
   panel.id = 'team-edit-modal';
-  panel.style.cssText = `
-    position:fixed;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);
-    width:100%;max-width:480px;max-height:78vh;
-    background:var(--color-background-primary);
-    border-radius:16px 16px 0 0;
-    border-top:0.5px solid var(--color-border-tertiary);
-    box-shadow:0 -4px 20px rgba(0,0,0,.08);
-    z-index:9999;display:flex;flex-direction:column;
-    transition:transform .28s cubic-bezier(.32,1,.28,1);
-  `;
+  panel.style.cssText = [
+    'position:fixed;bottom:0;left:50%;',
+    'transform:translateX(-50%) translateY(100%);',
+    'width:100%;max-width:480px;max-height:78vh;',
+    'background:var(--color-background-primary);',
+    'border-radius:16px 16px 0 0;',
+    'border-top:0.5px solid var(--color-border-tertiary);',
+    'box-shadow:0 -4px 20px rgba(0,0,0,.08);',
+    'z-index:9999;display:flex;flex-direction:column;',
+    'transition:transform .28s cubic-bezier(.32,1,.28,1);',
+  ].join('');
 
   panel.innerHTML = `
     <div style="display:flex;justify-content:center;padding:10px 0 6px;flex-shrink:0">
@@ -1572,15 +1567,12 @@ function openTeamEditModal(){
     </div>
     <div style="overflow-y:auto;flex:1;padding-bottom:env(safe-area-inset-bottom,0px)">
       ${sectionsHtml}
-    </div>
-  `;
+    </div>`;
 
   document.body.appendChild(panel);
-  // 슬라이드 인 애니메이션
   requestAnimationFrame(()=>{ panel.style.transform='translateX(-50%) translateY(0)'; });
 }
 
-// ── 패널 닫기 ──
 function closeTeamEditPanel(){
   const panel = document.getElementById('team-edit-modal');
   if(!panel) return;
@@ -1588,61 +1580,44 @@ function closeTeamEditPanel(){
   setTimeout(()=>panel.remove(), 280);
 }
 
-// ── 행 토글 (팝업 재열기 없이 즉시 반응) ──
 function teamRowToggle(btn){
   const name = btn.dataset.name;
   const row = btn.closest('[data-row]');
   const inTeam = myTeam.includes(name);
   if(inTeam){
-    myTeam = myTeam.filter(n=>n!==name);
-    // 행 배경 → 흰색
-    row.style.background = '';
-    const span = row.querySelector('span[style*="font-weight"]');
-    if(span) span.style.fontWeight = '400';
-    // 버튼 → + 상태
-    btn.textContent = '+';
-    btn.style.border = '1.5px solid #185FA5';
-    btn.style.background = 'none';
-    btn.style.color = '#185FA5';
-    btn.style.fontSize = '16px';
+    myTeam = myTeam.filter(n=>n!==name); saveMyTeam();
+    row.style.background='';
+    row.querySelector('span').style.fontWeight='400';
+    btn.textContent='+';
+    btn.style.cssText='width:24px;height:24px;border-radius:50%;border:1.5px solid #185FA5;background:none;color:#185FA5;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
     btn.animate([{transform:'scale(1)'},{transform:'scale(.75)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
   } else {
-    myTeam.push(name);
-    // 행 배경 → 초록
-    row.style.background = '#EAF3DE';
-    const span = row.querySelector('span');
-    if(span) span.style.fontWeight = '500';
-    // 버튼 → ✓ 상태
-    btn.textContent = '✓';
-    btn.style.border = 'none';
-    btn.style.background = '#3B6D11';
-    btn.style.color = '#fff';
-    btn.style.fontSize = '11px';
+    myTeam.push(name); saveMyTeam();
+    row.style.background='#EAF3DE';
+    row.querySelector('span').style.fontWeight='500';
+    btn.textContent='✓';
+    btn.style.cssText='width:24px;height:24px;border-radius:50%;border:none;background:#3B6D11;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
     btn.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});
   }
   saveMyTeam();
-  // 카운트 배지 업데이트
   const countEl = document.getElementById('team-edit-count');
-  if(countEl) countEl.textContent = `${myTeam.length}명 선택됨`;
-  renderSearchFilters();
-  renderCalendar();
+  if(countEl) countEl.textContent=`${myTeam.length}명 선택됨`;
+  renderSearchFilters(); renderCalendar();
 }
-
 
 function addToTeam(name, btnEl){
   if(myTeam.includes(name)) return;
   myTeam.push(name); saveMyTeam();
   renderSearchFilters(); renderSearchResult(); renderCalendar();
-  // 소통탭 버튼이 넘어온 경우 즉시 갱신
   if(btnEl){
-    const row = btnEl.closest('[data-row]') || btnEl.closest('div[style*="display:flex"]');
+    const row = btnEl.closest('[data-row]') || btnEl.parentElement;
     if(row) row.style.background='#EAF3DE';
-    btnEl.textContent='✓'; btnEl.style.border='none'; btnEl.style.background='#3B6D11';
-    btnEl.style.color='#fff'; btnEl.style.fontSize='11px';
+    btnEl.textContent='✓';
+    btnEl.style.cssText='width:24px;height:24px;border-radius:50%;border:none;background:#3B6D11;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
     btnEl.setAttribute('onclick', `event.stopPropagation();removeFromTeam('${name}',this)`);
     btnEl.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});
   } else {
-    renderMemberList?.();
+    renderFeedTab?.();
   }
 }
 
@@ -1650,14 +1625,14 @@ function removeFromTeam(name, btnEl){
   myTeam = myTeam.filter(n=>n!==name); saveMyTeam();
   renderSearchFilters(); renderSearchResult(); renderCalendar();
   if(btnEl){
-    const row = btnEl.closest('[data-row]') || btnEl.closest('div[style*="display:flex"]');
+    const row = btnEl.closest('[data-row]') || btnEl.parentElement;
     if(row) row.style.background='';
-    btnEl.textContent='+'; btnEl.style.border='1.5px solid #185FA5'; btnEl.style.background='none';
-    btnEl.style.color='#185FA5'; btnEl.style.fontSize='16px';
+    btnEl.textContent='+';
+    btnEl.style.cssText='width:24px;height:24px;border-radius:50%;border:1.5px solid #185FA5;background:none;color:#185FA5;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
     btnEl.setAttribute('onclick', `event.stopPropagation();addToTeam('${name}',this)`);
     btnEl.animate([{transform:'scale(1)'},{transform:'scale(.75)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
   } else {
-    renderMemberList?.();
+    renderFeedTab?.();
   }
 }
 // 파트별 고정 순서
