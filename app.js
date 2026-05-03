@@ -2447,7 +2447,10 @@ function openUserDm(userId){
   }
   updateFeedBadge();
 
-  // 모달 열기 (관리자 채팅 모달 재활용 or 별도 모달)
+  // main-screen이 position:relative여야 absolute 자식이 정확히 덮임
+  const container = $('main-screen');
+  if(container) container.style.position = 'relative';
+
   const modal = $('user-dm-modal');
   if(modal){
     $('user-dm-target-name').textContent = user.name + (isAdminRole(user)?' (관리자)':'');
@@ -2538,28 +2541,43 @@ function injectUserDmModal(){
   if($('user-dm-modal')) return;
   const modal = document.createElement('div');
   modal.id = 'user-dm-modal';
-  modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:500;flex-direction:column;background:var(--color-background-primary)';
+  // chat-modal과 동일하게 main-screen 내부에 absolute로 배치
+  // → 앱 컨테이너(max-width) 안에 정확히 덮이고, 배경 완전 불투명
+  modal.style.cssText = [
+    'display:none',
+    'position:absolute',
+    'inset:0',
+    'z-index:200',
+    'flex-direction:column',
+    'background:#fff',   // 하드코딩 흰색 — CSS 변수 미적용 방지
+    'overflow:hidden',
+  ].join(';');
   modal.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 10px;background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-secondary);position:sticky;top:0;z-index:1">
-      <button onclick="closeUserDmModal()" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <!-- 헤더 -->
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 10px;background:#fff;border-bottom:1px solid #f0f0ea;flex-shrink:0">
+      <button onclick="closeUserDmModal()" style="width:34px;height:34px;border-radius:50%;border:none;background:#f5f5f3;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="#444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <div style="flex:1">
-        <div id="user-dm-target-name" style="font-size:15px;font-weight:600;color:var(--color-text-primary)"></div>
-        <div style="font-size:11px;color:var(--color-text-secondary)">개인 메시지</div>
+      <div style="flex:1;min-width:0">
+        <div id="user-dm-target-name" style="font-size:15px;font-weight:600;color:#1a1a18;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <div style="font-size:11px;color:#888;margin-top:1px">개인 메시지</div>
       </div>
     </div>
-    <div id="user-dm-messages" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;background:var(--color-background-secondary)"></div>
-    <div style="padding:10px 12px 16px;background:var(--color-background-primary);border-top:0.5px solid var(--color-border-secondary);display:flex;gap:8px;align-items:flex-end">
+    <!-- 메시지 목록 -->
+    <div id="user-dm-messages" style="flex:1;overflow-y:auto;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch"></div>
+    <!-- 입력창 -->
+    <div style="padding:8px 12px 12px;background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
       <textarea id="user-dm-input" rows="1" placeholder="메시지 입력..."
-        style="flex:1;padding:10px 13px;border:1.5px solid var(--color-border-secondary);border-radius:20px;font-size:14px;resize:none;max-height:100px;overflow-y:auto;background:var(--color-background-secondary);color:var(--color-text-primary);font-family:inherit;line-height:1.4;outline:none"
+        style="flex:1;padding:10px 13px;border:1.5px solid #e8e8e4;border-radius:20px;font-size:14px;resize:none;max-height:100px;overflow-y:auto;background:#f8f8f6;color:#1a1a18;font-family:inherit;line-height:1.4;outline:none;-webkit-appearance:none"
         oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendUserDm();}"></textarea>
-      <button onclick="sendUserDm()" style="width:38px;height:38px;border-radius:50%;background:#185FA5;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:transform .1s" onmousedown="this.style.transform='scale(.93)'" onmouseup="this.style.transform=''">
+      <button onclick="sendUserDm()" style="width:38px;height:38px;border-radius:50%;background:#185FA5;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" onmousedown="this.style.opacity='.8'" onmouseup="this.style.opacity='1'" ontouchend="this.style.opacity='1'">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-5-5 12-2-4.5L2 8z" fill="#fff"/></svg>
       </button>
     </div>`;
-  document.body.appendChild(modal);
+  // chat-modal과 동일하게 main-screen 내부에 삽입
+  const container = $('main-screen') || document.body;
+  container.appendChild(modal);
 }
 
 function fmtTime(s){
