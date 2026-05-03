@@ -2181,6 +2181,18 @@ function renderChatListHtml(){
           <span style="font-size:14px;font-weight:500">${admin.name} <span style="font-size:11px;color:#185FA5;font-weight:400">관리자</span></span>
           <div style="display:flex;align-items:center;gap:6px">
             ${unread?`<span class="cnt-badge">${unread}</span>`:''}
+             ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
+           </div>
+         </div>
+         <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+           ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'아직 대화가 없습니다'}
+         </div>
+       </div>
+     </div>`;
+  }
+  return html;
+}
+
 function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 
 // 배지: 받은 읽지 않은 DM 수
