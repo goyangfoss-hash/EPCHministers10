@@ -2069,68 +2069,118 @@ function toggleKeepLogin(toggleEl){
   }
 }
 // ══════════════════════════════════════════════════
+let feedTab = 'members'; // 'members' | 'chat'
+
 function renderFeedTab(){
   const el=$('feed-list'); if(!el) return;
+
+  const segHtml=`
+    <div style="display:flex;gap:0;background:var(--color-background-secondary);border-radius:8px;padding:2px;margin-bottom:14px">
+      <button onclick="setFeedTab('members')" style="flex:1;padding:7px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;background:${feedTab==='members'?'var(--color-background-primary)':'transparent'};color:${feedTab==='members'?'#185FA5':'var(--color-text-secondary)'}">사역자 목록</button>
+      <button onclick="setFeedTab('chat')" style="flex:1;padding:7px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;background:${feedTab==='chat'?'var(--color-background-primary)':'transparent'};color:${feedTab==='chat'?'#185FA5':'var(--color-text-secondary)'}">관리자 메시지</button>
+    </div>`;
+
+  if(feedTab==='members'){
+    el.innerHTML = segHtml + renderMemberListHtml();
+  } else {
+    el.innerHTML = segHtml + renderChatListHtml();
+  }
+}
+
+function setFeedTab(tab){
+  feedTab = tab;
+  renderFeedTab();
+}
+
+// ★ 사역자 목록 (파트별)
+function renderMemberListHtml(){
+  const DEPT_SECTIONS=[
+    {label:'담임목사', names:['박지현']},
+    {label:'교구', names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
+    {label:'청년국', names:['허남홍','서동빈','손우성']},
+    {label:'교육국', names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
+    {label:'행정/선교', names:['김동권','최성은']},
+  ];
+
+  let html='';
+  DEPT_SECTIONS.forEach(sec=>{
+    const dMeta=DEPT_META[sec.label]||{color:'#888',bg:'#f0f0ea',border:'#e0e0e0'};
+    html+=`<div style="font-size:10px;font-weight:500;color:${dMeta.color};padding:8px 2px 4px;letter-spacing:.5px">${sec.label}</div>
+    <div style="background:var(--color-background-primary);border-radius:12px;overflow:hidden;border:1px solid ${dMeta.border};margin-bottom:10px">`;
+
+    sec.names.forEach((name,idx)=>{
+      const u=allMembers.find(m=>m.name===name);
+      const isPending=!u;
+      const isInTeam=myTeam.includes(name);
+      const avHtml=u?.avatar
+        ?`<img src="${u.avatar}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${dMeta.border}">`
+        :`<div style="width:34px;height:34px;border-radius:50%;background:${isPending?'#f0f0ea':dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:${isPending?'#bbb':dMeta.color};flex-shrink:0">${name[0]}</div>`;
+
+      const teamBtn = isPending
+        ? `<div style="width:28px;height:28px;border-radius:50%;border:1px solid #e0e0e0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#ccc;opacity:.4">+</div>`
+        : isInTeam
+          ? `<button onclick="event.stopPropagation();removeFromTeam('${name}')" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #3B6D11;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:12px;color:#3B6D11;cursor:pointer">✓</button>`
+          : `<button onclick="event.stopPropagation();addToTeam('${name}')" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #185FA5;background:none;display:flex;align-items:center;justify-content:center;font-size:16px;color:#185FA5;cursor:pointer">+</button>`;
+
+      html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:${idx<sec.names.length-1?'0.5px solid var(--color-border-tertiary)':'none'};${isPending?'opacity:.4':''}">
+        ${avHtml}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${name}</div>
+          <div style="font-size:10px;color:var(--color-text-secondary);margin-top:1px">${u?.title||(isPending?'준비중':'')}</div>
+        </div>
+        ${teamBtn}
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+  return html;
+}
+
+// ★ 관리자 메시지
+function renderChatListHtml(){
+  let html='';
   if(isAdmin()){
-    // 관리자: 전체 이용자 대화 목록
     const members=allMembers.filter(u=>!isAdminRole(u));
-    if(!members.length){el.innerHTML='<p class="empty-state">이용자가 없습니다.</p>';return;}
-    let html='<div class="list-section-title">이용자 채팅</div>';
+    if(!members.length) return '<p class="empty-state">이용자가 없습니다.</p>';
     members.forEach((u,i)=>{
       const msgs=chatMessages[u.id]||[];
       const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
       const last=msgs[msgs.length-1];
       const c=PALETTE[i%PALETTE.length];
-      // ★ 프로필 사진 표시
       const avHtml=u.avatar
-        ?`<img src="${u.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #f0f0ea">`
-        :`<div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:${c.text};flex-shrink:0;border:2px solid ${c.border}">${u.name[0]}</div>`;
+        ?`<img src="${u.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea">`
+        :`<div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:${c.text};flex-shrink:0">${u.name[0]}</div>`;
       html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${u.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
         ${avHtml}
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-            <span style="font-size:14px;font-weight:700">${u.name}</span>
+            <span style="font-size:14px;font-weight:500">${u.name}</span>
             <div style="display:flex;align-items:center;gap:6px">
               ${unread?`<span class="cnt-badge">${unread}</span>`:''}
-              ${last?`<span style="font-size:10px;color:#bbb">${fmtTime(last.created_at)}</span>`:''}
+              ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
             </div>
           </div>
-          <div style="font-size:12px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-            ${last?`<span style="color:${last.from_id===cu.id?'#aaa':'#555'}">${last.from_id===cu.id?'나: ':''}${esc(last.content)}</span>`:'<span style="color:#ccc">아직 대화가 없습니다</span>'}
+          <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'아직 대화가 없습니다'}
           </div>
         </div>
       </div>`;
     });
-    el.innerHTML=html;
   } else {
-    // ★ 이용자: 관리자와의 대화 목록 표시 (카드 형태)
     const admin=allMembers.find(u=>isAdminRole(u));
-    if(!admin){ el.innerHTML='<p class="empty-state">관리자를 찾을 수 없습니다.</p>'; return; }
+    if(!admin) return '<p class="empty-state">관리자를 찾을 수 없습니다.</p>';
     const msgs=chatMessages[admin.id]||[];
     const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
     const last=msgs[msgs.length-1];
-    let html='<div class="list-section-title">관리자와의 대화</div>';
     html+=`<div class="list-card${unread?' feed-card-new':''}" onclick="openChat(${admin.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
       ${admin.avatar
-        ?`<img src="${admin.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #dbeafe">`
-        :`<div style="width:42px;height:42px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;flex-shrink:0">${admin.name[0]}</div>`}
+        ?`<img src="${admin.avatar}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #dbeafe">`
+        :`<div style="width:42px;height:42px;border-radius:50%;background:#185FA5;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:#fff;flex-shrink:0">${admin.name[0]}</div>`}
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-          <span style="font-size:14px;font-weight:700">${admin.name} <span style="font-size:11px;color:#185FA5;font-weight:400">관리자</span></span>
+          <span style="font-size:14px;font-weight:500">${admin.name} <span style="font-size:11px;color:#185FA5;font-weight:400">관리자</span></span>
           <div style="display:flex;align-items:center;gap:6px">
             ${unread?`<span class="cnt-badge">${unread}</span>`:''}
-            ${last?`<span style="font-size:10px;color:#bbb">${fmtTime(last.created_at)}</span>`:''}
-          </div>
-        </div>
-        <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          ${last?`<span style="color:${last.from_id===cu.id?'#aaa':'#555'}">${last.from_id===cu.id?'나: ':''}${esc(last.content)}</span>`:'<span style="color:#bbb">관리자에게 먼저 말을 걸어보세요 💬</span>'}
-        </div>
-      </div>
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-    </div>`;
-    el.innerHTML=html;
-  }
-}
 function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 
 // 배지: 받은 읽지 않은 DM 수
