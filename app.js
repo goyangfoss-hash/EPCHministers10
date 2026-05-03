@@ -33,19 +33,14 @@ const getMonthData = (y, m) => allSchedules[y]?.[m] || {};
 const curData = () => getMonthData(curY, curM + 1);
 let allMembers = [], notices = [], feedPosts = [];
 
-// ── 표기 정규화: '담임목사님' ↔ '담임목사' 동일 처리 ──
+// ── '담임목사님' ↔ '담임목사' 동일 처리 ──
 function normalizeStr(s){ return (s||'').replace(/담임목사님/g,'담임목사'); }
 function normalizeMember(u){
   if(!u) return u;
-  return {
-    ...u,
-    department: normalizeStr(u.department),
-    title: normalizeStr(u.title),
-  };
+  return {...u, department:normalizeStr(u.department), title:normalizeStr(u.title)};
 }
 function normalizeMembers(arr){ return (arr||[]).map(normalizeMember); }
-// 사역 타입 문자열도 정규화 (예: '[담임목사님]설교' → '[담임목사]설교')
-function normalizeType(t){ return normalizeStr(t); }
+function normalizeType(t){ return normalizeStr(t||''); }
 let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
 let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth() + 1;
 let srchYear = 0, srchMonth = 0, srchName = '';
@@ -159,7 +154,7 @@ const PALETTE = [
 let typeColorMap = {};
 function assignColors(types){ (types||[]).forEach(t=>{if(t&&!typeColorMap[t])typeColorMap[t]=getTypeColor(t);}); }
 function resetTypeColors(){ typeColorMap={}; assignColors(collectAllTypes()); }
-const tc = t => { const nt=normalizeType(t); return typeColorMap[nt] || getTypeColor(nt); };
+const tc = t => { const nt=normalizeType(t); return typeColorMap[nt]||getTypeColor(nt); };
 function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEach(ym=>Object.values(ym).forEach(nm=>Object.values(nm).forEach(dm=>Object.values(dm).forEach(t=>t&&s.add(t))))); return[...s]; }
 
 // ══════════════════════════════════════════════════
@@ -913,7 +908,7 @@ const CATEGORIES = [
 
 // ★ 요일 + 사역유형으로 카테고리 판별
 function getCategory(type, year, month, day){
-  type = normalizeType(type);
+  type=normalizeType(type);
   if(!type) return 'all';
   // ★ 새벽/저녁 통합 유형 처리
   const isCombined = type.includes('새벽/저녁') || type.includes('새벽+저녁');
@@ -1204,12 +1199,39 @@ function renderDayModal(){
   const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:normalizeType(d[n][String(day)])}));
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
 
-  // 사역자 목록
+  const SHIFT_ORDER = {
+    0: ['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],
+    1: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    2: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    3: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],
+    4: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    5: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],
+    6: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+  };
+  const dow = new Date(year, month-1, day).getDay();
+  const orderList = SHIFT_ORDER[dow] || [];
+  function shiftRank(type){
+    const t = normalizeType(type).replace(/\s/g,'');
+    const exactIdx = orderList.findIndex(o => o.replace(/\s/g,'') === t);
+    if(exactIdx !== -1) return exactIdx;
+    const partIdx = orderList.findIndex(o => { const oc=o.replace(/\s/g,''); return t.includes(oc)||oc.includes(t); });
+    return partIdx === -1 ? 999 : partIdx;
+  }
+  const sorted = [...workers].sort((a,b) => shiftRank(a.type) - shiftRank(b.type));
+
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
-  wHtml+=workers.length?workers.map(w=>{const c=tc(w.type);return `<div class="day-worker-row"><div style="display:flex;align-items:center;gap:9px"><div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div><span class="worker-nm">${w.name}</span></div><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
+  wHtml+=sorted.length?sorted.map(w=>{
+    const c=tc(w.type);
+    return `<div class="day-worker-row">
+      <span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="worker-nm">${w.name}</span>
+        <div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div>
+      </div>
+    </div>`;
+  }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
 
-  // 알림 설정 (내 사역일만)
   let alarmHtml='';
   if(myType){
     alarmHtml=`<div class="modal-section">
@@ -1221,7 +1243,6 @@ function renderDayModal(){
       ${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}
     </div>`;
   }
-
   $('modal-body').innerHTML=wHtml+alarmHtml;
 }
 function closeModalById(id){$(id).style.display='none';if(id==='comment-modal')modalDate=null;}
@@ -1514,94 +1535,132 @@ function setSrch(key,v2){
 // ★ 내 팀 편집 모달 (개선)
 function openTeamEditModal(){
   document.getElementById('team-edit-modal')?.remove();
-  const modal = document.createElement('div');
-  modal.id = 'team-edit-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+  document.getElementById('team-edit-overlay')?.remove();
 
-  // 전체 사역자 (파트 순서대로)
-  const allOrderedNames = [
-    '박지현',
-    '안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수',
-    '허남홍','서동빈','손우성',
-    '김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경',
-    '김동권','최성은'
-  ];
-  // DB에 있는 추가 이용자
-  allMembers.forEach(u=>{ if(!allOrderedNames.includes(u.name)) allOrderedNames.push(u.name); });
+  const overlay = document.createElement('div');
+  overlay.id = 'team-edit-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:9998;backdrop-filter:blur(3px);transition:opacity .25s';
+  overlay.addEventListener('click', closeTeamEditPanel);
+  document.body.appendChild(overlay);
 
-  const currentTeamHtml = myTeam.length
-    ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px">
-        ${myTeam.map(n=>`
-          <div style="display:flex;align-items:center;gap:5px;background:#EAF3DE;border:1px solid #C0DD97;border-radius:20px;padding:4px 8px 4px 6px">
-            <span style="font-size:12px;font-weight:500;color:#3B6D11">${n}</span>
-            <button onclick="removeFromTeam('${n}')" style="border:none;background:none;color:#E24B4A;cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>
-          </div>`).join('')}
-      </div>`
-    : `<p style="font-size:12px;color:var(--color-text-secondary);padding:8px 0">아직 팀원이 없어요</p>`;
-
-  const addListHtml = allOrderedNames
-    .filter(n=>!myTeam.includes(n))
-    .map(n=>{
-      const u = allMembers.find(m=>m.name===n);
-      const isPending = !u;
-      const titleText = u?.title || '';
+  function buildRows(){
+    if(!myTeam.length){
+      return `<div style="padding:36px 16px;text-align:center">
+        <div style="font-size:30px;margin-bottom:10px">👥</div>
+        <div style="font-size:13px;color:#888">아직 팀원이 없어요</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">소통 탭에서 팀원을 추가해보세요</div>
+      </div>`;
+    }
+    return myTeam.map(name => {
+      const u = allMembers.find(m=>m.name===name);
       const deptKey = u?.department || '';
-      const dMeta = DEPT_META[deptKey] || {color:'#888',bg:'#f0f0ea'};
-      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:0.5px solid var(--color-border-tertiary);${isPending?'opacity:.4':''}">
-        <div style="width:32px;height:32px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:${dMeta.color};flex-shrink:0">${n[0]}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500">${n}</div>
-          ${titleText?`<div style="font-size:10px;color:var(--color-text-secondary)">${titleText}</div>`:''}
-        </div>
-        ${!isPending
-          ?`<button onclick="addToTeam('${n}')" style="flex-shrink:0;padding:5px 12px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:500;cursor:pointer">추가</button>`
-          :`<span style="font-size:10px;color:#bbb">준비중</span>`}
+      const dMeta = DEPT_META[deptKey] || {color:'#888', bg:'#f0f0f0'};
+      return `<div id="team-row-${name.replace(/\s/g,'_')}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:0.5px solid #f0f0f0;transition:background .15s;background:#fff">
+        <div style="width:36px;height:36px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:${dMeta.color};flex-shrink:0">${name[0]}</div>
+        <span style="flex:1;font-size:14px;font-weight:400;color:#1a1a1a">${name}</span>
+        <button onclick="teamRemoveAsk(this,'${name}')"
+          style="width:28px;height:28px;border-radius:50%;border:1.5px solid #E24B4A;background:none;color:#E24B4A;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">×</button>
       </div>`;
     }).join('');
+  }
 
-  modal.innerHTML=`
-    <div style="background:var(--color-background-primary);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.2)">
-      <div style="padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:0.5px solid var(--color-border-tertiary)">
-        <div>
-          <div style="font-size:15px;font-weight:600">내 팀 편집</div>
-          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">팀원을 추가하면 캘린더에서도 함께 확인돼요</div>
-        </div>
-        <button onclick="document.getElementById('team-edit-modal').remove()" style="border:none;background:var(--color-background-secondary);width:28px;height:28px;border-radius:50%;font-size:16px;color:var(--color-text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+  const panel = document.createElement('div');
+  panel.id = 'team-edit-modal';
+  panel.style.cssText = [
+    'position:fixed;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);',
+    'width:100%;max-width:480px;background:#ffffff;border-radius:20px 20px 0 0;',
+    'box-shadow:0 -8px 40px rgba(0,0,0,.22);z-index:9999;display:flex;flex-direction:column;',
+    'transition:transform .28s cubic-bezier(.32,1,.28,1);max-height:72vh;',
+  ].join('');
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:center;padding:12px 0 4px;flex-shrink:0;cursor:pointer" onclick="closeTeamEditPanel()">
+      <div style="width:40px;height:4px;background:#e0e0e0;border-radius:2px"></div>
+    </div>
+    <div style="padding:6px 18px 13px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid #f0f0f0">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px;font-weight:700;color:#1a1a1a">내 팀</span>
+        <span id="team-edit-count" style="font-size:12px;color:#666;background:#f4f4f4;padding:2px 9px;border-radius:12px;font-weight:500">${myTeam.length}명</span>
       </div>
-      <div style="overflow-y:auto;flex:1">
-        <div style="padding:12px 16px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary)">
-          <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:8px">현재 팀원 ${myTeam.length}명</div>
-          <div id="current-team-list">${currentTeamHtml}</div>
-        </div>
-        <div>
-          <div style="padding:10px 16px 6px;font-size:11px;font-weight:600;color:var(--color-text-secondary)">추가하기</div>
-          ${addListHtml}
-        </div>
-      </div>
+      <button onclick="closeTeamEditPanel()" style="border:none;background:none;font-size:14px;font-weight:600;color:#185FA5;cursor:pointer;padding:4px 2px">완료</button>
+    </div>
+    <div id="team-edit-list" style="overflow-y:auto;flex:1;background:#fff;padding-bottom:env(safe-area-inset-bottom,16px)">
+      ${buildRows()}
     </div>`;
-  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
-  document.body.appendChild(modal);
+
+  document.body.appendChild(panel);
+  requestAnimationFrame(()=>{ panel.style.transform='translateX(-50%) translateY(0)'; });
 }
 
-
-function addToTeam(name){
-  if(!myTeam.includes(name)){ myTeam.push(name); saveMyTeam(); }
-  document.getElementById('team-edit-modal')?.remove();
-  openTeamEditModal();
-  renderSearchFilters();
-  renderSearchResult();
-  renderCalendar(); // 캘린더도 즉시 반영
+function closeTeamEditPanel(){
+  const panel=document.getElementById('team-edit-modal');
+  const overlay=document.getElementById('team-edit-overlay');
+  if(panel){panel.style.transform='translateX(-50%) translateY(100%)';setTimeout(()=>panel.remove(),280);}
+  if(overlay){overlay.style.opacity='0';setTimeout(()=>overlay.remove(),280);}
 }
 
-function removeFromTeam(name){
-  myTeam = myTeam.filter(n=>n!==name);
-  saveMyTeam();
-  document.getElementById('team-edit-modal')?.remove();
-  openTeamEditModal();
-  renderSearchFilters();
-  renderSearchResult();
-  renderCalendar();
+function teamRemoveAsk(btn,name){
+  const row=document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
+  if(!row||row.dataset.confirming)return;
+  row.dataset.confirming='1'; row.style.background='#FFF5F5'; btn.style.display='none';
+  const confirm=document.createElement('div');
+  confirm.style.cssText='display:flex;align-items:center;gap:7px;flex-shrink:0';
+  confirm.innerHTML=`
+    <span style="font-size:11px;color:#E24B4A;font-weight:500;white-space:nowrap">제거할까요?</span>
+    <button onclick="teamRemoveCancel(this,'${name}')" style="padding:5px 11px;border-radius:8px;border:1px solid #e0e0e0;background:#f7f7f7;font-size:11px;color:#555;cursor:pointer;font-weight:500">취소</button>
+    <button onclick="teamRemoveConfirm(this,'${name}')" style="padding:5px 11px;border-radius:8px;border:none;background:#E24B4A;font-size:11px;color:#fff;cursor:pointer;font-weight:600">제거</button>`;
+  row.appendChild(confirm);
 }
+
+function teamRemoveCancel(btn,name){
+  const row=document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
+  if(!row)return;
+  delete row.dataset.confirming; row.style.background='#fff';
+  btn.closest('div').remove();
+  const xBtn=row.querySelector('button[onclick*="teamRemoveAsk"]');
+  if(xBtn)xBtn.style.display='';
+}
+
+function teamRemoveConfirm(btn,name){
+  const row=document.getElementById('team-edit-modal')?.querySelector(`#team-row-${name.replace(/\s/g,'_')}`);
+  if(row){row.style.transition='opacity .18s,transform .18s';row.style.opacity='0';row.style.transform='translateX(24px)';setTimeout(()=>row.remove(),190);}
+  myTeam=myTeam.filter(n=>n!==name);saveMyTeam();
+  renderSearchFilters();renderSearchResult();renderCalendar();
+  const countEl=document.getElementById('team-edit-count');
+  if(countEl)countEl.textContent=`${myTeam.length}명`;
+  if(!myTeam.length){setTimeout(()=>{
+    const list=document.getElementById('team-edit-list');
+    if(list)list.innerHTML=`<div style="padding:36px 16px;text-align:center"><div style="font-size:30px;margin-bottom:10px">👥</div><div style="font-size:13px;color:#888">아직 팀원이 없어요</div><div style="font-size:11px;color:#aaa;margin-top:4px">소통 탭에서 팀원을 추가해보세요</div></div>`;
+  },200);}
+}
+
+function addToTeam(name,btnEl){
+  if(myTeam.includes(name))return;
+  myTeam.push(name);saveMyTeam();
+  renderSearchFilters();renderSearchResult();renderCalendar();
+  if(btnEl){
+    const row=btnEl.closest('[data-row]')||btnEl.parentElement;
+    if(row)row.style.background='#EAF3DE';
+    btnEl.textContent='✓';
+    btnEl.style.cssText='width:24px;height:24px;border-radius:50%;border:none;background:#3B6D11;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
+    btnEl.setAttribute('onclick',`event.stopPropagation();removeFromTeam('${name}',this)`);
+    btnEl.animate([{transform:'scale(1)'},{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:220,easing:'ease-out'});
+  } else {renderFeedTab?.();}
+}
+
+function removeFromTeam(name,btnEl){
+  myTeam=myTeam.filter(n=>n!==name);saveMyTeam();
+  renderSearchFilters();renderSearchResult();renderCalendar();
+  if(btnEl){
+    const row=btnEl.closest('[data-row]')||btnEl.parentElement;
+    if(row)row.style.background='';
+    btnEl.textContent='+';
+    btnEl.style.cssText='width:24px;height:24px;border-radius:50%;border:1.5px solid #185FA5;background:none;color:#185FA5;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s';
+    btnEl.setAttribute('onclick',`event.stopPropagation();addToTeam('${name}',this)`);
+    btnEl.animate([{transform:'scale(1)'},{transform:'scale(.75)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
+  } else {renderFeedTab?.();}
+}
+
 // 파트별 고정 순서
 const DEPT_NAMES = {
   '담임목사': ['박지현'],
@@ -2196,18 +2255,17 @@ function renderChatListHtml(){
           <span style="font-size:14px;font-weight:500">${admin.name} <span style="font-size:11px;color:#185FA5;font-weight:400">관리자</span></span>
           <div style="display:flex;align-items:center;gap:6px">
             ${unread?`<span class="cnt-badge">${unread}</span>`:''}
-             ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
-           </div>
-         </div>
-         <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-           ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'아직 대화가 없습니다'}
-         </div>
-       </div>
-     </div>`;
+              ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'아직 대화가 없습니다'}
+          </div>
+        </div>
+      </div>`;
   }
   return html;
 }
-
 function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 
 // 배지: 받은 읽지 않은 DM 수
