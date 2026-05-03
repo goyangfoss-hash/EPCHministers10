@@ -156,7 +156,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const raw = localStorage.getItem('ws_session');
   if (raw) {
     try { const s=JSON.parse(raw); if (await doLoginWith(s.name,s.phone,s.birth,true)) return; } catch {}
-    localStorage.removeItem('ws_session');
+    localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
   }
   hide('loading'); showScreen('login-screen');
 });
@@ -322,7 +322,7 @@ async function doRegister() {
 function doLogout() {
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
   if(rtChannel){sb?.removeChannel(rtChannel);rtChannel=null;}
-  cu=null; localStorage.removeItem('ws_session');
+  cu=null; localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
   allMembers=[];allSchedules={};notices=[];feedPosts=[];shiftComments={};commentLikes={};typeColorMap={};filterType='';
   showScreen('login-screen'); showLoginCard();
   ['l-name','l-phone','l-pw'].forEach(id=>$(id).value=''); $('l-err').style.display='none';
@@ -1188,8 +1188,6 @@ function renderDayModal(){
   const{year,month,day}=modalDate,key=`${year}-${month}-${day}`,d=getMonthData(year,month);
   const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:d[n][String(day)]}));
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
-
-  // ── 요일별 사역 순서 ──
   const SHIFT_ORDER={
     0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],
     1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
@@ -1209,8 +1207,6 @@ function renderDayModal(){
     return pi===-1?999:pi;
   }
   const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
-
-  // ── 사역내용 왼쪽, 이름+아바타 오른쪽 ──
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
   wHtml+=sorted.length?sorted.map(w=>{
     const c=tc(w.type);
@@ -1223,7 +1219,6 @@ function renderDayModal(){
     </div>`;
   }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
-
   let alarmHtml='';
   if(myType){
     alarmHtml=`<div class="modal-section">
@@ -1405,10 +1400,14 @@ function renderMyShift(){
     </div>`;
   });
 
-  // 예정 사역 목록 (완료 숨김)
+  // 예정 사역 목록 — 월별 헤더 구분
   let listHtml='';
   if(myFuture.length){
+    let lastMonth='';
     listHtml=myFuture.map(({y,m,d,type,dt})=>{
+      const monthKey=`${y}-${m}`;
+      const monthHeader=monthKey!==lastMonth?`<div style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.5px;padding:10px 2px 6px">${m}월</div>`:'';
+      lastMonth=monthKey;
       const c=tc(type);
       const dow=new Date(y,m-1,d).getDay();
       const alarm=getAlarm(y,m,d);
@@ -1416,7 +1415,7 @@ function renderMyShift(){
       const diff=Math.ceil((dt-today)/(1000*60*60*24));
       const ddayBadge=isToday?'<span style="background:#185FA5;color:#fff;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">오늘</span>':
         diff===1?'<span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">내일</span>':'';
-      return `<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between" onclick="openDayModal_myshift(${y},${m},${d})">
+      return monthHeader+`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${c?.dot||'#185FA5'};flex-shrink:0"></div>
           <div>
@@ -2091,7 +2090,7 @@ function toggleNotifSetting(key, el){
 function toggleKeepLogin(toggleEl){
   const isOn=toggleEl.classList.contains('on');
   if(isOn){
-    localStorage.removeItem('ws_session');
+    localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
     toggleEl.classList.remove('on');
     showToastMsg('로그인 유지가 해제되었습니다.');
   } else {
