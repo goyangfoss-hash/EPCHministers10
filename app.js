@@ -694,7 +694,7 @@ function renderAlarmPanel(){
       const c=tc(type);
       const isToday=dt.getTime()===today.getTime();
       const label=isToday?'오늘':'내일';
-      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
+      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
         <div style="width:32px;height:32px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📅</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${label} 사역</div>
@@ -1141,7 +1141,7 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
       bodyHtml=arr.map(d=>{
         const type=myRaw[String(d)]||'',c=type?tc(type):null;
         const key2=`${curY}-${curM+1}-${d}`,cc=(shiftComments[key2]||[]).length,alarm=getAlarm(curY,curM+1,d);
-        return `<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})">
+        return`<div class="list-card${pastDay(d)?' past':''}" onclick="openDayModal(${d})">
           <div class="list-card-header">
             <span class="list-date">${MNlabel} ${d}일 <span class="list-dow">${DN[new Date(curY,curM,d).getDay()]}</span></span>
             <div style="display:flex;gap:6px;align-items:center">
@@ -1189,23 +1189,33 @@ function renderDayModal(){
   const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:d[n][String(day)]}));
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
 
+  // ── 요일별 사역 순서 (0=일,1=월,2=화,3=수,4=목,5=금,6=토) ──
   const SHIFT_ORDER = {
-    '주일': ['[주일새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[기도]설교'],
-    '수요': ['[수요]설교','[수요]사회','[수요]자막','[수요]영상'],
-    '금요': ['[금요]설교','[금요]기도','[금요]자막','[금요]영상'],
-    '새벽': ['[새벽]설교','[새벽]인도','[새벽]방송'],
+    0: ['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],
+    1: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    2: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    3: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],
+    4: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
+    5: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],
+    6: ['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],
   };
   const dow = new Date(year, month-1, day).getDay();
-  const dayCat = dow===0?'주일': dow===3?'수요': dow===5?'금요':'새벽';
-  const orderList = SHIFT_ORDER[dayCat] || [];
+  const orderList = SHIFT_ORDER[dow] || [];
+
   function shiftRank(type){
-    const exactIdx = orderList.indexOf(type);
+    // 공백 제거 후 비교
+    const t = type.replace(/\s/g,'');
+    const exactIdx = orderList.findIndex(o => o.replace(/\s/g,'') === t);
     if(exactIdx !== -1) return exactIdx;
-    const idx = orderList.findIndex(o => type.includes(o) || o.includes(type));
-    return idx === -1 ? 999 : idx;
+    const partIdx = orderList.findIndex(o => {
+      const oc = o.replace(/\s/g,'');
+      return t.includes(oc) || oc.includes(t);
+    });
+    return partIdx === -1 ? 999 : partIdx;
   }
   const sorted = [...workers].sort((a,b) => shiftRank(a.type) - shiftRank(b.type));
 
+  // ── 사역자 목록 (사역내용 왼쪽, 이름+아바타 오른쪽) ──
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
   wHtml+=sorted.length?sorted.map(w=>{
     const c=tc(w.type);
@@ -1384,7 +1394,7 @@ function renderMyShift(){
     const isOpen=collapseState[key]===true;
     const typeItems=Object.entries(types).sort((a,b)=>b[1]-a[1]).map(([type,cnt])=>{
       const c=tc(type);
-      return `<div class="type-stat-block" style="background:${c.bg};border:1px solid ${c.border}"><div class="type-stat-name" style="color:${c.text}">${type}</div><div class="type-stat-big" style="color:${c.dot}">${cnt}</div><div class="type-stat-sub" style="color:${c.text}">회</div></div>`;
+      return`<div class="type-stat-block" style="background:${c.bg};border:1px solid ${c.border}"><div class="type-stat-name" style="color:${c.text}">${type}</div><div class="type-stat-big" style="color:${c.dot}">${cnt}</div><div class="type-stat-sub" style="color:${c.text}">회</div></div>`;
     }).join('');
     catHtml+=`<div style="margin-bottom:6px;background:#fff;border-radius:12px;overflow:hidden;border:1.5px solid #f0f0ea">
       <div onclick="toggleCollapse('${key}',this.querySelector('.collapse-btn'))" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;user-select:none">
@@ -1412,7 +1422,7 @@ function renderMyShift(){
       const diff=Math.ceil((dt-today)/(1000*60*60*24));
       const ddayBadge=isToday?'<span style="background:#185FA5;color:#fff;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">오늘</span>':
         diff===1?'<span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">내일</span>':'';
-      return `<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between" onclick="openDayModal_myshift(${y},${m},${d})">
+      return`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${c?.dot||'#185FA5'};flex-shrink:0"></div>
           <div>
@@ -1752,7 +1762,7 @@ function renderSearchResult(){
       const future = shifts.filter(s=>s.dt>=today);
       const shiftRows = shifts.slice(0,20).map(({y,m,d,type,dt})=>{
         const c2=tc(type); const isPastShift=dt<today; const dow=new Date(y,m-1,d).getDay();
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-top:0.5px solid var(--color-border-tertiary);${isPastShift?'opacity:.4':''}">
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-top:0.5px solid var(--color-border-tertiary);${isPastShift?'opacity:.4':''}">
           <span style="font-size:11px;color:var(--color-text-secondary)">${m}월 ${d}일 (${DN[dow]})</span>
           <span style="font-size:10px;padding:2px 7px;border-radius:5px;background:${c2.bg};color:${c2.text};border:1px solid ${c2.border}">${type}</span>
         </div>`;
@@ -1843,7 +1853,7 @@ function togglePersonStats(name){
     const tc2=tc(type);
     const isPast=dt<today;
     const dow=new Date(y,m-1,d).getDay();
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:0.5px solid var(--color-border-tertiary);${isPast?'opacity:.4':''}">
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:0.5px solid var(--color-border-tertiary);${isPast?'opacity:.4':''}">
       <span style="font-size:12px;color:var(--color-text-secondary)">${m}월 ${d}일 (${DN[dow]})</span>
       <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:${tc2.bg};color:${tc2.text};border:1px solid ${tc2.border}">${type}</span>
     </div>`;
@@ -2262,18 +2272,17 @@ function renderChatListHtml(){
           <span style="font-size:14px;font-weight:500">${admin.name} <span style="font-size:11px;color:#185FA5;font-weight:400">관리자</span></span>
           <div style="display:flex;align-items:center;gap:6px">
             ${unread?`<span class="cnt-badge">${unread}</span>`:''}
-             ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
-           </div>
-         </div>
-         <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-           ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'아직 대화가 없습니다'}
-         </div>
-       </div>
-     </div>`;
+              ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'아직 대화가 없습니다'}
+          </div>
+        </div>
+      </div>`;
   }
   return html;
 }
-
 function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 
 // 배지: 받은 읽지 않은 DM 수
@@ -2329,7 +2338,7 @@ function renderChatMessages(){
   if(!msgs.length){el.innerHTML='<p style="text-align:center;color:#ccc;font-size:13px;padding:20px">첫 메시지를 보내보세요</p>';return;}
   el.innerHTML=msgs.map(m=>{
     const isMine=m.from_id===cu.id;
-    return `<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:10px">
+    return`<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:10px">
       <div style="max-width:75%;padding:10px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.1)">${esc(m.content)}</div>
       <div style="font-size:10px;color:#bbb;margin-top:3px">${fmtTime(m.created_at)}</div>
     </div>`;
@@ -2371,7 +2380,7 @@ function closeChatModal(){
 
 function fmtTime(s){
   if(!s)return'';
-  try{const d=new Date(s);return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}catch{return'';}
+  try{const d=new Date(s);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}catch{return'';}
 }
 
 // ══════════════════════════════════════════════════
@@ -2411,7 +2420,7 @@ function toggleUploadSetting(key){
   showToastMsg('설정이 저장되었습니다.');
 }
 function updatePendingBadge(){const cnt=(window._pending||[]).length;let b=$('btn-admin').querySelector('.nav-badge');if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-admin').appendChild(b);}b.textContent=cnt;}else b?.remove();}
-function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return `<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">사역표 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
+function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return`<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">사역표 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
 function renderMembers(){
   const el=$('member-list');
   if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}
@@ -2467,7 +2476,7 @@ function renderMembers(){
       <div style="background:var(--color-background-primary);border-radius:14px;overflow:hidden;border:1px solid var(--color-border-tertiary)">
         ${others.map((u,i)=>{
           const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
-          return `<div class="member-row" onclick="openMemberModal(${u.id})" style="border-bottom:${i<others.length-1?'0.5px solid var(--color-border-tertiary)':'none'}">
+          return`<div class="member-row" onclick="openMemberModal(${u.id})" style="border-bottom:${i<others.length-1?'0.5px solid var(--color-border-tertiary)':'none'}">
             <div style="width:38px;height:38px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:14px;color:#888">${u.name[0]}</div>
             <div class="member-info"><div class="m-name">${u.name}</div><div class="m-sub">전체 ${total}건</div></div>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color:#ddd;flex-shrink:0"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -2987,7 +2996,7 @@ function renderAIPreviewTable(){
   }).join('');
 
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
-  $('parse-summary').innerHTML=`<b>사역자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...new Set(names.flatMap(n=>Object.values(data[n]||{})))].map(t=>{const c=tc(t);return `<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
+  $('parse-summary').innerHTML=`<b>사역자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...new Set(names.flatMap(n=>Object.values(data[n]||{})))].map(t=>{const c=tc(t);return`<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
 }
 
 function editAICell(name, day){
@@ -3166,7 +3175,7 @@ function processExcelRows2(rows, fileName, sheetName){
   let th='<tr><th>이름</th>';days.forEach(d=>th+=`<th>${d}</th>`);th+='</tr>';
   const tb=names.map(name=>{const dd=result[name];let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap">${name}</td>`;days.forEach(d=>{const v=dd[String(d)]||'';const c=v?tc(v.split('/')[0]):null;r+=`<td ${c?`style="background:${c.bg};color:${c.text};font-weight:600"`:''} title="${v}">${v?v.replace(/[\[\]]/g,'').slice(0,6):''}</td>`;});return r+'</tr>';}).join('');
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
-  $('parse-summary').innerHTML=`<b>사역자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...types].map(t=>{const c=tc(t);return `<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
+  $('parse-summary').innerHTML=`<b>사역자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...types].map(t=>{const c=tc(t);return`<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
 }
 function processExcelRows(rows,fileName,sheetName){
   if(!rows||rows.length<2){showExcelErr('데이터가 없습니다.');return;}
@@ -3185,7 +3194,7 @@ function processExcelRows(rows,fileName,sheetName){
   let th='<tr><th>이름</th>';dateCols.forEach(({d})=>th+=`<th>${d}</th>`);th+='</tr>';
   const tb=names.map(name=>{const dd=result[name];let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap">${name}</td>`;dateCols.forEach(({d})=>{const v=dd[String(d)]||'';const c=v?tc(v):null;r+=`<td ${c?`style="background:${c.bg};color:${c.text};font-weight:600"`:''} title="${v}">${v?v.replace(/[\[\]]/g,'').slice(0,4):''}</td>`;});return r+'</tr>';}).join('');
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
-  $('parse-summary').innerHTML=`<b>사역자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...types].map(t=>{const c=tc(t);return `<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
+  $('parse-summary').innerHTML=`<b>사역자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...types].map(t=>{const c=tc(t);return`<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
 }
 function showExcelErr(msg){clearExcel();const t=$('excel-err-toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',5000);}
 function clearExcel(){parsedExcel=null;$('upload-zone').style.display='block';$('excel-preview').style.display='none';$('excel-err-toast').style.display='none';}
@@ -3421,7 +3430,7 @@ function buildSchedPreview(){
         ${names.map(name=>{
           const wd=d[name]||{},days=Object.keys(wd).map(Number).sort((a,b)=>a-b);
           const approved=allMembers.some(u=>u.name===name);
-          return `<div class="sched-preview-row">
+          return`<div class="sched-preview-row">
             <span class="sched-name">${name}${!approved?` <span class="unregistered-tag">미가입</span>`:''}</span>
             <span class="sched-days">${days.map(d2=>{
               const t=wd[String(d2)],c=t?tc(t):null;
@@ -3649,4 +3658,4 @@ function toast(id){const e=$(id);if(!e)return;e.style.display='block';setTimeout
 function showToastMsg(msg){let el=$('g-toast');if(!el){el=document.createElement('div');el.id='g-toast';el.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(26,26,24,.9);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;white-space:nowrap;pointer-events:none';document.body.appendChild(el);}el.textContent=msg;el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2500);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function escNl(s){return esc(s).replace(/\n/g,"<br>").replace(/\r/g,"");}
-function fmtDate(s){if(!s)return'';try{const d=new Date(s);return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;}catch{return'';}}
+function fmtDate(s){if(!s)return'';try{const d=new Date(s);return`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;}catch{return'';}}
