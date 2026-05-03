@@ -337,6 +337,8 @@ function isAdmin(){return cu?.role==='admin'||cu?.role==='superadmin';}
 function enterApp() {
   showScreen('main-screen');
   $('hdr-name').textContent=cu.name;
+  // 자기 자신이 내 팀에 포함되어 있으면 제거
+  if(myTeam.includes(cu.name)){ myTeam=myTeam.filter(n=>n!==cu.name); saveMyTeam(); }
   // ★ 프로필 이미지 or 이름 첫 글자
   updateHeaderAvatar();
   $('btn-admin').style.display=isAdmin()?'flex':'none';
@@ -1595,7 +1597,7 @@ function teamRemoveConfirm(btn,name){
 }
 
 function addToTeam(name,btnEl){
-  if(myTeam.includes(name))return;
+  if(name===cu.name||myTeam.includes(name))return;
   myTeam.push(name);saveMyTeam();
   renderSearchFilters();renderSearchResult();renderCalendar();
   if(btnEl){
@@ -2143,7 +2145,8 @@ function renderMemberListHtml(){
 
     sec.names.forEach((name,idx)=>{
       const u=allMembers.find(m=>m.name===name);
-      const isPending=!u;
+      const isSelf=name===cu.name;
+      const isPending=!u||isSelf;
       const isInTeam=myTeam.includes(name);
       const avHtml=u?.avatar
         ?`<img src="${u.avatar}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid ${dMeta.border}">`
@@ -2152,7 +2155,7 @@ function renderMemberListHtml(){
       const teamBtn = isPending
         ? `<div style="width:28px;height:28px;border-radius:50%;border:1px solid #e0e0e0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#ccc;opacity:.4">+</div>`
         : isInTeam
-          ? `<button onclick="event.stopPropagation();removeFromTeam('${name}')" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #3B6D11;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:12px;color:#3B6D11;cursor:pointer">✓</button>`
+          ? `<button onclick="event.stopPropagation();removeFromTeam('${name}',this)" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #3B6D11;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:12px;color:#3B6D11;cursor:pointer;transition:transform .15s">✓</button>`
           : `<button onclick="event.stopPropagation();addToTeam('${name}',this)" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #185FA5;background:none;display:flex;align-items:center;justify-content:center;font-size:16px;color:#185FA5;cursor:pointer;transition:transform .15s">+</button>`;
 
       html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:${idx<sec.names.length-1?'0.5px solid var(--color-border-tertiary)':'none'};${isPending?'opacity:.4':''}">
