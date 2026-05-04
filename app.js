@@ -2574,10 +2574,16 @@ function openUserDm(userId){
   const modal = $('user-dm-modal');
   if(modal){
     $('user-dm-target-name').textContent = user.name + (isAdminRole(user)?' (관리자)':'');
-    positionUserDmModal(); // ★ main-screen rect에 맞춰 위치·크기 설정
-    modal.style.display='flex';
+    positionUserDmModal();  // ★ 열기 전에 정확한 위치/크기 계산
+    modal.style.display = 'flex';
     renderUserDmMessages();
     setTimeout(()=>{ const el=$('user-dm-messages'); if(el) el.scrollTop=el.scrollHeight; },50);
+  }
+  // 키보드/리사이즈 대응
+  if(!window._dmResizeHandler){
+    window._dmResizeHandler = ()=>{ if($('user-dm-modal')?.style.display==='flex') positionUserDmModal(); };
+    window.addEventListener('resize', window._dmResizeHandler);
+    window.visualViewport?.addEventListener('resize', window._dmResizeHandler);
   }
 }
 
@@ -2697,19 +2703,49 @@ function injectUserDmModal(){
       </button>
     </div>`;
 
-  // chat-modal이 붙어있는 동일한 부모를 찾아 삽입 (앱 컨테이너 기준)
-  const chatModal = $('chat-modal');
-  const parent = chatModal ? chatModal.parentElement : ($('main-screen') || document.body);
-  // 부모가 position 컨텍스트를 갖도록
-  if(parent && getComputedStyle(parent).position === 'static'){
-    parent.style.position = 'relative';
+  // ── fixed + CSS로 앱 컨테이너 폭/높이에 정확히 맞춤 ──
+  // main-screen의 실제 좌표를 읽어 CSS 변수로 세팅
+  if(!document.getElementById('user-dm-style')){
+    const st = document.createElement('style');
+    st.id = 'user-dm-style';
+    st.textContent = `
+      #user-dm-modal {
+        position: fixed !important;
+        top: var(--dm-top, 0px);
+        left: var(--dm-left, 0px);
+        width: var(--dm-width, 100%);
+        height: var(--dm-height, 100%);
+        z-index: 9000;
+        flex-direction: column;
+        background: #fff;
+        overflow: hidden;
+      }
+    `;
+    document.head.appendChild(st);
   }
-  modal.style.cssText = 'display:none;position:absolute;inset:0;z-index:300;flex-direction:column;background:#fff;overflow:hidden';
-  parent.appendChild(modal);
+  modal.style.cssText = 'display:none';
+  document.body.appendChild(modal);
 }
 
-// 더 이상 사용하지 않지만 혹시 호출되더라도 오류 안 나도록 유지
-function positionUserDmModal(){}
+function positionUserDmModal(){
+  const screen = $('main-screen');
+  const root = document.documentElement;
+  if(screen){
+    const r = screen.getBoundingClientRect();
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    root.style.setProperty('--dm-top',    Math.max(0, r.top)  + 'px');
+    root.style.setProperty('--dm-left',   Math.max(0, r.left) + 'px');
+    root.style.setProperty('--dm-width',  r.width + 'px');
+    // 높이: 뷰포트 기준 — 스크롤 높이 제외
+    root.style.setProperty('--dm-height', (vh - Math.max(0, r.top)) + 'px');
+  } else {
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    root.style.setProperty('--dm-top',    '0px');
+    root.style.setProperty('--dm-left',   '0px');
+    root.style.setProperty('--dm-width',  '100%');
+    root.style.setProperty('--dm-height', vh + 'px');
+  }
+}
 
 function fmtTime(s){
   if(!s)return'';
