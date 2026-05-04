@@ -2532,6 +2532,7 @@ function openUserDm(userId){
   const modal = $('user-dm-modal');
   if(modal){
     $('user-dm-target-name').textContent = user.name + (isAdminRole(user)?' (관리자)':'');
+    positionUserDmModal(); // ★ main-screen rect에 맞춰 위치·크기 설정
     modal.style.display='flex';
     renderUserDmMessages();
     setTimeout(()=>{ const el=$('user-dm-messages'); if(el) el.scrollTop=el.scrollHeight; },50);
@@ -2631,21 +2632,11 @@ function injectUserDmModal(){
   if($('user-dm-modal')) return;
   const modal = document.createElement('div');
   modal.id = 'user-dm-modal';
-  modal.style.cssText = [
-    'display:none',
-    'position:fixed',           // fixed로 viewport 기준 — 스크롤 무관하게 전체 덮음
-    'top:0',
-    'left:0',
-    'right:0',
-    'bottom:0',
-    'z-index:300',
-    'flex-direction:column',
-    'background:#fff',
-    'overflow:hidden',
-  ].join(';');
+  // position:fixed + JS로 main-screen rect에 맞춰 위치·크기 설정
+  modal.style.cssText = 'display:none;position:fixed;z-index:300;flex-direction:column;background:#fff;overflow:hidden';
   modal.innerHTML = `
     <!-- 헤더 -->
-    <div style="display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 10px;background:#fff;border-bottom:1px solid #f0f0ea;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px 10px;background:#fff;border-bottom:1px solid #f0f0ea;flex-shrink:0">
       <button onclick="closeUserDmModal()" style="width:34px;height:34px;border-radius:50%;border:none;background:#f5f5f3;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="#444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -2657,7 +2648,7 @@ function injectUserDmModal(){
     <!-- 메시지 목록 -->
     <div id="user-dm-messages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch;min-height:0"></div>
     <!-- 입력창 -->
-    <div style="padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 10px);background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
+    <div style="padding:8px 12px 12px;background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
       <textarea id="user-dm-input" rows="1" placeholder="메시지 입력..."
         style="flex:1;padding:10px 13px;border:1.5px solid #e8e8e4;border-radius:20px;font-size:14px;resize:none;max-height:100px;overflow-y:auto;background:#f8f8f6;color:#1a1a18;font-family:inherit;line-height:1.4;outline:none;-webkit-appearance:none"
         oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
@@ -2667,6 +2658,25 @@ function injectUserDmModal(){
       </button>
     </div>`;
   document.body.appendChild(modal);
+
+  // 리사이즈 시에도 위치 재계산
+  window.addEventListener('resize', ()=>{ if($('user-dm-modal')?.style.display==='flex') positionUserDmModal(); });
+}
+
+// main-screen의 실제 화면 위치에 모달을 고정
+function positionUserDmModal(){
+  const modal=$('user-dm-modal'); if(!modal) return;
+  const screen=$('main-screen');
+  if(screen){
+    const r=screen.getBoundingClientRect();
+    modal.style.top    = r.top+'px';
+    modal.style.left   = r.left+'px';
+    modal.style.width  = r.width+'px';
+    modal.style.height = r.height+'px';
+  } else {
+    modal.style.top='0'; modal.style.left='0';
+    modal.style.width='100%'; modal.style.height='100dvh';
+  }
 }
 
 function fmtTime(s){
