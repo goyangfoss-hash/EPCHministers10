@@ -394,7 +394,9 @@ function enterApp() {
     navigator.serviceWorker.register('firebase-messaging-sw.js').catch(()=>{});
   }
   initFCM();
-  initPullToRefresh(); // ★ 당겨서 새로고침
+  initPullToRefresh();
+  // ★ 알림 클릭으로 열렸을 때 URL ?tab= 파라미터로 탭 이동
+  handleNotifLaunchTab();
 }
 
 // ══════════════════════════════════════════════════
@@ -424,10 +426,13 @@ async function initFCM(){
     // FCM 토큰 발급
     const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY });
     if(token) await saveFCMToken(token);
-    // 포그라운드 메시지 수신
+    // 포그라운드 메시지 수신 — 토스트만 표시 (Notification API는 백그라운드 sw가 담당)
     messaging.onMessage(payload=>{
       const {title, body} = payload.notification || {};
+      // 포그라운드에서는 토스트만, Notification.show는 하지 않음 (중복 방지 플래그 세팅)
+      window._fcmForeground = true;
       if(title) showToastMsg(`🔔 ${title}: ${body||''}`);
+      setTimeout(()=>{ window._fcmForeground = false; }, 3000);
     });
   } catch(e){ console.warn('FCM init error:', e.message); }
 }
@@ -450,11 +455,12 @@ async function saveFCMToken(token){
 }
 
 // ★ 푸시 알림 전송 (Edge Function 호출)
-async function sendPushToUsers(userIds, title, body){
+// tab: 알림 클릭 시 이동할 탭 ('feed'|'notice'|'cal' 등)
+async function sendPushToUsers(userIds, title, body, tab='feed'){
   if(OFFLINE||!userIds?.length) return;
   try {
     await sb.functions.invoke('send-push', {
-      body: { user_ids: userIds, title, body }
+      body: { user_ids: userIds, title, body, data: { tab, url: '/?tab='+tab } }
     });
   } catch(e){ console.warn('Push send error:', e.message); }
 }
@@ -586,6 +592,7 @@ function startRealtime() {
 }
 function pushNotify(title, body, type=''){
   if(!canNotify(type)) return;
+  if(window._fcmForeground) return; // FCM onMessage가 이미 토스트를 띄웠으면 skip
   try{ new Notification(title,{body,icon:'icon-192.png'}); }catch{}
 }
 
@@ -872,9 +879,44 @@ function saveShiftMemo(y,m,d){
   if($('tab-myshift')?.style.display!=='none')renderMyShift();
 }
 
-// ══════════════════════════════════════════════════
-//  DB 전체 로드
-// ══════════════════════════════════════════════════
+// ★ 알림 클릭 → URL ?tab=xxx 으로 앱 진입 시 해당 탭 바로 열기
+function handleNotifLaunchTab(){
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if(!tab) return;
+    // URL 정리 (history 오염 방지)
+    history.replaceState(null,'',window.location.pathname);
+    // 탭 버튼 매핑
+    const btnMap = {
+      feed:   $('btn-feed'),
+      notice: $('btn-notice'),
+      cal:    $('btn-cal'),
+      myshift:$('btn-myshift'),
+      search: $('btn-search'),
+      admin:  $('btn-admin'),
+    };
+    const btn = btnMap[tab];
+    if(btn) setTimeout(()=>switchTab(tab, btn), 300);
+  } catch(e){ console.warn('handleNotifLaunchTab:',e); }
+}
+
+// ★ Service Worker에서 알림 클릭 메시지 수신 (sw → app)
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', e=>{
+    const {type, tab} = e.data || {};
+    if(type==='NOTIF_CLICK' && tab && cu){
+      const btnMap = {
+        feed:   $('btn-feed'),
+        notice: $('btn-notice'),
+        cal:    $('btn-cal'),
+        myshift:$('btn-myshift'),
+      };
+      const btn = btnMap[tab];
+      if(btn) switchTab(tab, btn);
+    }
+  });
+}
 async function loadAll(){
   const[uR,sR,nR,fR,cR,rR]=await Promise.all([
     sb.from('app_users').select('*'),
@@ -2632,10 +2674,9 @@ function injectUserDmModal(){
   if($('user-dm-modal')) return;
   const modal = document.createElement('div');
   modal.id = 'user-dm-modal';
-  // position:fixed + JS로 main-screen rect에 맞춰 위치·크기 설정
-  modal.style.cssText = 'display:none;position:fixed;z-index:300;flex-direction:column;background:#fff;overflow:hidden';
+  // 앱 wrapper를 찾아 그 안에 absolute로 삽입
+  // → wrapper가 없으면 body에 fixed로 fallback
   modal.innerHTML = `
-    <!-- 헤더 -->
     <div style="display:flex;align-items:center;gap:10px;padding:12px 16px 10px;background:#fff;border-bottom:1px solid #f0f0ea;flex-shrink:0">
       <button onclick="closeUserDmModal()" style="width:34px;height:34px;border-radius:50%;border:none;background:#f5f5f3;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="#444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2645,9 +2686,7 @@ function injectUserDmModal(){
         <div style="font-size:11px;color:#888;margin-top:1px">개인 메시지</div>
       </div>
     </div>
-    <!-- 메시지 목록 -->
     <div id="user-dm-messages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch;min-height:0"></div>
-    <!-- 입력창 -->
     <div style="padding:8px 12px 12px;background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
       <textarea id="user-dm-input" rows="1" placeholder="메시지 입력..."
         style="flex:1;padding:10px 13px;border:1.5px solid #e8e8e4;border-radius:20px;font-size:14px;resize:none;max-height:100px;overflow-y:auto;background:#f8f8f6;color:#1a1a18;font-family:inherit;line-height:1.4;outline:none;-webkit-appearance:none"
@@ -2657,27 +2696,20 @@ function injectUserDmModal(){
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-5-5 12-2-4.5L2 8z" fill="#fff"/></svg>
       </button>
     </div>`;
-  document.body.appendChild(modal);
 
-  // 리사이즈 시에도 위치 재계산
-  window.addEventListener('resize', ()=>{ if($('user-dm-modal')?.style.display==='flex') positionUserDmModal(); });
-}
-
-// main-screen의 실제 화면 위치에 모달을 고정
-function positionUserDmModal(){
-  const modal=$('user-dm-modal'); if(!modal) return;
-  const screen=$('main-screen');
-  if(screen){
-    const r=screen.getBoundingClientRect();
-    modal.style.top    = r.top+'px';
-    modal.style.left   = r.left+'px';
-    modal.style.width  = r.width+'px';
-    modal.style.height = r.height+'px';
-  } else {
-    modal.style.top='0'; modal.style.left='0';
-    modal.style.width='100%'; modal.style.height='100dvh';
+  // chat-modal이 붙어있는 동일한 부모를 찾아 삽입 (앱 컨테이너 기준)
+  const chatModal = $('chat-modal');
+  const parent = chatModal ? chatModal.parentElement : ($('main-screen') || document.body);
+  // 부모가 position 컨텍스트를 갖도록
+  if(parent && getComputedStyle(parent).position === 'static'){
+    parent.style.position = 'relative';
   }
+  modal.style.cssText = 'display:none;position:absolute;inset:0;z-index:300;flex-direction:column;background:#fff;overflow:hidden';
+  parent.appendChild(modal);
 }
+
+// 더 이상 사용하지 않지만 혹시 호출되더라도 오류 안 나도록 유지
+function positionUserDmModal(){}
 
 function fmtTime(s){
   if(!s)return'';
