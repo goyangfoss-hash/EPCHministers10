@@ -323,8 +323,11 @@ async function doRegister() {
 function doLogout() {
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
   if(rtChannel){sb?.removeChannel(rtChannel);rtChannel=null;}
+  if(window._dmChannel){try{sb?.removeChannel(window._dmChannel);}catch{}window._dmChannel=null;}
+  if(window._dmOutChannel){try{sb?.removeChannel(window._dmOutChannel);}catch{}window._dmOutChannel=null;}
   cu=null; localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
   allMembers=[];allSchedules={};notices=[];feedPosts=[];shiftComments={};commentLikes={};typeColorMap={};filterType='';
+  chatMessages={};chatTarget=null;userDmTarget=null;dmUnreadCount=0;
   showScreen('login-screen'); showLoginCard();
   ['l-name','l-phone','l-pw'].forEach(id=>$(id).value=''); $('l-err').style.display='none';
 }
@@ -338,6 +341,19 @@ function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 // ══════════════════════════════════════════════════
 function enterApp() {
   showScreen('main-screen');
+  // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
+  if(!document.getElementById('app-overflow-fix')){
+    const s=document.createElement('style');
+    s.id='app-overflow-fix';
+    s.textContent=`
+      html,body{overflow-x:hidden;max-width:100vw;}
+      .screen{overflow-x:hidden;}
+      #chat-messages,#user-dm-messages{overflow-x:hidden;}
+      /* 말풍선 최대 너비: 화면 폭의 72% 또는 260px 중 작은 값 */
+      .bubble{max-width:min(72%,260px);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap;}
+    `;
+    document.head.appendChild(s);
+  }
   $('hdr-name').textContent=cu.name;
   if(myTeam.includes(cu.name)){myTeam=myTeam.filter(n=>n!==cu.name);saveMyTeam();}
   // ★ 프로필 이미지 or 이름 첫 글자
@@ -519,36 +535,54 @@ function startRealtime() {
     })
     .subscribe(s=>console.log('[RT]',s));
 
-  // ★ DM 실시간 구독 (별도 채널, 중복 방지)
+  // ★ DM 실시간 구독 — 받는 메시지(to_id) 채널
   if(window._dmChannel) { try{sb.removeChannel(window._dmChannel);}catch{} }
-  window._dmChannel = sb.channel('ws_dm_'+cu.id)
+  window._dmChannel = sb.channel('ws_dm_to_'+cu.id)
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'direct_messages',filter:`to_id=eq.${cu.id}`},payload=>{
-      const m=payload.new;
-      const otherId=m.from_id;
-      if(!chatMessages[otherId])chatMessages[otherId]=[];
-      if(!chatMessages[otherId].find(x=>x.id===m.id)){
+      const m = payload.new;
+      const otherId = m.from_id;
+      if(!chatMessages[otherId]) chatMessages[otherId]=[];
+      // 중복 방지
+      if(chatMessages[otherId].find(x=>x.id===m.id)) return;
+      chatMessages[otherId].push(m);
+
+      // 해당 채팅창이 열려있으면 즉시 렌더 + 읽음 처리
+      const isOpenAdmin = chatTarget?.id===otherId;
+      const isOpenUser  = userDmTarget?.id===otherId;
+      if(isOpenAdmin || isOpenUser){
+        m.is_read=true;
+        if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id).then(()=>{});
+        if(isOpenAdmin) renderChatMessages();
+        if(isOpenUser)  renderUserDmMessages();
+      }
+      updateFeedBadge();
+      if($('tab-feed')?.style.display!=='none') renderFeedTab();
+      const sender=allMembers.find(u=>u.id===otherId);
+      pushNotify(`${sender?.name||'누군가'}님의 메시지`, m.content, 'chat');
+    }).subscribe(s=>console.log('[DM-in]',s));
+
+  // ★ DM 실시간 구독 — 보낸 메시지(from_id) 채널
+  // 내가 보낸 메시지의 실제 DB row를 받아서 임시 id를 교체하고 다중 기기 동기화
+  if(window._dmOutChannel) { try{sb.removeChannel(window._dmOutChannel);}catch{} }
+  window._dmOutChannel = sb.channel('ws_dm_from_'+cu.id)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'direct_messages',filter:`from_id=eq.${cu.id}`},payload=>{
+      const m = payload.new;
+      const otherId = m.to_id;
+      if(!chatMessages[otherId]) chatMessages[otherId]=[];
+      // 이미 있으면 임시 row(_temp)를 실제 row로 교체
+      const tempIdx = chatMessages[otherId].findIndex(x=>
+        x._temp && x.content===m.content && x.from_id===cu.id
+      );
+      if(tempIdx>=0){
+        chatMessages[otherId][tempIdx] = m;
+      } else if(!chatMessages[otherId].find(x=>x.id===m.id)){
         chatMessages[otherId].push(m);
       }
-      // 관리자↔이용자 채팅창 열려있으면 즉시 렌더 + 읽음 처리
-      if(chatTarget?.id===otherId){
-        m.is_read=true;
-        if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
-        renderChatMessages();
-      }
-      // 이용자↔이용자 채팅창 열려있으면 즉시 렌더 + 읽음 처리
-      if(userDmTarget?.id===otherId){
-        m.is_read=true;
-        if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id);
-        renderUserDmMessages();
-      }
-      // 배지 업데이트
-      updateFeedBadge();
-      // 소통 탭 열려있으면 목록 갱신
+      // 열려있는 채팅창 갱신
+      if(chatTarget?.id===otherId)    renderChatMessages();
+      if(userDmTarget?.id===otherId)  renderUserDmMessages();
       if($('tab-feed')?.style.display!=='none') renderFeedTab();
-      // 알림
-      const sender=allMembers.find(u=>u.id===m.from_id);
-      pushNotify(`${sender?.name||'누군가'}님의 메시지`,m.content,'chat');
-    }).subscribe(s=>console.log('[DM]',s));
+    }).subscribe(s=>console.log('[DM-out]',s));
 }
 function pushNotify(title, body, type=''){
   if(!canNotify(type)) return;
@@ -2230,11 +2264,11 @@ function renderChatListHtml(){
   return html;
 }
 
-// ★ 이용자↔이용자 채팅 목록 — 대화 이력이 있는 멤버만 표시
+// ★ 이용자↔이용자 채팅 목록 — 대화 이력이 있는 멤버만, 관리자 제외
 function renderUserDmListHtml(){
-  // 자신 제외, 대화 이력이 있는 멤버만
+  // 자신·관리자 제외, 대화 이력이 있는 이용자만
   const withMsg = allMembers
-    .filter(u => u.id !== cu.id && chatMessages[u.id]?.length > 0)
+    .filter(u => u.id !== cu.id && !isAdminRole(u) && chatMessages[u.id]?.length > 0)
     .sort((a,b)=>{
       const la = chatMessages[a.id]?.slice(-1)[0]?.created_at || '';
       const lb = chatMessages[b.id]?.slice(-1)[0]?.created_at || '';
@@ -2302,9 +2336,9 @@ function openNewDmPicker(){
     {label:'행정/선교',names:['김동권','최성은']},
   ];
 
-  // 이미 대화 중인 ID 제외
+  // 이미 대화 중인 ID 제외, 관리자도 제외
   const alreadyIds = new Set(
-    allMembers.filter(u=>u.id!==cu.id&&chatMessages[u.id]?.length>0).map(u=>u.id)
+    allMembers.filter(u=>u.id!==cu.id&&!isAdminRole(u)&&chatMessages[u.id]?.length>0).map(u=>u.id)
   );
 
   let rows = '';
@@ -2432,8 +2466,8 @@ function renderChatMessages(){
   if(!msgs.length){el.innerHTML='<p style="text-align:center;color:#ccc;font-size:13px;padding:20px">첫 메시지를 보내보세요</p>';return;}
   el.innerHTML=msgs.map(m=>{
     const isMine=m.from_id===cu.id;
-    return `<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:10px">
-      <div style="max-width:75%;padding:10px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.1)">${esc(m.content)}</div>
+    return `<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:10px;width:100%">
+      <div style="max-width:min(75%,260px);padding:10px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.1);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap">${esc(m.content)}</div>
       <div style="font-size:10px;color:#bbb;margin-top:3px">${fmtTime(m.created_at)}</div>
     </div>`;
   }).join('');
@@ -2447,18 +2481,23 @@ async function sendDm(){
   const txt=input?.value.trim();
   if(!txt||!chatTarget) return;
   dmSending = true;
-  const msg={id:Date.now(),from_id:cu.id,to_id:chatTarget.id,content:txt,is_read:false,created_at:new Date().toISOString()};
+  const tempId = '_tmp_' + Date.now();
+  const msg={id:tempId,_temp:true,from_id:cu.id,to_id:chatTarget.id,content:txt,is_read:false,created_at:new Date().toISOString()};
   if(!chatMessages[chatTarget.id])chatMessages[chatTarget.id]=[];
   chatMessages[chatTarget.id].push(msg);
   input.value='';
   renderChatMessages();
   if(!OFFLINE){
-    const{data}=await sb.from('direct_messages').insert({from_id:cu.id,to_id:chatTarget.id,content:txt}).select('*').single();
+    const{data,error}=await sb.from('direct_messages').insert({from_id:cu.id,to_id:chatTarget.id,content:txt}).select('*').single();
     if(data){
-      const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===msg.id);
+      const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===tempId);
       if(idx>=0)chatMessages[chatTarget.id][idx]=data;
-      // ★ 상대방에게 푸시 알림
+      renderChatMessages();
       sendPushToUsers([chatTarget.id], `💬 ${cu.name}`, txt);
+    } else if(error){
+      chatMessages[chatTarget.id]=chatMessages[chatTarget.id].filter(m=>m.id!==tempId);
+      renderChatMessages();
+      showToastMsg('메시지 전송에 실패했습니다.');
     }
   }
   dmSending = false;
@@ -2521,10 +2560,10 @@ function renderUserDmMessages(){
     const senderAvHtml = (!isMine && sender?.avatar)
       ? `<img src="${sender.avatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-top:2px">`
       : (!isMine ? `<div style="width:28px;height:28px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:11px;color:#888;flex-shrink:0;margin-top:2px">${(userDmTarget.name||'?')[0]}</div>` : '');
-    return `${dateDivider}<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:8px">
-      <div style="display:flex;align-items:flex-end;gap:6px;flex-direction:${isMine?'row-reverse':'row'}">
+    return `${dateDivider}<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:8px;width:100%">
+      <div style="display:flex;align-items:flex-end;gap:6px;flex-direction:${isMine?'row-reverse':'row'};max-width:min(78%,280px)">
         ${isMine?'':senderAvHtml}
-        <div style="max-width:72%;padding:9px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.08)">${esc(m.content)}</div>
+        <div style="padding:9px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.08);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap;min-width:0;flex:1">${esc(m.content)}</div>
       </div>
       <div style="font-size:10px;color:#bbb;margin-top:3px;${isMine?'':'margin-left:34px'}">${fmtTime(m.created_at)}</div>
     </div>`;
@@ -2540,8 +2579,11 @@ async function sendUserDm(){
   if(!txt || !userDmTarget) return;
   userDmSending = true;
 
+  // 임시 id: '_tmp_' 접두사로 Date.now()와 명확히 구분
+  const tempId = '_tmp_' + Date.now();
   const msg = {
-    id: Date.now(),
+    id: tempId,
+    _temp: true,
     from_id: cu.id,
     to_id: userDmTarget.id,
     content: txt,
@@ -2551,17 +2593,26 @@ async function sendUserDm(){
   if(!chatMessages[userDmTarget.id]) chatMessages[userDmTarget.id]=[];
   chatMessages[userDmTarget.id].push(msg);
   input.value='';
+  // textarea 높이 초기화
+  input.style.height='auto';
   renderUserDmMessages();
 
   if(!OFFLINE){
-    const {data} = await sb.from('direct_messages')
+    const {data, error} = await sb.from('direct_messages')
       .insert({from_id:cu.id, to_id:userDmTarget.id, content:txt})
       .select('*').single();
     if(data){
-      const idx = chatMessages[userDmTarget.id].findIndex(m=>m.id===msg.id);
+      // 임시 row를 실제 DB row로 교체
+      const idx = chatMessages[userDmTarget.id].findIndex(m=>m.id===tempId);
       if(idx>=0) chatMessages[userDmTarget.id][idx]=data;
+      renderUserDmMessages();
       // 푸시 알림
       sendPushToUsers([userDmTarget.id], `💬 ${cu.name}`, txt);
+    } else if(error){
+      // 전송 실패 시 임시 메시지 제거
+      chatMessages[userDmTarget.id] = chatMessages[userDmTarget.id].filter(m=>m.id!==tempId);
+      renderUserDmMessages();
+      showToastMsg('메시지 전송에 실패했습니다.');
     }
   }
   userDmSending = false;
@@ -2604,7 +2655,7 @@ function injectUserDmModal(){
       </div>
     </div>
     <!-- 메시지 목록 -->
-    <div id="user-dm-messages" style="flex:1;overflow-y:auto;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch;min-height:0"></div>
+    <div id="user-dm-messages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch;min-height:0"></div>
     <!-- 입력창 -->
     <div style="padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 10px);background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
       <textarea id="user-dm-input" rows="1" placeholder="메시지 입력..."
