@@ -823,11 +823,23 @@ function scheduleLocalAlarms(){
 }
 
 function closeAllPanels(){
+  // 패널
   const ap=$('alarm-panel'), sp=$('settings-panel');
   if(ap) ap.style.display='none';
   if(sp) sp.style.display='none';
   $('alarm-overlay')?.remove();
   $('settings-overlay')?.remove();
+
+  // 모달 — 탭 전환/알림 클릭 시 이중 표시 방지
+  [
+    'chat-modal','user-dm-modal','comment-modal',
+    'profile-modal','team-edit-modal','notice-edit-modal',
+    'sched-edit-modal','merge-choice-modal','new-dm-picker',
+    'day-modal','avatar-viewer',
+  ].forEach(id=>{ const el=$(id); if(el) el.style.display='none'; });
+
+  chatTarget=null;
+  userDmTarget=null;
 }
 
 function toggleAlarmPanel(){
