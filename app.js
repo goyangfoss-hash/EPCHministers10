@@ -2230,64 +2230,36 @@ function renderChatListHtml(){
   return html;
 }
 
-// ★ 이용자↔이용자 채팅 목록
+// ★ 이용자↔이용자 채팅 목록 — 대화 이력이 있는 멤버만 표시
 function renderUserDmListHtml(){
-  // 자신을 제외한 전체 멤버 목록 (관리자 포함 모두 가능)
-  const others = allMembers.filter(u => u.id !== cu.id);
-  if(!others.length) return '<p class="empty-state">대화 가능한 멤버가 없습니다.</p>';
-
-  const DEPT_SECTIONS=[
-    {label:'담임목사님',names:['박지현']},
-    {label:'교구',names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
-    {label:'청년국',names:['허남홍','서동빈','손우성']},
-    {label:'교육국',names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
-    {label:'행정/선교',names:['김동권','최성은']},
-  ];
-
-  // 최근 대화가 있는 멤버를 상단에 정렬
-  const withMsg = others.filter(u=>chatMessages[u.id]?.length>0)
+  // 자신 제외, 대화 이력이 있는 멤버만
+  const withMsg = allMembers
+    .filter(u => u.id !== cu.id && chatMessages[u.id]?.length > 0)
     .sort((a,b)=>{
-      const la=chatMessages[a.id]?.slice(-1)[0]?.created_at||'';
-      const lb=chatMessages[b.id]?.slice(-1)[0]?.created_at||'';
+      const la = chatMessages[a.id]?.slice(-1)[0]?.created_at || '';
+      const lb = chatMessages[b.id]?.slice(-1)[0]?.created_at || '';
       return lb.localeCompare(la);
     });
-  const withMsgIds = new Set(withMsg.map(u=>u.id));
 
-  let html='';
+  let html = '';
 
-  // 최근 대화 섹션
-  if(withMsg.length){
-    html+=`<div style="font-size:10px;font-weight:500;color:#185FA5;padding:4px 2px 6px;letter-spacing:.5px">최근 대화</div>`;
-    withMsg.forEach(u=>{
-      html += buildUserDmRow(u);
-    });
+  if(!withMsg.length){
+    html += `<div style="text-align:center;padding:32px 16px 16px">
+      <div style="font-size:32px;margin-bottom:10px">💬</div>
+      <div style="font-size:14px;font-weight:500;color:#444;margin-bottom:6px">아직 대화가 없습니다</div>
+      <div style="font-size:12px;color:#aaa;line-height:1.6">사역자 목록에서 멤버를 선택해<br>첫 메시지를 보내보세요</div>
+    </div>`;
+  } else {
+    withMsg.forEach(u => { html += buildUserDmRow(u); });
   }
 
-  // 전체 멤버 섹션 (대화 없는 사람 포함)
-  html+=`<div style="font-size:10px;font-weight:500;color:#888;padding:${withMsg.length?'12px':'4px'} 2px 6px;letter-spacing:.5px">전체 멤버</div>`;
-  DEPT_SECTIONS.forEach(sec=>{
-    const dMeta=DEPT_META[sec.label]||{color:'#888',bg:'#f0f0ea',border:'#e0e0e0'};
-    const secMembers=sec.names.map(n=>allMembers.find(u=>u.name===n&&u.id!==cu.id)).filter(Boolean);
-    if(!secMembers.length) return;
-    html+=`<div style="font-size:10px;font-weight:400;color:${dMeta.color};padding:3px 2px 3px;letter-spacing:.3px">${sec.label}</div>
-    <div style="background:var(--color-background-primary);border-radius:12px;overflow:hidden;border:1px solid ${dMeta.border};margin-bottom:8px">`;
-    secMembers.forEach((u,idx)=>{
-      html += buildUserDmRowInner(u, idx < secMembers.length-1, dMeta);
-    });
-    html+=`</div>`;
-  });
-
-  // 섹션에 없는 기타 멤버
-  const listedNames=DEPT_SECTIONS.flatMap(s=>s.names);
-  const otherMembers=others.filter(u=>!listedNames.includes(u.name)&&u.id!==cu.id);
-  if(otherMembers.length){
-    html+=`<div style="font-size:10px;font-weight:400;color:#888;padding:3px 2px 3px">기타</div>
-    <div style="background:var(--color-background-primary);border-radius:12px;overflow:hidden;border:1px solid var(--color-border-tertiary);margin-bottom:8px">`;
-    otherMembers.forEach((u,idx)=>{
-      html += buildUserDmRowInner(u, idx<otherMembers.length-1, {color:'#888',bg:'#f0f0ea',border:'#e0e0e0'});
-    });
-    html+=`</div>`;
-  }
+  // 새 대화 시작 버튼 (항상 하단에)
+  html += `<div style="margin-top:${withMsg.length?'16px':'0'}">
+    <button onclick="openNewDmPicker()" style="width:100%;padding:13px;border:1.5px dashed #c8d8e8;border-radius:14px;background:none;color:#185FA5;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#185FA5" stroke-width="1.5"/><path d="M8 5v6M5 8h6" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/></svg>
+      새 대화 시작
+    </button>
+  </div>`;
 
   return html;
 }
@@ -2298,24 +2270,95 @@ function buildUserDmRow(u){
   const last = msgs[msgs.length-1];
   const c = PALETTE[allMembers.indexOf(u) % PALETTE.length];
   const avHtml = u.avatar
-    ?`<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${esc(u.name)}')" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea;cursor:pointer">`
-    :`<div style="width:42px;height:42px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:${c.text};flex-shrink:0">${u.name[0]}</div>`;
+    ?`<img src="${u.avatar}" onclick="event.stopPropagation();openAvatarViewer('${u.avatar}','${esc(u.name)}')" style="width:46px;height:46px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea;cursor:pointer">`
+    :`<div style="width:46px;height:46px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500;color:${c.text};flex-shrink:0">${u.name[0]}</div>`;
   const adminTag = isAdminRole(u) ? `<span style="font-size:10px;color:#185FA5;font-weight:400;margin-left:3px">관리자</span>` : '';
-  return `<div class="list-card${unread?' feed-card-new':''}" onclick="openUserDm(${u.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-    ${avHtml}
+  return `<div class="list-card${unread?' feed-card-new':''}" onclick="openUserDm(${u.id})" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:12px 14px">
+    <div style="position:relative;flex-shrink:0">
+      ${avHtml}
+      ${unread?`<span style="position:absolute;top:-2px;right:-2px;background:#e11d48;border:2px solid #fff;border-radius:50%;min-width:16px;height:16px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0 3px">${unread}</span>`:''}
+    </div>
     <div style="flex:1;min-width:0">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-        <span style="font-size:14px;font-weight:500">${esc(u.name)}${adminTag}</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          ${unread?`<span class="cnt-badge">${unread}</span>`:''}
-          ${last?`<span style="font-size:10px;color:var(--color-text-secondary)">${fmtTime(last.created_at)}</span>`:''}
-        </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:14px;font-weight:${unread?600:500}">${esc(u.name)}${adminTag}</span>
+        ${last?`<span style="font-size:10px;color:#bbb;flex-shrink:0">${fmtTime(last.created_at)}</span>`:''}
       </div>
-      <div style="font-size:12px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-        ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:'대화를 시작해보세요'}
+      <div style="font-size:12px;color:${unread?'#444':'#aaa'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${unread?500:400}">
+        ${last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:''}
       </div>
     </div>
   </div>`;
+}
+
+// ★ 새 대화 시작 — 멤버 선택 피커 (바텀시트)
+function openNewDmPicker(){
+  document.getElementById('new-dm-picker')?.remove();
+
+  const DEPT_SECTIONS=[
+    {label:'담임목사님',names:['박지현']},
+    {label:'교구',names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
+    {label:'청년국',names:['허남홍','서동빈','손우성']},
+    {label:'교육국',names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
+    {label:'행정/선교',names:['김동권','최성은']},
+  ];
+
+  // 이미 대화 중인 ID 제외
+  const alreadyIds = new Set(
+    allMembers.filter(u=>u.id!==cu.id&&chatMessages[u.id]?.length>0).map(u=>u.id)
+  );
+
+  let rows = '';
+  DEPT_SECTIONS.forEach(sec=>{
+    const dMeta = DEPT_META[sec.label]||{color:'#888',bg:'#f0f0ea',border:'#e0e0e0'};
+    const members = sec.names.map(n=>allMembers.find(u=>u.name===n&&u.id!==cu.id&&!alreadyIds.has(u.id))).filter(Boolean);
+    if(!members.length) return;
+    rows += `<div style="font-size:10px;font-weight:500;color:${dMeta.color};padding:10px 16px 4px;letter-spacing:.4px">${sec.label}</div>`;
+    members.forEach((u,idx)=>{
+      const avHtml = u.avatar
+        ?`<img src="${u.avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+        :`<div style="width:36px;height:36px;border-radius:50%;background:${dMeta.bg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:${dMeta.color};flex-shrink:0">${u.name[0]}</div>`;
+      const adminTag = isAdminRole(u)?`<span style="font-size:10px;color:#185FA5;margin-left:3px">관리자</span>`:'';
+      rows += `<div onclick="closeNewDmPicker();openUserDm(${u.id})" style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:${idx<members.length-1?'0.5px solid #f0f0ea':'none'};cursor:pointer;active:background:#f5f5f3">
+        ${avHtml}
+        <div style="font-size:14px;font-weight:500;color:#1a1a18">${esc(u.name)}${adminTag}</div>
+      </div>`;
+    });
+  });
+
+  // 나머지 기타 멤버
+  const listed = new Set(DEPT_SECTIONS.flatMap(s=>s.names));
+  const extras = allMembers.filter(u=>u.id!==cu.id&&!listed.has(u.name)&&!alreadyIds.has(u.id));
+  if(extras.length){
+    rows += `<div style="font-size:10px;font-weight:500;color:#888;padding:10px 16px 4px">기타</div>`;
+    extras.forEach((u,idx)=>{
+      rows += `<div onclick="closeNewDmPicker();openUserDm(${u.id})" style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:${idx<extras.length-1?'0.5px solid #f0f0ea':'none'};cursor:pointer">
+        <div style="width:36px;height:36px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:13px;color:#888;flex-shrink:0">${u.name[0]}</div>
+        <div style="font-size:14px;font-weight:500;color:#1a1a18">${esc(u.name)}</div>
+      </div>`;
+    });
+  }
+
+  if(!rows){
+    rows = `<div style="padding:24px 16px;text-align:center;font-size:13px;color:#aaa">모든 멤버와 이미 대화 중입니다</div>`;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.id = 'new-dm-picker';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;justify-content:flex-end';
+  wrap.innerHTML = `
+    <div onclick="closeNewDmPicker()" style="flex:1;background:rgba(0,0,0,.45)"></div>
+    <div style="background:#fff;border-radius:20px 20px 0 0;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.15)">
+      <div style="padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f0f0ea;flex-shrink:0">
+        <span style="font-size:15px;font-weight:600;color:#1a1a18">새 대화 시작</span>
+        <button onclick="closeNewDmPicker()" style="width:28px;height:28px;border-radius:50%;border:none;background:#f0f0ea;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:#666">✕</button>
+      </div>
+      <div style="overflow-y:auto;-webkit-overflow-scrolling:touch">${rows}</div>
+    </div>`;
+  document.body.appendChild(wrap);
+}
+
+function closeNewDmPicker(){
+  document.getElementById('new-dm-picker')?.remove();
 }
 
 function buildUserDmRowInner(u, hasBorder, dMeta){
@@ -2447,10 +2490,6 @@ function openUserDm(userId){
   }
   updateFeedBadge();
 
-  // main-screen이 position:relative여야 absolute 자식이 정확히 덮임
-  const container = $('main-screen');
-  if(container) container.style.position = 'relative';
-
   const modal = $('user-dm-modal');
   if(modal){
     $('user-dm-target-name').textContent = user.name + (isAdminRole(user)?' (관리자)':'');
@@ -2541,20 +2580,21 @@ function injectUserDmModal(){
   if($('user-dm-modal')) return;
   const modal = document.createElement('div');
   modal.id = 'user-dm-modal';
-  // chat-modal과 동일하게 main-screen 내부에 absolute로 배치
-  // → 앱 컨테이너(max-width) 안에 정확히 덮이고, 배경 완전 불투명
   modal.style.cssText = [
     'display:none',
-    'position:absolute',
-    'inset:0',
-    'z-index:200',
+    'position:fixed',           // fixed로 viewport 기준 — 스크롤 무관하게 전체 덮음
+    'top:0',
+    'left:0',
+    'right:0',
+    'bottom:0',
+    'z-index:300',
     'flex-direction:column',
-    'background:#fff',   // 하드코딩 흰색 — CSS 변수 미적용 방지
+    'background:#fff',
     'overflow:hidden',
   ].join(';');
   modal.innerHTML = `
     <!-- 헤더 -->
-    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px 10px;background:#fff;border-bottom:1px solid #f0f0ea;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 10px;background:#fff;border-bottom:1px solid #f0f0ea;flex-shrink:0">
       <button onclick="closeUserDmModal()" style="width:34px;height:34px;border-radius:50%;border:none;background:#f5f5f3;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="#444" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -2564,9 +2604,9 @@ function injectUserDmModal(){
       </div>
     </div>
     <!-- 메시지 목록 -->
-    <div id="user-dm-messages" style="flex:1;overflow-y:auto;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch"></div>
+    <div id="user-dm-messages" style="flex:1;overflow-y:auto;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch;min-height:0"></div>
     <!-- 입력창 -->
-    <div style="padding:8px 12px 12px;background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
+    <div style="padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 10px);background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
       <textarea id="user-dm-input" rows="1" placeholder="메시지 입력..."
         style="flex:1;padding:10px 13px;border:1.5px solid #e8e8e4;border-radius:20px;font-size:14px;resize:none;max-height:100px;overflow-y:auto;background:#f8f8f6;color:#1a1a18;font-family:inherit;line-height:1.4;outline:none;-webkit-appearance:none"
         oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
@@ -2575,9 +2615,7 @@ function injectUserDmModal(){
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-5-5 12-2-4.5L2 8z" fill="#fff"/></svg>
       </button>
     </div>`;
-  // chat-modal과 동일하게 main-screen 내부에 삽입
-  const container = $('main-screen') || document.body;
-  container.appendChild(modal);
+  document.body.appendChild(modal);
 }
 
 function fmtTime(s){
