@@ -181,10 +181,16 @@ function initPullToRefresh(){
   };
 
   document.addEventListener('touchstart', e=>{
+    // 채팅 모달이 열려있으면 PTR 비활성
+    if($('chat-modal')?.style.display==='flex') return;
+    if($('user-dm-modal')?.style.display==='flex') return;
     if(window.scrollY===0) { startY=e.touches[0].clientY; pulling=true; }
   }, {passive:true});
 
   document.addEventListener('touchmove', e=>{
+    // 채팅 모달이 열려있으면 PTR 비활성
+    if($('chat-modal')?.style.display==='flex'){ pulling=false; return; }
+    if($('user-dm-modal')?.style.display==='flex'){ pulling=false; return; }
     if(!pulling) return;
     const dist=e.touches[0].clientY - startY;
     if(dist<=0){ pulling=false; return; }
@@ -2707,9 +2713,11 @@ function lockScroll(){
   const ms = $('main-screen'); if(!ms) return;
   _scrollLockY = ms.scrollTop;
   ms.style.overflow = 'hidden';
-  ms.style.pointerEvents = 'none';  // ★ 터치/클릭 이벤트 차단
+  ms.style.pointerEvents = 'none';
   ms.style.userSelect = 'none';
   document.body.style.overflow = 'hidden';
+  document.body.style.overscrollBehavior = 'none';
+  document.documentElement.style.overscrollBehavior = 'none';
   if(window.visualViewport && !window._vpHandler){
     window._vpHandler = () => applyViewportToModals();
     window.visualViewport.addEventListener('resize', window._vpHandler);
@@ -2720,10 +2728,12 @@ function lockScroll(){
 function unlockScroll(){
   const ms = $('main-screen'); if(!ms) return;
   ms.style.overflow = '';
-  ms.style.pointerEvents = '';  // ★ 복원
+  ms.style.pointerEvents = '';
   ms.style.userSelect = '';
   ms.scrollTop = _scrollLockY;
   document.body.style.overflow = '';
+  document.body.style.overscrollBehavior = '';
+  document.documentElement.style.overscrollBehavior = '';
   if(window.visualViewport && window._vpHandler){
     window.visualViewport.removeEventListener('resize', window._vpHandler);
     window.visualViewport.removeEventListener('scroll', window._vpHandler);
@@ -3010,7 +3020,7 @@ function injectUserDmModal(){
         <div style="font-size:11px;color:#888;margin-top:1px">개인 메시지</div>
       </div>
     </div>
-    <div id="user-dm-messages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch;min-height:0"></div>
+    <div id="user-dm-messages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 16px;background:#f8f8f6;-webkit-overflow-scrolling:touch;min-height:0;overscroll-behavior:none"></div>
     <div style="padding:8px 12px 12px;background:#fff;border-top:1px solid #f0f0ea;display:flex;gap:8px;align-items:flex-end;flex-shrink:0">
       <textarea id="user-dm-input" rows="1" placeholder="메시지 입력..."
         style="flex:1;padding:10px 13px;border:1.5px solid #e8e8e4;border-radius:20px;font-size:14px;resize:none;max-height:100px;overflow-y:auto;background:#f8f8f6;color:#1a1a18;font-family:inherit;line-height:1.4;outline:none;-webkit-appearance:none"
