@@ -2707,8 +2707,9 @@ function lockScroll(){
   const ms = $('main-screen'); if(!ms) return;
   _scrollLockY = ms.scrollTop;
   ms.style.overflow = 'hidden';
+  ms.style.pointerEvents = 'none';  // ★ 터치/클릭 이벤트 차단
+  ms.style.userSelect = 'none';
   document.body.style.overflow = 'hidden';
-  // visualViewport 키보드 대응 시작
   if(window.visualViewport && !window._vpHandler){
     window._vpHandler = () => applyViewportToModals();
     window.visualViewport.addEventListener('resize', window._vpHandler);
@@ -2719,15 +2720,15 @@ function lockScroll(){
 function unlockScroll(){
   const ms = $('main-screen'); if(!ms) return;
   ms.style.overflow = '';
+  ms.style.pointerEvents = '';  // ★ 복원
+  ms.style.userSelect = '';
   ms.scrollTop = _scrollLockY;
   document.body.style.overflow = '';
-  // visualViewport 핸들러 해제
   if(window.visualViewport && window._vpHandler){
     window.visualViewport.removeEventListener('resize', window._vpHandler);
     window.visualViewport.removeEventListener('scroll', window._vpHandler);
     window._vpHandler = null;
   }
-  // 모달 위치 원복
   const root = document.documentElement;
   root.style.removeProperty('--dm-top');
   root.style.removeProperty('--dm-height');
