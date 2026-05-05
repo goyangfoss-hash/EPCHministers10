@@ -321,6 +321,10 @@ async function doRegister() {
 }
 
 function doLogout() {
+  // 현재 기기 FCM 토큰만 삭제 (다른 기기 토큰은 유지)
+  if(!OFFLINE && cu?.id && window._fcmToken){
+    sb.from('fcm_tokens').delete().eq('token', window._fcmToken).then(()=>{});
+  }
   if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
   if(rtChannel){sb?.removeChannel(rtChannel);rtChannel=null;}
   if(window._dmChannel){try{sb?.removeChannel(window._dmChannel);}catch{}window._dmChannel=null;}
@@ -425,7 +429,7 @@ async function initFCM(){
     if(Notification.permission !== 'granted') return;
     // FCM 토큰 발급
     const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY });
-    if(token) await saveFCMToken(token);
+    if(token){ window._fcmToken = token; await saveFCMToken(token); }
     // 포그라운드 메시지 수신 — 토스트만 표시 (Notification API는 백그라운드 sw가 담당)
     messaging.onMessage(payload=>{
       const {title, body} = payload.notification || {};
@@ -448,9 +452,11 @@ function loadScript(src){
 
 async function saveFCMToken(token){
   try {
-    // 기존 토큰 모두 삭제 후 새 토큰만 저장 (중복 방지)
-    await sb.from('fcm_tokens').delete().eq('user_id', cu.id);
-    await sb.from('fcm_tokens').insert({user_id: cu.id, token});
+    // 동일 토큰이 이미 있으면 updated_at만 갱신, 없으면 insert
+    // → 다중 기기 모두 유지 (delete 금지)
+    await sb.from('fcm_tokens')
+      .upsert({ user_id: cu.id, token, updated_at: new Date().toISOString() },
+               { onConflict: 'token' });
   } catch(e){ console.warn('FCM token save error:', e.message); }
 }
 
@@ -2272,10 +2278,14 @@ function renderFeedTab(){
     return sum + msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
   }, 0);
   // 관리자↔이용자 읽지 않은 수
+  // - 이용자 입장: 관리자(isAdminRole)가 보낸 미읽은 메시지
+  // - 관리자 입장: 이용자(!isAdminRole)가 보낸 미읽은 메시지
   const adminChatUnread = Object.entries(chatMessages).reduce((sum,[otherId,msgs])=>{
     const other = allMembers.find(u=>u.id===parseInt(otherId));
     if(!other) return sum;
-    if(isAdmin() ? isAdminRole(other) : !isAdminRole(other)) return sum;
+    const isOtherAdmin = isAdminRole(other);
+    // 이용자면 관리자가 상대, 관리자면 이용자가 상대
+    if(isAdmin() ? isOtherAdmin : !isOtherAdmin) return sum;
     return sum + msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
   }, 0);
 
