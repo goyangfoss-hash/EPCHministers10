@@ -2735,38 +2735,46 @@ function unlockScroll(){
   if(cm){ cm.style.top=''; cm.style.height=''; }
 }
 
-// 키보드 올라올 때 두 채팅 모달 높이를 visualViewport에 맞춤
+// 키보드 올라올 때 채팅 메시지 영역 높이를 visualViewport에 맞춤
 function applyViewportToModals(){
   if(!window.visualViewport) return;
   const vv = window.visualViewport;
-  const top = vv.offsetTop;
-  const height = vv.height;
+  const visibleHeight = vv.height; // 키보드 제외 실제 보이는 높이
 
-  // user-dm-modal (CSS 변수 방식)
+  // chat-modal: position:fixed 이미 설정됨 — 메시지 영역 높이만 조정
+  const cm = $('chat-modal');
+  if(cm && cm.style.display === 'flex'){
+    // 헤더 + 입력창 높이를 제외한 나머지를 메시지 영역에
+    const header = cm.querySelector('[id="chat-header"], div:first-child');
+    const input  = cm.querySelector('[id="chat-input-area"], div:last-child');
+    const headerH = header ? header.offsetHeight : 56;
+    const inputH  = input  ? input.offsetHeight  : 60;
+    const msgEl = $('chat-messages');
+    if(msgEl){
+      msgEl.style.height = (visibleHeight - headerH - inputH) + 'px';
+      msgEl.style.maxHeight = (visibleHeight - headerH - inputH) + 'px';
+      msgEl.scrollTop = msgEl.scrollHeight;
+    }
+  }
+
+  // user-dm-modal: CSS 변수 방식 — top/height 재계산
   const screen = $('main-screen');
   if(screen){
     const r = screen.getBoundingClientRect();
-    const left = Math.max(0, r.left);
-    const width = r.width;
-    const modalTop = Math.max(top, r.top);
-    const modalHeight = height - (modalTop - top);
     const root = document.documentElement;
-    root.style.setProperty('--dm-top',    modalTop + 'px');
-    root.style.setProperty('--dm-left',   left + 'px');
-    root.style.setProperty('--dm-width',  width + 'px');
-    root.style.setProperty('--dm-height', modalHeight + 'px');
+    const modalTop = Math.max(0, r.top);
+    root.style.setProperty('--dm-top',    vv.offsetTop + 'px');
+    root.style.setProperty('--dm-left',   Math.max(0, r.left) + 'px');
+    root.style.setProperty('--dm-width',  r.width + 'px');
+    root.style.setProperty('--dm-height', visibleHeight + 'px');
   }
 
-  // chat-modal (inline style 방식 — index.html에 position:absolute로 있음)
-  const cm = $('chat-modal');
-  if(cm && cm.style.display === 'flex'){
-    cm.style.position = 'fixed';
-    cm.style.top = top + 'px';
-    cm.style.height = height + 'px';
-    if(screen){
-      const r = screen.getBoundingClientRect();
-      cm.style.left = Math.max(0, r.left) + 'px';
-      cm.style.width = r.width + 'px';
+  // user-dm-messages 영역도 동일하게
+  const dm = $('user-dm-modal');
+  if(dm && dm.style.display === 'flex'){
+    const dmMsg = $('user-dm-messages');
+    if(dmMsg){
+      dmMsg.scrollTop = dmMsg.scrollHeight;
     }
   }
 }
@@ -2845,14 +2853,10 @@ async function sendDm(){
 
 function closeChatModal(){
   const cm = $('chat-modal');
-  if(cm){
-    cm.style.display='none';
-    cm.style.position='';
-    cm.style.top='';
-    cm.style.height='';
-    cm.style.left='';
-    cm.style.width='';
-  }
+  if(cm) cm.style.display='none';
+  // 메시지 영역 높이 원복
+  const msgEl = $('chat-messages');
+  if(msgEl){ msgEl.style.height=''; msgEl.style.maxHeight=''; }
   chatTarget=null;
   unlockScroll();
   if($('tab-feed')?.style.display!=='none') renderFeedTab();
