@@ -763,7 +763,7 @@ function renderAlarmPanel(){
   if(unreadNotices.length){
     html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">새 공지</div>`;
     html+=unreadNotices.slice(0,3).map(n=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#E6F1FB;cursor:pointer" onclick="switchTab('notice',$('btn-notice'));toggleAlarmPanel()">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#E6F1FB;cursor:pointer" onclick="markNoticeRead(${n.id});switchTab('notice',$('btn-notice'));toggleAlarmPanel()">
         <div style="width:32px;height:32px;border-radius:50%;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📢</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.title)}</div>
@@ -776,7 +776,7 @@ function renderAlarmPanel(){
   // ③ 미읽은 DM
   if(dmUnreadCount>0){
     html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">새 메시지</div>`;
-    html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EEEDFE;cursor:pointer" onclick="switchTab('feed',$('btn-feed'));toggleAlarmPanel()">
+    html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EEEDFE;cursor:pointer" onclick="markAllDmRead();switchTab('feed',$('btn-feed'));toggleAlarmPanel()">
       <div style="width:32px;height:32px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">💬</div>
       <div style="flex:1">
         <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">새 메시지 ${dmUnreadCount}개</div>
@@ -794,14 +794,74 @@ function renderAlarmPanel(){
   el.innerHTML=html;
 }
 
-function markAllRead(){
-  // 공지 모두 읽음
-  const ids=(notices||[]).map(n=>n.id);
-  localStorage.setItem('ws_read_notices',JSON.stringify(ids));
+// 개별 공지 읽음 처리
+// DM 전체 읽음 처리 (알림 클릭 시)
+function markAllDmRead(){
+  Object.entries(chatMessages).forEach(([otherId, msgs])=>{
+    const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read);
+    if(!unread.length) return;
+    unread.forEach(m=>{ m.is_read=true; });
+    if(!OFFLINE){
+      sb.from('direct_messages')
+        .update({is_read:true})
+        .eq('to_id',cu.id).eq('from_id',parseInt(otherId))
+        .then(({error})=>{ if(error) console.warn('DM read error:',error.message); });
+    }
+  });
   dmUnreadCount=0;
   updateAlarmBadge();
-  renderAlarmPanel();
+  updateFeedBadge();
+}
+
+function markNoticeRead(noticeId){
+  // localStorage 기준 읽음 목록에 추가
+  const stored=JSON.parse(localStorage.getItem('ws_read_notices')||'[]');
+  if(!stored.includes(noticeId)){
+    stored.push(noticeId);
+    localStorage.setItem('ws_read_notices', JSON.stringify(stored));
+  }
+  // notices 배열 동기화
+  const n=notices.find(x=>x.id===noticeId);
+  if(n) n.is_unread=false;
+  // DB upsert
+  if(!OFFLINE && cu?.id){
+    sb.from('notice_reads')
+      .upsert({notice_id:noticeId, user_id:cu.id},{onConflict:'notice_id,user_id'})
+      .then(({error})=>{ if(error) console.warn('notice_reads upsert:',error.message); });
+  }
+  updateAlarmBadge();
   updateNoticeBadge();
+}
+
+function markAllRead(){
+  // ① 공지 모두 읽음 — localStorage + notices[].is_unread 동기화
+  const ids=(notices||[]).map(n=>n.id);
+  localStorage.setItem('ws_read_notices', JSON.stringify(ids));
+  notices.forEach(n=>{ n.is_unread=false; });
+
+  // ② DM 모두 읽음 — chatMessages + DB
+  const promises=[];
+  Object.entries(chatMessages).forEach(([otherId, msgs])=>{
+    const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read);
+    if(!unread.length) return;
+    unread.forEach(m=>{ m.is_read=true; });
+    if(!OFFLINE){
+      promises.push(
+        sb.from('direct_messages')
+          .update({is_read:true})
+          .eq('to_id', cu.id)
+          .eq('from_id', parseInt(otherId))
+          .then(({error})=>{ if(error) console.warn('markAllRead DM error:', error.message); })
+      );
+    }
+  });
+  dmUnreadCount=0;
+
+  // ③ UI 갱신
+  updateAlarmBadge();
+  updateNoticeBadge();
+  updateFeedBadge();
+  renderAlarmPanel();
 }
 
 function scheduleLocalAlarms(){
