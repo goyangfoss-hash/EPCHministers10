@@ -167,8 +167,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && cu
 //  당겨서 새로고침 (Pull to Refresh)
 // ══════════════════════════════════════════════════
 function initPullToRefresh(){
-  let startY=0, startScrollTop=0, pulling=false, indicator=null;
-  const threshold=110; // 임계값 상향 (70→110)
+  let startY=0, pulling=false, indicator=null;
+  const threshold=110;
 
   const createIndicator=()=>{
     if($('ptr-indicator')) return $('ptr-indicator');
@@ -185,45 +185,52 @@ function initPullToRefresh(){
     $('user-dm-modal')?.style.display==='flex' ||
     $('alarm-panel')?.style.display==='block';
 
-  const getScrollTop=()=>{
-    // main-screen이 스크롤 컨테이너인 경우
-    const ms=$('main-screen');
-    return ms ? ms.scrollTop : (window.scrollY||document.documentElement.scrollTop||0);
+  // 터치 시작점에서 스크롤 가능한 조상의 scrollTop 확인
+  const getTargetScrollTop=(target)=>{
+    let el=target;
+    while(el && el!==document.body){
+      const oy=getComputedStyle(el).overflowY;
+      if((oy==='auto'||oy==='scroll') && el.scrollHeight>el.clientHeight+2){
+        return el.scrollTop;
+      }
+      el=el.parentElement;
+    }
+    return 0;
   };
 
   document.addEventListener('touchstart', e=>{
-    if(isModalOpen()) return;
-    // 스크롤이 완전히 최상단(scrollTop===0)일 때만 PTR 준비
-    const st = getScrollTop();
-    if(st <= 0){
-      startY = e.touches[0].clientY;
-      startScrollTop = st;
-      pulling = true;
+    if(isModalOpen()){ pulling=false; return; }
+    // 터치한 곳의 스크롤 컨테이너가 최상단일 때만 PTR 활성
+    const st=getTargetScrollTop(e.touches[0].target);
+    if(st<=1){
+      startY=e.touches[0].clientY;
+      pulling=true;
     } else {
-      pulling = false;
+      pulling=false;
     }
   }, {passive:true});
 
   document.addEventListener('touchmove', e=>{
     if(isModalOpen()){ pulling=false; return; }
     if(!pulling) return;
-    // 중간에 scrollTop이 올라가면 취소
-    if(getScrollTop() > 5){ pulling=false; if(indicator) indicator.style.display='none'; return; }
-    const dist = e.touches[0].clientY - startY;
-    if(dist <= 0){ pulling=false; return; }
-    indicator = createIndicator();
-    if(dist > 30){
+    // 이동 중 스크롤 컨테이너가 올라갔으면 취소
+    const st=getTargetScrollTop(e.touches[0].target);
+    if(st>2){ pulling=false; if(indicator) indicator.style.display='none'; return; }
+    const dist=e.touches[0].clientY-startY;
+    if(dist<=0){ pulling=false; if(indicator) indicator.style.display='none'; return; }
+    indicator=createIndicator();
+    if(dist>30){
       indicator.style.display='flex';
-      $('ptr-text').textContent = dist>threshold ? '놓아서 새로고침' : '당겨서 새로고침';
+      $('ptr-text').textContent=dist>threshold?'놓아서 새로고침':'당겨서 새로고침';
     }
   }, {passive:true});
 
   document.addEventListener('touchend', async e=>{
     if(!pulling){ return; }
-    pulling = false;
-    const dist = e.changedTouches[0].clientY - startY;
-    if(dist > threshold && indicator){
-      $('ptr-text').textContent = '새로고침 중...';
+    pulling=false;
+    const dist=e.changedTouches[0].clientY-startY;
+    if(dist>threshold && indicator){
+      $('ptr-text').textContent='새로고침 중...';
       await refreshSchedules();
       if(cu) updateNoticeBadge();
     }
