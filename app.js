@@ -2790,7 +2790,13 @@ function openChat(userId){
   $('chat-modal').style.display='flex';
   applyViewportToModals();
   renderChatMessages();
-  setTimeout(()=>{const el=$('chat-messages');if(el)el.scrollTop=el.scrollHeight;},50);
+  // viewport 적용 후 다음 프레임에 스크롤 — 높이 확정 후 실행
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      const el=$('chat-messages');
+      if(el) el.scrollTop=el.scrollHeight;
+    });
+  });
 }
 
 function renderChatMessages(){
@@ -2804,7 +2810,8 @@ function renderChatMessages(){
       <div style="font-size:10px;color:#bbb;margin-top:3px">${fmtTime(m.created_at)}</div>
     </div>`;
   }).join('');
-  el.scrollTop=el.scrollHeight;
+  el.scrollTop = el.scrollHeight;
+  requestAnimationFrame(()=>{ el.scrollTop = el.scrollHeight; });
 }
 
 let dmSending = false;
@@ -2873,10 +2880,15 @@ function openUserDm(userId){
   const modal = $('user-dm-modal');
   if(modal){
     $('user-dm-target-name').textContent = user.name + (isAdminRole(user)?' (관리자)':'');
-    positionUserDmModal();  // ★ 열기 전에 정확한 위치/크기 계산
+    positionUserDmModal();
     modal.style.display = 'flex';
     renderUserDmMessages();
-    setTimeout(()=>{ const el=$('user-dm-messages'); if(el) el.scrollTop=el.scrollHeight; },50);
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        const el=$('user-dm-messages');
+        if(el) el.scrollTop=el.scrollHeight;
+      });
+    });
   }
   // 키보드/리사이즈 대응
   if(!window._dmResizeHandler){
@@ -2917,6 +2929,7 @@ function renderUserDmMessages(){
     </div>`;
   }).join('');
   el.scrollTop = el.scrollHeight;
+  requestAnimationFrame(()=>{ el.scrollTop = el.scrollHeight; });
 }
 
 let userDmSending = false;
