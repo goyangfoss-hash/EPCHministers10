@@ -2702,18 +2702,73 @@ function renderDmInbox(){}
 
 // ★ 모달 열릴 때 main-screen 스크롤 잠금 / 해제
 let _scrollLockY = 0;
+
 function lockScroll(){
   const ms = $('main-screen'); if(!ms) return;
   _scrollLockY = ms.scrollTop;
   ms.style.overflow = 'hidden';
-  // body도 잠금 (iOS 대응)
   document.body.style.overflow = 'hidden';
+  // visualViewport 키보드 대응 시작
+  if(window.visualViewport && !window._vpHandler){
+    window._vpHandler = () => applyViewportToModals();
+    window.visualViewport.addEventListener('resize', window._vpHandler);
+    window.visualViewport.addEventListener('scroll', window._vpHandler);
+  }
 }
+
 function unlockScroll(){
   const ms = $('main-screen'); if(!ms) return;
   ms.style.overflow = '';
   ms.scrollTop = _scrollLockY;
   document.body.style.overflow = '';
+  // visualViewport 핸들러 해제
+  if(window.visualViewport && window._vpHandler){
+    window.visualViewport.removeEventListener('resize', window._vpHandler);
+    window.visualViewport.removeEventListener('scroll', window._vpHandler);
+    window._vpHandler = null;
+  }
+  // 모달 위치 원복
+  const root = document.documentElement;
+  root.style.removeProperty('--dm-top');
+  root.style.removeProperty('--dm-height');
+  const cm = $('chat-modal');
+  if(cm){ cm.style.top=''; cm.style.height=''; }
+}
+
+// 키보드 올라올 때 두 채팅 모달 높이를 visualViewport에 맞춤
+function applyViewportToModals(){
+  if(!window.visualViewport) return;
+  const vv = window.visualViewport;
+  const top = vv.offsetTop;
+  const height = vv.height;
+
+  // user-dm-modal (CSS 변수 방식)
+  const screen = $('main-screen');
+  if(screen){
+    const r = screen.getBoundingClientRect();
+    const left = Math.max(0, r.left);
+    const width = r.width;
+    const modalTop = Math.max(top, r.top);
+    const modalHeight = height - (modalTop - top);
+    const root = document.documentElement;
+    root.style.setProperty('--dm-top',    modalTop + 'px');
+    root.style.setProperty('--dm-left',   left + 'px');
+    root.style.setProperty('--dm-width',  width + 'px');
+    root.style.setProperty('--dm-height', modalHeight + 'px');
+  }
+
+  // chat-modal (inline style 방식 — index.html에 position:absolute로 있음)
+  const cm = $('chat-modal');
+  if(cm && cm.style.display === 'flex'){
+    cm.style.position = 'fixed';
+    cm.style.top = top + 'px';
+    cm.style.height = height + 'px';
+    if(screen){
+      const r = screen.getBoundingClientRect();
+      cm.style.left = Math.max(0, r.left) + 'px';
+      cm.style.width = r.width + 'px';
+    }
+  }
 }
 
 function openChat(userId){
@@ -2733,6 +2788,7 @@ function openChat(userId){
   // ★ 스크롤 잠금
   lockScroll();
   $('chat-modal').style.display='flex';
+  applyViewportToModals();
   renderChatMessages();
   setTimeout(()=>{const el=$('chat-messages');if(el)el.scrollTop=el.scrollHeight;},50);
 }
@@ -2781,7 +2837,15 @@ async function sendDm(){
 }
 
 function closeChatModal(){
-  $('chat-modal').style.display='none';
+  const cm = $('chat-modal');
+  if(cm){
+    cm.style.display='none';
+    cm.style.position='';
+    cm.style.top='';
+    cm.style.height='';
+    cm.style.left='';
+    cm.style.width='';
+  }
   chatTarget=null;
   unlockScroll();
   if($('tab-feed')?.style.display!=='none') renderFeedTab();
