@@ -1029,6 +1029,110 @@ if('serviceWorker' in navigator){
     }
   });
 }
+// ══════════════════════════════════════════════════
+//  시스템 진단 패널 (관리자 전용)
+// ══════════════════════════════════════════════════
+function renderSystemDiag(){
+  // admin-diag 컨테이너가 없으면 관리자 탭 내부에 동적 생성
+  let el=$('admin-diag');
+  if(!el){
+    const adminTab=$('tab-admin');
+    if(!adminTab) return;
+    el=document.createElement('div');
+    el.id='admin-diag';
+    el.style.cssText='padding:0 16px 24px';
+    adminTab.appendChild(el);
+  }
+  el.innerHTML=`
+    <div style="font-size:13px;font-weight:700;color:#888;letter-spacing:.5px;margin-bottom:10px">🔧 시스템 진단</div>
+    <div id="diag-results" style="background:var(--color-background-primary);border-radius:14px;border:1px solid var(--color-border-tertiary);overflow:hidden">
+      <div style="padding:16px;text-align:center;color:#bbb;font-size:13px">진단 실행 버튼을 눌러주세요</div>
+    </div>
+    <button onclick="runSystemDiag()" style="width:100%;margin-top:10px;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer">🔍 전체 진단 실행</button>`;
+}
+
+async function runSystemDiag(){
+  const el=$('diag-results'); if(!el) return;
+  el.innerHTML=`<div style="padding:16px;text-align:center;color:#888;font-size:13px">⏳ 진단 중...</div>`;
+
+  const checks = [];
+
+  // ① Supabase 연결
+  try {
+    const {error} = await sb.from('app_users').select('id').limit(1);
+    checks.push({label:'Supabase DB 연결', ok:!error, detail:error?.message||`이용자 ${allMembers.length}명 로드됨`});
+  } catch(e){ checks.push({label:'Supabase DB 연결', ok:false, detail:e.message}); }
+
+  // ② FCM 토큰 등록 현황
+  try {
+    const {data,error} = await sb.from('fcm_tokens').select('user_id,token,updated_at');
+    if(error) throw new Error(error.message);
+    const uniqueUsers = new Set(data.map(r=>r.user_id)).size;
+    const old = data.filter(r=>(Date.now()-new Date(r.updated_at||0).getTime())>30*24*60*60*1000).length;
+    checks.push({label:'FCM 토큰 등록', ok:data.length>0,
+      detail:`총 ${data.length}개 / ${uniqueUsers}명 기기 등록${old>0?` / ⚠️ 만료 의심 ${old}개`:''}`});
+  } catch(e){ checks.push({label:'FCM 토큰 등록', ok:false, detail:e.message}); }
+
+  // ③ 현재 기기 FCM 토큰
+  checks.push({label:'현재 기기 FCM 토큰', ok:!!window._fcmToken,
+    detail:window._fcmToken?`등록됨 (${window._fcmToken.slice(0,24)}...)`:'없음 — 알림 권한 확인 필요'});
+
+  // ④ 브라우저 알림 권한
+  const perm = typeof Notification!=='undefined'?Notification.permission:'unsupported';
+  checks.push({label:'브라우저 알림 권한', ok:perm==='granted',
+    detail:perm==='granted'?'허용됨':perm==='denied'?'❌ 차단됨 — 브라우저/기기 설정에서 허용 필요':'미설정'});
+
+  // ⑤ Service Worker
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    const hasSW = regs.some(r=>r.active);
+    checks.push({label:'Service Worker (백그라운드 알림)', ok:hasSW,
+      detail:hasSW?`등록됨 (${regs.length}개 활성)`:'❌ 미등록 — firebase-messaging-sw.js 배포 필요'});
+  } catch(e){ checks.push({label:'Service Worker', ok:false, detail:'지원 안 됨'}); }
+
+  // ⑥ send-push Edge Function
+  try {
+    const res = await sb.functions.invoke('send-push',{body:{user_ids:[],title:'diag',body:'diag'}});
+    checks.push({label:'send-push Edge Function', ok:!res.error,
+      detail:res.error?'❌ 함수 없음 — Edge Function 배포 필요':'응답 정상 ✅'});
+  } catch(e){ checks.push({label:'send-push Edge Function', ok:false, detail:'❌ 배포 안 됨: '+e.message}); }
+
+  // ⑦ daily-shift-push Edge Function
+  try {
+    const res = await sb.functions.invoke('daily-shift-push',{body:{}});
+    checks.push({label:'daily-shift-push Edge Function', ok:!res.error,
+      detail:res.error?'❌ 함수 없음 — Edge Function 배포 필요':'응답 정상 ✅'});
+  } catch(e){ checks.push({label:'daily-shift-push Edge Function', ok:false, detail:'❌ 배포 안 됨: '+e.message}); }
+
+  // ⑧ Realtime 구독
+  checks.push({label:'Realtime 구독', ok:!!rtChannel, detail:rtChannel?'연결됨':'미연결'});
+
+  // ⑨ DM 채널
+  checks.push({label:'DM 실시간 채널', ok:!!(window._dmChannel&&window._dmOutChannel),
+    detail:(window._dmChannel&&window._dmOutChannel)?'수신·발신 모두 연결됨':'일부 미연결'});
+
+  // ⑩ 미읽은 DM 현황
+  const unread=Object.values(chatMessages).reduce((s,msgs)=>s+msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length,0);
+  checks.push({label:'미읽은 DM', ok:true, detail:`${unread}건`});
+
+  // 결과 렌더
+  el.innerHTML = checks.map((c,i)=>{
+    const icon = c.ok===true?'✅':c.ok===false?'❌':'⚠️';
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-bottom:${i<checks.length-1?'0.5px solid var(--color-border-tertiary)':'none'};background:${c.ok===false?'rgba(220,38,38,.04)':''}">
+      <span style="font-size:14px;flex-shrink:0;margin-top:1px">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${c.label}</div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px;word-break:break-all">${c.detail}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const fails = checks.filter(c=>c.ok===false).length;
+  el.insertAdjacentHTML('beforeend', fails===0
+    ?`<div style="padding:12px 14px;background:#f0fdf4;border-top:1px solid #bbf7d0;font-size:13px;color:#16a34a;font-weight:600;text-align:center">✅ 모든 시스템 정상 작동 중</div>`
+    :`<div style="padding:12px 14px;background:#fef2f2;border-top:1px solid #fecaca;font-size:13px;color:#dc2626;font-weight:600;text-align:center">⚠️ ${fails}개 항목 조치 필요 — 위 빨간 항목을 확인해주세요</div>`);
+}
+
 async function loadAll(){
   const[uR,sR,nR,fR,cR,rR]=await Promise.all([
     sb.from('app_users').select('*'),
@@ -2871,7 +2975,7 @@ function fmtTime(s){
 // ══════════════════════════════════════════════════
 //  관리자
 // ══════════════════════════════════════════════════
-function renderAdmin(){renderPending();renderMembers();buildSchedPreview();renderAdminFeed();renderUploadSettings();updatePendingBadge();}
+function renderAdmin(){renderPending();renderMembers();buildSchedPreview();renderAdminFeed();renderUploadSettings();renderSystemDiag();updatePendingBadge();}
 
 function renderUploadSettings(){
   const el=$('upload-settings-ui'); if(!el) return;
