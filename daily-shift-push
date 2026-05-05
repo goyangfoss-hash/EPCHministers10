@@ -1,0 +1,138 @@
+// supabase/functions/daily-shift-push/index.ts
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+async function getAccessToken() {
+  const sa = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!)
+  const now = Math.floor(Date.now() / 1000)
+  const encode = (obj: object) =>
+    btoa(JSON.stringify(obj)).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')
+  const header = encode({ alg: 'RS256', typ: 'JWT' })
+  const payload = encode({
+    iss: sa.client_email,
+    scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now, exp: now + 3600,
+  })
+  const signingInput = `${header}.${payload}`
+  const keyData = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g,'')
+  const binaryKey = Uint8Array.from(atob(keyData), c => c.charCodeAt(0))
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8', binaryKey.buffer,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
+  )
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput))
+  const signature = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')
+  const jwt = `${signingInput}.${signature}`
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  })
+  return (await r.json()).access_token as string
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  try {
+    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
+    // 내일 날짜 (KST = UTC+9)
+    const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000)
+    const tmr = new Date(nowKST)
+    tmr.setDate(tmr.getDate() + 1)
+    const y = tmr.getUTCFullYear()
+    const m = tmr.getUTCMonth() + 1
+    const d = tmr.getUTCDate()
+
+    const { data: schedules } = await supabase
+      .from('schedules').select('data').eq('year', y).eq('month', m)
+
+    if (!schedules?.length) {
+      return new Response(JSON.stringify({ sent: 0, reason: 'no schedules' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    const namesWithShift: Record<string, string> = {}
+    for (const row of schedules) {
+      for (const [name, days] of Object.entries(row.data as Record<string, Record<string, string>>)) {
+        if (days[String(d)]) namesWithShift[name] = days[String(d)]
+      }
+    }
+
+    if (!Object.keys(namesWithShift).length) {
+      return new Response(JSON.stringify({ sent: 0, reason: 'no shifts tomorrow' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    const { data: users } = await supabase
+      .from('app_users').select('id,name').in('name', Object.keys(namesWithShift))
+    if (!users?.length) return new Response(JSON.stringify({ sent: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+    const userIds = users.map((u: any) => u.id)
+    const nameMap: Record<number, string> = {}
+    users.forEach((u: any) => { nameMap[u.id] = u.name })
+
+    const { data: tokens } = await supabase.from('fcm_tokens').select('user_id,token').in('user_id', userIds)
+    if (!tokens?.length) return new Response(JSON.stringify({ sent: 0, reason: 'no tokens' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+    const projectId = Deno.env.get('FIREBASE_PROJECT_ID')!
+    const accessToken = await getAccessToken()
+    const invalid: string[] = []
+    let sent = 0
+
+    // user_id별 토큰 그룹핑
+    const byUser: Record<number, string[]> = {}
+    for (const { user_id, token } of tokens as any[]) {
+      if (!byUser[user_id]) byUser[user_id] = []
+      byUser[user_id].push(token)
+    }
+
+    for (const [userIdStr, userTokens] of Object.entries(byUser)) {
+      const uid = parseInt(userIdStr)
+      const name = nameMap[uid]
+      const shiftType = namesWithShift[name] || '사역'
+      const title = '📅 내일 사역 알림'
+      const body = `${m}월 ${d}일 [${shiftType}] 사역이 내일입니다.`
+
+      for (const token of userTokens) {
+        const r = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: {
+              token,
+              notification: { title, body },
+              data: { tab: 'cal', url: '/?tab=cal' },
+              webpush: {
+                notification: { title, body, icon: '/icon-192.png', badge: '/icon-192.png',
+                  tag: 'epch-shift', renotify: false },
+                fcm_options: { link: '/?tab=cal' },
+              },
+            },
+          }),
+        })
+        const j = await r.json()
+        if (j.error?.details?.some((d: any) => ['UNREGISTERED','INVALID_ARGUMENT'].includes(d.errorCode))) invalid.push(token)
+        else if (r.ok) sent++
+      }
+    }
+
+    if (invalid.length) await supabase.from('fcm_tokens').delete().in('token', invalid)
+    console.log(`[daily-shift-push] ${y}-${m}-${d} 내일 사역자 ${Object.keys(namesWithShift).length}명, ${sent}건 전송`)
+    return new Response(JSON.stringify({ sent, users: Object.keys(namesWithShift).length }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+  } catch(e) {
+    console.error('daily-shift-push error:', e)
+    return new Response(JSON.stringify({ error: String(e) }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
+})
