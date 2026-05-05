@@ -691,7 +691,8 @@ function getNotifCount(){
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const tomorrow=new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
 
-  // ① 오늘/내일 사역 알림
+  // ① 오늘/내일 사역 알림 — 확인하지 않은 것만 카운트
+  const seenShifts=new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
   let shiftCnt=0;
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
@@ -699,7 +700,10 @@ function getNotifCount(){
       Object.entries(myData).forEach(([ds])=>{
         const d=parseInt(ds);
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
-        if(dt.getTime()===today.getTime()||dt.getTime()===tomorrow.getTime()) shiftCnt++;
+        if(dt.getTime()===today.getTime()||dt.getTime()===tomorrow.getTime()){
+          const key=`${y}-${m}-${d}`;
+          if(!seenShifts.has(key)) shiftCnt++;
+        }
       });
     });
   });
@@ -746,7 +750,7 @@ function renderAlarmPanel(){
       const c=tc(type);
       const isToday=dt.getTime()===today.getTime();
       const label=isToday?'오늘':'내일';
-      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="markShiftSeen('${y}-${m}-${d}');viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
         <div style="width:32px;height:32px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📅</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${label} 사역</div>
@@ -795,6 +799,20 @@ function renderAlarmPanel(){
 }
 
 // 개별 공지 읽음 처리
+// 개별 사역 알림 확인 처리
+function markShiftSeen(key){
+  const seen=new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
+  seen.add(key);
+  // 오늘 이전 날짜 기록 자동 정리 (30일 이상 된 항목 제거)
+  const cutoff=new Date(); cutoff.setDate(cutoff.getDate()-30);
+  const cleaned=[...seen].filter(k=>{
+    const [y,m,d]=k.split('-').map(Number);
+    return new Date(y,m-1,d)>=cutoff;
+  });
+  localStorage.setItem('ws_seen_shifts', JSON.stringify(cleaned));
+  updateAlarmBadge();
+}
+
 // DM 전체 읽음 처리 (알림 클릭 시)
 function markAllDmRead(){
   Object.entries(chatMessages).forEach(([otherId, msgs])=>{
@@ -834,30 +852,46 @@ function markNoticeRead(noticeId){
 }
 
 function markAllRead(){
-  // ① 공지 모두 읽음 — localStorage + notices[].is_unread 동기화
+  // ① 사역 알림 모두 확인 — 오늘/내일 해당 날짜 전부 seen 처리
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const tomorrow=new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+  const seen=new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    Object.entries(ym).forEach(([m,data])=>{
+      const myData=data[cu?.name]||{};
+      Object.entries(myData).forEach(([ds])=>{
+        const d=parseInt(ds);
+        const dt=new Date(parseInt(y),parseInt(m)-1,d);
+        if(dt.getTime()===today.getTime()||dt.getTime()===tomorrow.getTime()){
+          seen.add(`${y}-${m}-${d}`);
+        }
+      });
+    });
+  });
+  localStorage.setItem('ws_seen_shifts', JSON.stringify([...seen]));
+
+  // ② 공지 모두 읽음
   const ids=(notices||[]).map(n=>n.id);
   localStorage.setItem('ws_read_notices', JSON.stringify(ids));
   notices.forEach(n=>{ n.is_unread=false; });
 
-  // ② DM 모두 읽음 — chatMessages + DB
-  const promises=[];
+  // ③ DM 모두 읽음
   Object.entries(chatMessages).forEach(([otherId, msgs])=>{
     const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read);
     if(!unread.length) return;
     unread.forEach(m=>{ m.is_read=true; });
     if(!OFFLINE){
-      promises.push(
-        sb.from('direct_messages')
-          .update({is_read:true})
-          .eq('to_id', cu.id)
-          .eq('from_id', parseInt(otherId))
-          .then(({error})=>{ if(error) console.warn('markAllRead DM error:', error.message); })
-      );
+      sb.from('direct_messages')
+        .update({is_read:true})
+        .eq('to_id', cu.id)
+        .eq('from_id', parseInt(otherId))
+        .then(({error})=>{ if(error) console.warn('markAllRead DM error:', error.message); });
     }
   });
   dmUnreadCount=0;
 
-  // ③ UI 갱신
+  // ④ UI 갱신
   updateAlarmBadge();
   updateNoticeBadge();
   updateFeedBadge();
