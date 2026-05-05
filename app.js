@@ -940,6 +940,7 @@ function closeAllPanels(){
 
   chatTarget=null;
   userDmTarget=null;
+  unlockScroll();
 }
 
 function toggleAlarmPanel(){
@@ -2699,24 +2700,38 @@ function updateAppBadge(){
 function renderMyFeed(){}
 function renderDmInbox(){}
 
+// ★ 모달 열릴 때 main-screen 스크롤 잠금 / 해제
+let _scrollLockY = 0;
+function lockScroll(){
+  const ms = $('main-screen'); if(!ms) return;
+  _scrollLockY = ms.scrollTop;
+  ms.style.overflow = 'hidden';
+  // body도 잠금 (iOS 대응)
+  document.body.style.overflow = 'hidden';
+}
+function unlockScroll(){
+  const ms = $('main-screen'); if(!ms) return;
+  ms.style.overflow = '';
+  ms.scrollTop = _scrollLockY;
+  document.body.style.overflow = '';
+}
+
 function openChat(userId){
   const user=allMembers.find(u=>u.id===userId);
   if(!user) return;
   chatTarget=user;
-  // ★ 로컬 읽음 처리
   const msgs=chatMessages[userId]||[];
   const unreadIds=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).map(m=>m.id);
   msgs.forEach(m=>{if(m.to_id===cu.id)m.is_read=true;});
-  // ★ DB 한 번에 업데이트
   if(!OFFLINE&&unreadIds.length>0){
     sb.from('direct_messages')
-      .update({is_read:true})
-      .eq('to_id',cu.id)
-      .eq('from_id',userId)
+      .update({is_read:true}).eq('to_id',cu.id).eq('from_id',userId)
       .then(({error})=>{if(error)console.warn('DM read error:',error.message);});
   }
   updateFeedBadge();
   $('chat-target-name').textContent=user.name;
+  // ★ 스크롤 잠금
+  lockScroll();
   $('chat-modal').style.display='flex';
   renderChatMessages();
   setTimeout(()=>{const el=$('chat-messages');if(el)el.scrollTop=el.scrollHeight;},50);
@@ -2768,7 +2783,7 @@ async function sendDm(){
 function closeChatModal(){
   $('chat-modal').style.display='none';
   chatTarget=null;
-  // ★ 채팅창 닫을 때 소통 탭 목록 갱신 → 배지 사라짐
+  unlockScroll();
   if($('tab-feed')?.style.display!=='none') renderFeedTab();
   updateFeedBadge();
 }
@@ -2790,7 +2805,7 @@ function openUserDm(userId){
       .then(({error})=>{ if(error) console.warn('UserDM read error:',error.message); });
   }
   updateFeedBadge();
-
+  lockScroll();
   const modal = $('user-dm-modal');
   if(modal){
     $('user-dm-target-name').textContent = user.name + (isAdminRole(user)?' (관리자)':'');
@@ -2891,6 +2906,7 @@ function closeUserDmModal(){
   const modal=$('user-dm-modal');
   if(modal) modal.style.display='none';
   userDmTarget=null;
+  unlockScroll();
   if($('tab-feed')?.style.display!=='none') renderFeedTab();
   updateFeedBadge();
 }
