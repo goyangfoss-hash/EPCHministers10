@@ -167,8 +167,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && cu
 //  당겨서 새로고침 (Pull to Refresh)
 // ══════════════════════════════════════════════════
 function initPullToRefresh(){
-  let startY=0, pulling=false, indicator=null;
-  const threshold=70; // 당기는 최소 거리
+  let startY=0, startScrollTop=0, pulling=false, indicator=null;
+  const threshold=110; // 임계값 상향 (70→110)
 
   const createIndicator=()=>{
     if($('ptr-indicator')) return $('ptr-indicator');
@@ -180,37 +180,54 @@ function initPullToRefresh(){
     return el;
   };
 
+  const isModalOpen=()=>
+    $('chat-modal')?.style.display==='flex' ||
+    $('user-dm-modal')?.style.display==='flex' ||
+    $('alarm-panel')?.style.display==='block';
+
+  const getScrollTop=()=>{
+    // main-screen이 스크롤 컨테이너인 경우
+    const ms=$('main-screen');
+    return ms ? ms.scrollTop : (window.scrollY||document.documentElement.scrollTop||0);
+  };
+
   document.addEventListener('touchstart', e=>{
-    // 채팅 모달이 열려있으면 PTR 비활성
-    if($('chat-modal')?.style.display==='flex') return;
-    if($('user-dm-modal')?.style.display==='flex') return;
-    if(window.scrollY===0) { startY=e.touches[0].clientY; pulling=true; }
+    if(isModalOpen()) return;
+    // 스크롤이 완전히 최상단(scrollTop===0)일 때만 PTR 준비
+    const st = getScrollTop();
+    if(st <= 0){
+      startY = e.touches[0].clientY;
+      startScrollTop = st;
+      pulling = true;
+    } else {
+      pulling = false;
+    }
   }, {passive:true});
 
   document.addEventListener('touchmove', e=>{
-    // 채팅 모달이 열려있으면 PTR 비활성
-    if($('chat-modal')?.style.display==='flex'){ pulling=false; return; }
-    if($('user-dm-modal')?.style.display==='flex'){ pulling=false; return; }
+    if(isModalOpen()){ pulling=false; return; }
     if(!pulling) return;
-    const dist=e.touches[0].clientY - startY;
-    if(dist<=0){ pulling=false; return; }
-    indicator=createIndicator();
-    if(dist>20){
+    // 중간에 scrollTop이 올라가면 취소
+    if(getScrollTop() > 5){ pulling=false; if(indicator) indicator.style.display='none'; return; }
+    const dist = e.touches[0].clientY - startY;
+    if(dist <= 0){ pulling=false; return; }
+    indicator = createIndicator();
+    if(dist > 30){
       indicator.style.display='flex';
-      $('ptr-text').textContent=dist>threshold?'놓아서 새로고침':'당겨서 새로고침';
+      $('ptr-text').textContent = dist>threshold ? '놓아서 새로고침' : '당겨서 새로고침';
     }
   }, {passive:true});
 
   document.addEventListener('touchend', async e=>{
-    if(!pulling){return;}
-    pulling=false;
-    const dist=e.changedTouches[0].clientY - startY;
-    if(dist>threshold && indicator){
-      $('ptr-text').textContent='새로고침 중...';
+    if(!pulling){ return; }
+    pulling = false;
+    const dist = e.changedTouches[0].clientY - startY;
+    if(dist > threshold && indicator){
+      $('ptr-text').textContent = '새로고침 중...';
       await refreshSchedules();
       if(cu) updateNoticeBadge();
     }
-    if(indicator){ indicator.style.display='none'; }
+    if(indicator) indicator.style.display='none';
   }, {passive:true});
 }
 // ══════════════════════════════════════════════════
