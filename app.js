@@ -348,6 +348,15 @@ async function doRegister() {
   const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[name]));
   okEl.textContent=`'${name}'님의 가입 신청이 완료되었습니다.${inS?` 사역표에 '${name}'님의 일정이 있습니다. 관리자 승인 후 바로 확인하실 수 있습니다.`:' 관리자 승인 후 로그인 가능합니다.'}`;
   okEl.style.display='block'; ['r-name','r-phone','r-pw'].forEach(id=>$(id).value='');
+
+  // ★ 관리자들에게 가입 신청 푸시 알림
+  try {
+    const {data:admins}=await sb.from('app_users').select('id').in('role',['admin','superadmin']).eq('status','approved');
+    if(admins?.length){
+      const adminIds=admins.map(a=>a.id);
+      await sendPushToUsers(adminIds, '👤 새 가입 신청', `${name}님이 가입을 신청했습니다.`, 'admin');
+    }
+  } catch(e){ console.warn('가입 신청 푸시 오류:', e.message); }
 }
 
 function doLogout() {
@@ -541,8 +550,17 @@ function startRealtime() {
         }
       }
       // ★ 회원 목록 즉시 갱신 (프로필 사진 포함)
-      if(isAdmin()){renderAdmin();updatePendingBadge();}
-      renderMembers(); // 관리자가 아니어도 소통탭 등에서 표시되는 멤버 정보 갱신
+      if(isAdmin()){
+        // 새 pending 신청자 감지 → 관리자 앱내 알림
+        const newPending=data?.filter(u=>u.status==='pending')||[];
+        const prevPending=window._pending||[];
+        const brandNew=newPending.filter(u=>!prevPending.find(p=>p.id===u.id));
+        if(brandNew.length>0){
+          pushNotify('👤 새 가입 신청', `${brandNew.map(u=>u.name).join(', ')}님이 가입을 신청했습니다.`, 'admin');
+        }
+        renderAdmin();updatePendingBadge();
+      }
+      renderMembers();
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'shift_comments'},payload=>{
       const row=payload.new, author=allMembers.find(u=>u.id===row.user_id);
