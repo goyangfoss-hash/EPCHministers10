@@ -56,7 +56,11 @@ self.addEventListener('message', event => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
-// FCM 푸시는 firebase-messaging-sw.js가 전담 처리
+// ★ FCM 푸시는 firebase-messaging-sw.js 전담
+// sw.js는 push/notificationclick 완전 차단
 self.addEventListener('push', event => {
-  event.stopImmediatePropagation();
+  event.waitUntil(Promise.resolve());
+});
+self.addEventListener('notificationclick', event => {
+  // firebase-messaging-sw.js가 처리
 });
