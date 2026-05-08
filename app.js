@@ -738,6 +738,11 @@ function updateAlarmBadge(){
     if(!b){b=document.createElement('div');b.className='alarm-badge';btn.appendChild(b);}
     b.textContent=cnt;
   } else b?.remove();
+  // ★ PWA 홈 화면 아이콘 배지 (iOS 16.4+, Android PWA)
+  if('setAppBadge' in navigator){
+    if(cnt>0) navigator.setAppBadge(cnt).catch(()=>{});
+    else navigator.clearAppBadge().catch(()=>{});
+  }
 }
 
 function getNotifCount(){
@@ -953,6 +958,10 @@ function markAllRead(){
 }
 
 function scheduleLocalAlarms(){
+  // FCM Cron(daily-shift-push)이 백그라운드 알림을 담당하므로
+  // scheduleLocalAlarms는 앱이 열려있는 동안의 보조 알림만 담당
+  // 단, FCM 포그라운드 메시지와 중복되지 않도록 이미 FCM 토큰이 있으면 skip
+  if(window._fcmToken) return; // FCM이 있으면 서버에서 처리 — 로컬 알람 불필요
   const now=new Date();
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
