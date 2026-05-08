@@ -12,13 +12,17 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 백그라운드 메시지 수신
+// ★ push 이벤트를 FCM SDK보다 먼저 가로채서 중복 방지
+self.addEventListener('push', event => {
+  event.waitUntil(Promise.resolve());
+}, true); // capture:true → FCM SDK보다 먼저 실행
+
+// FCM 백그라운드 메시지 처리
 messaging.onBackgroundMessage(payload => {
   const { title, body } = payload.notification || {};
   const data = payload.data || {};
   const tab = data.tab || 'feed';
 
-  // ★ 앱 아이콘 배지 설정
   if ('setAppBadge' in self.navigator) {
     self.navigator.setAppBadge(1).catch(() => {});
   }
@@ -36,20 +40,15 @@ messaging.onBackgroundMessage(payload => {
 // 알림 클릭 처리
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-
-  // ★ 배지 제거
   if ('clearAppBadge' in self.navigator) {
     self.navigator.clearAppBadge().catch(() => {});
   }
-
   const tab = event.notification.data?.tab || 'feed';
   const targetUrl = new URL('/?tab=' + tab, self.location.origin).href;
-
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
       for (const client of windowClients) {
-        const clientUrl = new URL(client.url);
-        if (clientUrl.origin === self.location.origin) {
+        if (new URL(client.url).origin === self.location.origin) {
           client.focus();
           client.postMessage({ type: 'NOTIF_CLICK', tab });
           return;
@@ -58,10 +57,4 @@ self.addEventListener('notificationclick', event => {
       return clients.openWindow(targetUrl);
     })
   );
-});
-
-// FCM onBackgroundMessage 이후에 native push 차단
-self.addEventListener('push', event => {
-  // FCM SDK가 이미 처리했으므로 추가 처리 안 함
-  event.waitUntil(Promise.resolve());
 });
