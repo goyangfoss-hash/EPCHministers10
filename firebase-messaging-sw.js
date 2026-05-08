@@ -59,3 +59,9 @@ self.addEventListener('notificationclick', event => {
     })
   );
 });
+
+// FCM onBackgroundMessage 이후에 native push 차단
+self.addEventListener('push', event => {
+  // FCM SDK가 이미 처리했으므로 추가 처리 안 함
+  event.waitUntil(Promise.resolve());
+});
