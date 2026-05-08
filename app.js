@@ -463,15 +463,29 @@ async function initFCM(){
       });
     }
     const messaging = window.firebase.messaging();
-    // 알림 권한 확인
     if(Notification.permission !== 'granted') return;
-    // FCM 토큰 발급
-    const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY });
+
+    // ★ firebase-messaging-sw.js 등록 완료 후 토큰 발급
+    const swReg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+    await navigator.serviceWorker.ready; // SW 활성화 대기
+
+    // 토큰 발급 (최대 3회 재시도)
+    let token = null;
+    for(let i=0; i<3; i++){
+      try {
+        token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: swReg });
+        if(token) break;
+      } catch(e){
+        console.warn(`FCM 토큰 발급 재시도 ${i+1}:`, e.message);
+        await new Promise(r=>setTimeout(r, 1000));
+      }
+    }
     if(token){ window._fcmToken = token; await saveFCMToken(token); }
-    // 포그라운드 메시지 수신 — 토스트만 표시 (Notification API는 백그라운드 sw가 담당)
+    else { console.warn('FCM 토큰 발급 실패'); }
+
+    // 포그라운드 메시지 수신
     messaging.onMessage(payload=>{
       const {title, body} = payload.notification || {};
-      // 포그라운드에서는 토스트만, Notification.show는 하지 않음 (중복 방지 플래그 세팅)
       window._fcmForeground = true;
       if(title) showToastMsg(`🔔 ${title}: ${body||''}`);
       setTimeout(()=>{ window._fcmForeground = false; }, 3000);
