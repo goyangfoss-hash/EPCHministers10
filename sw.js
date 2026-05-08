@@ -55,3 +55,8 @@ self.addEventListener('fetch', event => {
 self.addEventListener('message', event => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
+
+// FCM 푸시는 firebase-messaging-sw.js가 전담 처리
+self.addEventListener('push', event => {
+  event.stopImmediatePropagation();
+});
