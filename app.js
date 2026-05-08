@@ -491,8 +491,8 @@ function loadScript(src){
 
 async function saveFCMToken(token){
   try {
-    // 동일 토큰이 이미 있으면 updated_at만 갱신, 없으면 insert
-    // → 다중 기기 모두 유지 (delete 금지)
+    // 토큰을 기기별로 유지 (삭제 안 함)
+    // send-push Edge Function에서 user_id별 최신 토큰 1개만 선택해서 전송
     await sb.from('fcm_tokens')
       .upsert({ user_id: cu.id, token, updated_at: new Date().toISOString() },
                { onConflict: 'token' });
