@@ -12,32 +12,30 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// ★ push 이벤트를 FCM SDK보다 먼저 가로채서 중복 방지
-self.addEventListener('push', event => {
-  event.waitUntil(Promise.resolve());
-}, true); // capture:true → FCM SDK보다 먼저 실행
-
-// FCM 백그라운드 메시지 처리
+// ★ data 전용 메시지 처리 — 모든 플랫폼에서 이 핸들러만 실행
 messaging.onBackgroundMessage(payload => {
-  const { title, body } = payload.notification || {};
   const data = payload.data || {};
-  const tab = data.tab || 'feed';
+  const title = data.title || '은평교회 사역스케줄러';
+  const body  = data.body  || '';
+  const tab   = data.tab   || 'feed';
 
+  // 앱 아이콘 배지
   if ('setAppBadge' in self.navigator) {
     self.navigator.setAppBadge(1).catch(() => {});
   }
 
-  self.registration.showNotification(title || '은평교회 사역스케줄러', {
-    body: body || '',
+  // 기기당 1번 — 같은 tag는 덮어씀
+  self.registration.showNotification(title, {
+    body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     tag: 'epch-' + tab,
-    renotify: true,
+    renotify: false,
     data: { tab, url: data.url || '/?tab=' + tab },
   });
 });
 
-// 알림 클릭 처리
+// 알림 클릭 → 앱 열고 해당 탭 이동
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   if ('clearAppBadge' in self.navigator) {
