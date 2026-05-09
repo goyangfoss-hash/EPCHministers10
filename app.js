@@ -4164,7 +4164,7 @@ async function doApplySchedule(year, month, isMerge){
 
   // ★ 안전장치 2: 되돌리기 토스트
   if(settings.enableUndo!==false && undoData){
-    showUndoToast(isMerge?`'${fileName}' 병합 완료`:isSameFile?`'${fileName}' 수정본 적용`:`${year}년 ${MN[month]} 사역표 저장 완료`);
+    showUndoToast(isMerge?`'${fileName}' 병합 완료`:`${year}년 ${MN[month]} 사역표 저장 완료`);
   } else {
     toast('excel-toast');
   }
