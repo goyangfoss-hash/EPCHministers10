@@ -1860,7 +1860,7 @@ async function saveMyTeam(){
   localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
   if(!OFFLINE && cu?.id){
     const {error} = await sb.from('app_users')
-      .update({my_team: JSON.stringify(myTeam)})
+      .update({my_team: myTeam})
       .eq('id', cu.id);
     if(error) console.warn('saveMyTeam error:', error.message);
   }
@@ -1892,8 +1892,9 @@ async function saveSeenShifts(seen){
   const arr = [...seen];
   localStorage.setItem('ws_seen_shifts', JSON.stringify(arr));
   if(!OFFLINE && cu?.id){
+    // JSONB 컬럼에는 배열 직접 전달 (JSON.stringify 하면 이중 직렬화됨)
     const {error} = await sb.from('app_users')
-      .update({seen_shifts: JSON.stringify(arr)})
+      .update({seen_shifts: arr})
       .eq('id', cu.id);
     if(error) console.warn('saveSeenShifts error:', error.message);
   }
@@ -1906,7 +1907,8 @@ async function loadSeenShiftsFromDB(){
   try {
     const {data} = await sb.from('app_users').select('seen_shifts').eq('id', cu.id).single();
     let loaded = data?.seen_shifts;
-    if(typeof loaded === 'string') loaded = JSON.parse(loaded);
+    // DB에 이중 직렬화된 경우 대비해 배열이 될 때까지 파싱
+    while(typeof loaded === 'string') loaded = JSON.parse(loaded);
     if(Array.isArray(loaded) && loaded.length > 0){
       localStorage.setItem('ws_seen_shifts', JSON.stringify(loaded));
       return new Set(loaded);
