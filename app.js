@@ -515,11 +515,19 @@ function loadScript(src){
 
 async function saveFCMToken(token){
   try {
-    // 토큰을 기기별로 유지 (삭제 안 함)
-    // send-push Edge Function에서 user_id별 최신 토큰 1개만 선택해서 전송
+    // 현재 토큰 upsert
     await sb.from('fcm_tokens')
       .upsert({ user_id: cu.id, token, updated_at: new Date().toISOString() },
                { onConflict: 'token' });
+    // 오래된 토큰 정리 — 최근 2개만 유지 (Mac + iPhone 등 2기기 기준)
+    const { data: tokens } = await sb.from('fcm_tokens')
+      .select('token, updated_at')
+      .eq('user_id', cu.id)
+      .order('updated_at', { ascending: false });
+    if(tokens && tokens.length > 2){
+      const toDelete = tokens.slice(2).map(t => t.token);
+      await sb.from('fcm_tokens').delete().in('token', toDelete);
+    }
   } catch(e){ console.warn('FCM token save error:', e.message); }
 }
 
