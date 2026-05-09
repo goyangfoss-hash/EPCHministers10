@@ -1837,7 +1837,7 @@ function renderMyShift(){
           <div style="display:flex;align-items:center;gap:10px">
             <div style="width:8px;height:8px;border-radius:50%;background:${c?.dot||'#185FA5'};flex-shrink:0"></div>
             <div>
-              <div style="font-size:13px;font-weight:600;color:${isToday?'#185FA5':'var(--color-text-primary)}">
+              <div style="font-size:13px;font-weight:600;color:${isToday?'#185FA5':'var(--color-text-primary)'}">
                 ${m}월 ${d}일 (${DN[dow]})${ddayBadge}
               </div>
               <div style="margin-top:3px"><span style="background:${c?.bg};color:${c?.text};border:1px solid ${c?.border};font-size:11px;padding:2px 7px;border-radius:6px">${type}</span></div>
