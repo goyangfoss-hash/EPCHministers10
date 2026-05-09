@@ -12,19 +12,32 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// ★ data 전용 메시지 처리 — 모든 플랫폼에서 이 핸들러만 실행
+// ★ 포그라운드 상태 추적 (앱에서 postMessage로 전달)
+let _isForeground = false;
+let _foregroundTimer = null;
+
+self.addEventListener('message', event => {
+  if(event.data?.type === 'FOREGROUND'){
+    _isForeground = true;
+    clearTimeout(_foregroundTimer);
+    _foregroundTimer = setTimeout(() => { _isForeground = false; }, 5000);
+  }
+});
+
+// data 전용 메시지 처리
 messaging.onBackgroundMessage(payload => {
+  // ★ 포그라운드면 배너 표시 안 함 (앱이 토스트로 처리)
+  if(_isForeground) return;
+
   const data = payload.data || {};
   const title = data.title || '은평교회 사역스케줄러';
   const body  = data.body  || '';
   const tab   = data.tab   || 'feed';
 
-  // 앱 아이콘 배지
   if ('setAppBadge' in self.navigator) {
     self.navigator.setAppBadge(1).catch(() => {});
   }
 
-  // 기기당 1번 — 같은 tag는 덮어씀
   self.registration.showNotification(title, {
     body,
     icon: '/icon-192.png',

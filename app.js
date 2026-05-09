@@ -494,8 +494,12 @@ async function initFCM(){
     messaging.onMessage(payload=>{
       const {title, body} = payload.notification || {};
       window._fcmForeground = true;
+      // ★ SW에 포그라운드 상태 전달 → SW가 배너 표시 안 함
+      navigator.serviceWorker.ready.then(reg=>{
+        reg.active?.postMessage({ type: 'FOREGROUND', timestamp: Date.now() });
+      });
       if(title) showToastMsg(`🔔 ${title}: ${body||''}`);
-      setTimeout(()=>{ window._fcmForeground = false; }, 3000);
+      setTimeout(()=>{ window._fcmForeground = false; }, 5000);
     });
   } catch(e){ console.warn('FCM init error:', e.message); }
 }
