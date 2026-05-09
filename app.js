@@ -397,6 +397,11 @@ async function enterApp() {
   window._seenShifts = await loadSeenShiftsFromDB();
   await loadShiftCompletions();
   await backfillPastShifts(); // 패치 이전 과거 사역 일괄 완료 처리
+  // ★ 앱 진입 시 히스토리 탭 라벨 즉시 반영
+  if(FEATURE_HISTORY()){
+    const lbl = document.getElementById('label-myshift');
+    if(lbl) lbl.textContent = '히스토리';
+  }
   // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
   if(!document.getElementById('app-overflow-fix')){
     const s=document.createElement('style');
@@ -1968,7 +1973,7 @@ async function backfillPastShifts(){
       Object.entries(myData).forEach(([ds, type])=>{
         if(!type) return;
         const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(ds));
-        if(dt < today){ // 오늘 이전 사역만
+        if(dt <= today){ // 오늘 포함 이전 사역
           const key = makeCompKey(parseInt(y),parseInt(m),parseInt(ds),type);
           if(!shiftCompletions[key]){ // 아직 완료 처리 안 된 것만
             const completedAt = dt.toISOString();
@@ -1989,6 +1994,9 @@ async function backfillPastShifts(){
   if(toInsert.length > 0){
     await sb.from('shift_completions').upsert(toInsert, {onConflict:'user_id,comp_key'});
     console.log(`backfill: ${toInsert.length}개 과거 사역 완료 처리`);
+  }
+  // 항상 리렌더링 (카운트 반영)
+  if(FEATURE_HISTORY() && $('tab-myshift')?.style.display !== 'none'){
     renderMyShift();
   }
 }
