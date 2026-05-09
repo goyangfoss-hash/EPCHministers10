@@ -1856,30 +1856,35 @@ function viewDayInCal(y,m0,d){curY=y;curM=m0;switchTab('cal',$('btn-cal'));rende
 async function saveMyTeam(){
   // localStorage 백업 (오프라인 대비)
   localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
-  // DB에 저장 (영구 보존)
+  // DB에 저장 — JSONB 문자열로 전달
   if(!OFFLINE && cu?.id){
-    await sb.from('app_users').update({my_team: myTeam}).eq('id', cu.id);
+    const {error} = await sb.from('app_users')
+      .update({my_team: JSON.stringify(myTeam)})
+      .eq('id', cu.id);
+    if(error) console.warn('saveMyTeam DB error:', error.message);
   }
 }
 
 async function loadMyTeamFromDB(){
   if(OFFLINE || !cu?.id){
-    // 오프라인이면 localStorage 폴백
     myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]');
     return;
   }
   try {
     const {data} = await sb.from('app_users').select('my_team').eq('id', cu.id).single();
-    if(data?.my_team && Array.isArray(data.my_team)){
-      myTeam = data.my_team;
-      // localStorage도 동기화
+    // JSONB는 문자열 또는 배열로 올 수 있음 — 둘 다 처리
+    let loaded = data?.my_team;
+    if(typeof loaded === 'string') loaded = JSON.parse(loaded);
+    if(Array.isArray(loaded) && loaded.length > 0){
+      myTeam = loaded;
       localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
     } else {
-      // DB에 없으면 localStorage 폴백 후 DB에 저장
+      // DB가 비어있으면 localStorage 폴백 후 DB에 저장
       myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]');
       if(myTeam.length) await saveMyTeam();
     }
   } catch(e){
+    console.warn('loadMyTeamFromDB error:', e);
     myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]');
   }
 }
