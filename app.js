@@ -19,11 +19,18 @@ let calTeamView = false; // 내 팀 보기
 
 function toggleMyTeamView(){
   calTeamView = !calTeamView;
-  if(calTeamView) calView='all';
+  // ★ 내 팀 보기 ON → 내 사역 보기 OFF
+  if(calTeamView){ calView='all'; filterType=''; filterCategory='all'; }
   const btn=$('btn-my-team');
   const minBtn=$('btn-my-ministry');
-  if(btn){ btn.classList.toggle('active', calTeamView); btn.textContent=calTeamView?'👥 내 팀 보기 ✓':'👥 내 팀 보기'; }
-  if(calTeamView&&minBtn) minBtn.classList.remove('active');
+  if(btn){
+    btn.classList.toggle('active', calTeamView);
+    btn.textContent = calTeamView ? '👥 내 팀 보기 ✓' : '👥 내 팀 보기';
+  }
+  if(minBtn){
+    minBtn.classList.remove('active');
+    minBtn.innerHTML = '🙋 내 사역 보기';
+  }
   renderCalendar();
 }
 let allSchedules = {};
@@ -1396,15 +1403,34 @@ function getFilteredMap(allMap, myRaw, myDays){
 // ══════════════════════════════════════════════════
 //  캘린더
 // ══════════════════════════════════════════════════
+function syncCalBtnStyles(){
+  const minBtn=$('btn-my-ministry');
+  const teamBtn=$('btn-my-team');
+  if(minBtn){
+    const on = calView==='mine';
+    minBtn.style.cssText=`background:${on?'#185FA5':'#fff'};color:${on?'#fff':'#333'};border:1.5px solid ${on?'#185FA5':'#d0d0d0'};border-radius:20px;padding:7px 14px;font-size:13px;font-weight:${on?'600':'400'};cursor:pointer;transition:all .15s`;
+  }
+  if(teamBtn){
+    const on = calTeamView;
+    teamBtn.style.cssText=`background:${on?'#185FA5':'#fff'};color:${on?'#fff':'#333'};border:1.5px solid ${on?'#185FA5':'#d0d0d0'};border-radius:20px;padding:7px 14px;font-size:13px;font-weight:${on?'600':'400'};cursor:pointer;transition:all .15s`;
+  }
+}
+
 function toggleMyMinistry(){
-  calView = calView==='all' ? 'mine' : 'all';
+  const wasActive = calView === 'mine';
+  calView = wasActive ? 'all' : 'mine';
   filterType=''; filterCategory='all';
+  // ★ 내 사역 보기 ON → 내 팀 보기 OFF
+  if(calView === 'mine') calTeamView = false;
   const btn=$('btn-my-ministry');
+  const teamBtn=$('btn-my-team');
   if(btn){
     btn.classList.toggle('active', calView==='mine');
-    btn.innerHTML = calView==='mine'
-      ? '🙋 내 사역 보기 ✓'
-      : '🙋 내 사역 보기';
+    btn.innerHTML = calView==='mine' ? '🙋 내 사역 보기 ✓' : '🙋 내 사역 보기';
+  }
+  if(teamBtn){
+    teamBtn.classList.remove('active');
+    teamBtn.textContent = '👥 내 팀 보기';
   }
   renderCalendar();
 }
@@ -1413,6 +1439,7 @@ function setFilter(t){filterType=filterType===t?'':t;renderCalendar();}
 function changeMonth(d){curM+=d;if(curM>11){curM=0;curY++;}if(curM<0){curM=11;curY--;}filterType='';filterCategory='all';if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}renderCalendar();});}else renderCalendar();}
 
 function renderCalendar(){
+  syncCalBtnStyles(); // ★ 버튼 스타일 항상 동기화
   const DN=['일','월','화','수','목','금','토'],MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const fd=new Date(curY,curM,1).getDay(),dim=new Date(curY,curM+1,0).getDate(),now=new Date(),d=curData();
   const myRaw=d[cu.name]||{}, myDays=new Set(Object.keys(myRaw).map(Number).filter(n=>!isNaN(n)&&n>=1));
@@ -1468,16 +1495,29 @@ function renderCalendar(){
       // ══ 전체 사역 모드 ══
       const dimmed=filterCategory!=='all'&&!workers.length;
       const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(dimmed?' dimmed':'');
-      // ★ 내 사역 배경 + 오늘 파란 테두리 분리
+
+      // 팀원 필터링
+      const teamWorkers = workers.filter(w=>!teamNames||teamNames.has(w.name));
+      const hasTeamWorker = calTeamView && teamNames && teamWorkers.length > 0;
+
+      // 배경: 내 사역 > 팀원 사역 > 기본
       const hasMy=isMy&&myC;
-      const bgStyle=hasMy?`background:${myC.bg};border-color:${myC.border}`:'';
+      let bgStyle='', borderStyle='';
+      if(hasMy){
+        bgStyle=`background:${myC.bg}`;
+        borderStyle=`border-color:${myC.border}`;
+      } else if(hasTeamWorker){
+        bgStyle=`background:#FFF8E6`;
+        borderStyle=`border-color:#FAC775;border-width:1.5px`;
+      }
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
-      const cellStyle=[bgStyle,todayBorder].filter(Boolean).join(';');
-      const dots=workers.length?`<div class="shift-dots">${workers.filter(w=>!teamNames||teamNames.has(w.name)).slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'';
+      const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
+
+      const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
       const myDot=hasMy?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
-      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:'';
+      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
       html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
