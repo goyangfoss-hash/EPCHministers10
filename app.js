@@ -1500,8 +1500,8 @@ function renderCalendar(){
       const teamWorkers = workers.filter(w=>!teamNames||teamNames.has(w.name));
       const hasTeamWorker = calTeamView && teamNames && teamWorkers.length > 0;
 
-      // 배경: 내 사역 > 팀원 사역 > 기본
-      const hasMy=isMy&&myC;
+      // 배경: 팀 보기 ON이면 팀원 사역만, 팀 보기 OFF면 내 사역 배경
+      const hasMy=isMy&&myC&&!calTeamView;
       let bgStyle='', borderStyle='';
       if(hasMy){
         bgStyle=`background:${myC.bg}`;
