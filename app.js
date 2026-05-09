@@ -164,7 +164,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const raw = localStorage.getItem('ws_session');
   if (raw) {
     try { const s=JSON.parse(raw); if (await doLoginWith(s.name,s.phone,s.birth,true)) return; } catch {}
-    localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
+    localStorage.removeItem('ws_session');localStorage.removeItem('ws_alarms');
   }
   hide('loading'); showScreen('login-screen');
 });
@@ -375,7 +375,7 @@ function doLogout() {
   if(rtChannel){sb?.removeChannel(rtChannel);rtChannel=null;}
   if(window._dmChannel){try{sb?.removeChannel(window._dmChannel);}catch{}window._dmChannel=null;}
   if(window._dmOutChannel){try{sb?.removeChannel(window._dmOutChannel);}catch{}window._dmOutChannel=null;}
-  cu=null; localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
+  cu=null; localStorage.removeItem('ws_session');localStorage.removeItem('ws_alarms');
   allMembers=[];allSchedules={};notices=[];feedPosts=[];shiftComments={};commentLikes={};typeColorMap={};filterType='';
   chatMessages={};chatTarget=null;userDmTarget=null;dmUnreadCount=0;
   showScreen('login-screen'); showLoginCard();
@@ -389,8 +389,10 @@ function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 // ══════════════════════════════════════════════════
 //  앱 진입
 // ══════════════════════════════════════════════════
-function enterApp() {
+async function enterApp() {
   showScreen('main-screen');
+  await loadMyTeamFromDB();
+  window._seenShifts = await loadSeenShiftsFromDB();
   // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
   if(!document.getElementById('app-overflow-fix')){
     const s=document.createElement('style');
@@ -783,7 +785,7 @@ function getNotifCount(){
   const tomorrow=new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
 
   // ① 오늘/내일 사역 알림 — 확인하지 않은 것만 카운트
-  const seenShifts=new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
+  const seenShifts = window._seenShifts || new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
   let shiftCnt=0;
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
@@ -891,16 +893,17 @@ function renderAlarmPanel(){
 
 // 개별 공지 읽음 처리
 // 개별 사역 알림 확인 처리
-function markShiftSeen(key){
-  const seen=new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
+async function markShiftSeen(key){
+  const seen = window._seenShifts || new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
   seen.add(key);
-  // 오늘 이전 날짜 기록 자동 정리 (30일 이상 된 항목 제거)
+  // 30일 이상 된 항목 자동 정리
   const cutoff=new Date(); cutoff.setDate(cutoff.getDate()-30);
-  const cleaned=[...seen].filter(k=>{
+  const cleaned=new Set([...seen].filter(k=>{
     const [y,m,d]=k.split('-').map(Number);
     return new Date(y,m-1,d)>=cutoff;
-  });
-  localStorage.setItem('ws_seen_shifts', JSON.stringify(cleaned));
+  }));
+  window._seenShifts = cleaned;
+  await saveSeenShifts(cleaned);
   updateAlarmBadge();
 }
 
@@ -942,12 +945,12 @@ function markNoticeRead(noticeId){
   updateNoticeBadge();
 }
 
-function markAllRead(){
+async function markAllRead(){
   // ① 사역 알림 모두 확인 — 오늘/내일 해당 날짜 전부 seen 처리
   const now=new Date();
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const tomorrow=new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
-  const seen=new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
+  const seen = window._seenShifts || new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
       const myData=data[cu?.name]||{};
@@ -960,7 +963,8 @@ function markAllRead(){
       });
     });
   });
-  localStorage.setItem('ws_seen_shifts', JSON.stringify([...seen]));
+  window._seenShifts = seen;
+  saveSeenShifts(seen);
 
   // ② 공지 모두 읽음
   const ids=(notices||[]).map(n=>n.id);
@@ -1187,9 +1191,12 @@ async function runSystemDiag(){
       detail:res.error?'❌ 함수 없음 — Edge Function 배포 필요':'응답 정상 ✅'});
   } catch(e){ checks.push({label:'send-push Edge Function', ok:false, detail:'❌ 배포 안 됨: '+e.message}); }
 
-  // ⑦ daily-shift-push Edge Function — 실제 호출 안 함 (호출 시 알림 발송됨)
-  checks.push({label:'daily-shift-push Edge Function', ok:true,
-    detail:'매일 자동 실행 중 — Supabase 대시보드 → Edge Functions에서 확인'});
+  // ⑦ daily-shift-push Edge Function
+  try {
+    const res = await sb.functions.invoke('daily-shift-push',{body:{}});
+    checks.push({label:'daily-shift-push Edge Function', ok:!res.error,
+      detail:res.error?'❌ 함수 없음 — Edge Function 배포 필요':'응답 정상 ✅'});
+  } catch(e){ checks.push({label:'daily-shift-push Edge Function', ok:false, detail:'❌ 배포 안 됨: '+e.message}); }
 
   // ⑧ Realtime 구독
   checks.push({label:'Realtime 구독', ok:!!rtChannel, detail:rtChannel?'연결됨':'미연결'});
@@ -1848,7 +1855,65 @@ function viewDayInCal(y,m0,d){curY=y;curM=m0;switchTab('cal',$('btn-cal'));rende
 // ══════════════════════════════════════════════════
 //  검색 탭
 // ══════════════════════════════════════════════════
-function saveMyTeam(){ localStorage.setItem('ws_my_team', JSON.stringify(myTeam)); }
+// ── my_team DB 저장 ──
+async function saveMyTeam(){
+  localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
+  if(!OFFLINE && cu?.id){
+    const {error} = await sb.from('app_users')
+      .update({my_team: JSON.stringify(myTeam)})
+      .eq('id', cu.id);
+    if(error) console.warn('saveMyTeam error:', error.message);
+  }
+}
+
+async function loadMyTeamFromDB(){
+  if(OFFLINE || !cu?.id){
+    myTeam = JSON.parse(localStorage.getItem('ws_my_team')||'[]');
+    return;
+  }
+  try {
+    const {data} = await sb.from('app_users').select('my_team').eq('id', cu.id).single();
+    let loaded = data?.my_team;
+    if(typeof loaded === 'string') loaded = JSON.parse(loaded);
+    if(Array.isArray(loaded) && loaded.length > 0){
+      myTeam = loaded;
+      localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
+    } else {
+      myTeam = JSON.parse(localStorage.getItem('ws_my_team')||'[]');
+      if(myTeam.length) await saveMyTeam();
+    }
+  } catch(e){
+    myTeam = JSON.parse(localStorage.getItem('ws_my_team')||'[]');
+  }
+}
+
+// ── seen_shifts DB 저장 ──
+async function saveSeenShifts(seen){
+  const arr = [...seen];
+  localStorage.setItem('ws_seen_shifts', JSON.stringify(arr));
+  if(!OFFLINE && cu?.id){
+    const {error} = await sb.from('app_users')
+      .update({seen_shifts: JSON.stringify(arr)})
+      .eq('id', cu.id);
+    if(error) console.warn('saveSeenShifts error:', error.message);
+  }
+}
+
+async function loadSeenShiftsFromDB(){
+  if(OFFLINE || !cu?.id){
+    return new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
+  }
+  try {
+    const {data} = await sb.from('app_users').select('seen_shifts').eq('id', cu.id).single();
+    let loaded = data?.seen_shifts;
+    if(typeof loaded === 'string') loaded = JSON.parse(loaded);
+    if(Array.isArray(loaded) && loaded.length > 0){
+      localStorage.setItem('ws_seen_shifts', JSON.stringify(loaded));
+      return new Set(loaded);
+    }
+  } catch(e){ console.warn('loadSeenShiftsFromDB error:', e); }
+  return new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
+}
 
 const DEPT_META = {
   'team':       { icon:'⭐', label:'내 팀',     color:'#3B6D11', bg:'#EAF3DE', border:'#C0DD97' },
@@ -2478,7 +2543,7 @@ function toggleNotifSetting(key, el){
 function toggleKeepLogin(toggleEl){
   const isOn=toggleEl.classList.contains('on');
   if(isOn){
-    localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
+    localStorage.removeItem('ws_session');localStorage.removeItem('ws_alarms');
     toggleEl.classList.remove('on');
     showToastMsg('로그인 유지가 해제되었습니다.');
   } else {
