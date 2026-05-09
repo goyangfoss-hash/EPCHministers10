@@ -389,10 +389,10 @@ function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 // ══════════════════════════════════════════════════
 //  앱 진입
 // ══════════════════════════════════════════════════
-function enterApp() {
+async function enterApp() {
   showScreen('main-screen');
-  // ★ DB에서 내 팀 로드 (localStorage는 오프라인 폴백용)
-  loadMyTeamFromDB();
+  // ★ DB에서 내 팀 로드 — await로 완료 후 렌더링
+  await loadMyTeamFromDB();
   // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
   if(!document.getElementById('app-overflow-fix')){
     const s=document.createElement('style');
