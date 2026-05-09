@@ -33,6 +33,7 @@ messaging.onBackgroundMessage(payload => {
   const title = data.title || '은평교회 사역스케줄러';
   const body  = data.body  || '';
   const tab   = data.tab   || 'feed';
+  const chatUserId = data.chatUserId || '';
 
   if ('setAppBadge' in self.navigator) {
     self.navigator.setAppBadge(1).catch(() => {});
@@ -44,7 +45,7 @@ messaging.onBackgroundMessage(payload => {
     badge: '/icon-192.png',
     tag: 'epch-' + tab,
     renotify: false,
-    data: { tab, url: data.url || '/?tab=' + tab },
+    data: { tab, chatUserId, url: data.url || '/?tab=' + tab },
   });
 });
 
@@ -55,13 +56,14 @@ self.addEventListener('notificationclick', event => {
     self.navigator.clearAppBadge().catch(() => {});
   }
   const tab = event.notification.data?.tab || 'feed';
-  const targetUrl = new URL('/?tab=' + tab, self.location.origin).href;
+  const chatUserId = event.notification.data?.chatUserId || '';
+  const targetUrl = new URL('/?tab=' + tab + (chatUserId ? '&chat=' + chatUserId : ''), self.location.origin).href;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
       for (const client of windowClients) {
         if (new URL(client.url).origin === self.location.origin) {
           client.focus();
-          client.postMessage({ type: 'NOTIF_CLICK', tab });
+          client.postMessage({ type: 'NOTIF_CLICK', tab, chatUserId });
           return;
         }
       }

@@ -533,11 +533,13 @@ async function saveFCMToken(token){
 
 // ★ 푸시 알림 전송 (Edge Function 호출)
 // tab: 알림 클릭 시 이동할 탭 ('feed'|'notice'|'cal' 등)
-async function sendPushToUsers(userIds, title, body, tab='feed'){
+// chatUserId: 채팅 알림일 때 자동으로 열 상대방 userId
+async function sendPushToUsers(userIds, title, body, tab='feed', chatUserId=null){
   if(OFFLINE||!userIds?.length) return;
   try {
+    const url = chatUserId ? `/?tab=feed&chat=${chatUserId}` : `/?tab=${tab}`;
     await sb.functions.invoke('send-push', {
-      body: { user_ids: userIds, title, body, data: { tab, url: '/?tab='+tab } }
+      body: { user_ids: userIds, title, body, data: { tab, url, chatUserId: chatUserId ? String(chatUserId) : '' } }
     });
   } catch(e){ console.warn('Push send error:', e.message); }
 }
@@ -1086,7 +1088,8 @@ function handleNotifLaunchTab(){
   try {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if(!tab) return;
+    const chatUserId = params.get('chat');
+    if(!tab && !chatUserId) return;
     // URL 정리 (history 오염 방지)
     history.replaceState(null,'',window.location.pathname);
     // 탭 버튼 매핑
@@ -1098,24 +1101,40 @@ function handleNotifLaunchTab(){
       search: $('btn-search'),
       admin:  $('btn-admin'),
     };
-    const btn = btnMap[tab];
-    if(btn) setTimeout(()=>switchTab(tab, btn), 300);
+    const targetTab = tab || 'feed';
+    const btn = btnMap[targetTab];
+    if(btn){
+      setTimeout(()=>{
+        switchTab(targetTab, btn);
+        // ★ 채팅 알림으로 열렸으면 채팅창 자동 오픈
+        if(chatUserId){
+          setTimeout(()=>{ openChat(Number(chatUserId)); }, 400);
+        }
+      }, 300);
+    }
   } catch(e){ console.warn('handleNotifLaunchTab:',e); }
 }
 
 // ★ Service Worker에서 알림 클릭 메시지 수신 (sw → app)
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message', e=>{
-    const {type, tab} = e.data || {};
-    if(type==='NOTIF_CLICK' && tab && cu){
+    const {type, tab, chatUserId} = e.data || {};
+    if(type==='NOTIF_CLICK' && cu){
+      const targetTab = tab || 'feed';
       const btnMap = {
         feed:   $('btn-feed'),
         notice: $('btn-notice'),
         cal:    $('btn-cal'),
         myshift:$('btn-myshift'),
       };
-      const btn = btnMap[tab];
-      if(btn) switchTab(tab, btn);
+      const btn = btnMap[targetTab];
+      if(btn) switchTab(targetTab, btn);
+      // ★ 채팅 알림이면 해당 사용자의 채팅창 자동 오픈
+      if(chatUserId){
+        const uid = Number(chatUserId);
+        // 탭 전환 후 렌더링 완료 대기 후 채팅창 오픈
+        setTimeout(()=>{ openChat(uid); }, 300);
+      }
     }
   });
 }
@@ -2968,7 +2987,7 @@ async function sendDm(){
       const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===tempId);
       if(idx>=0)chatMessages[chatTarget.id][idx]=data;
       renderChatMessages();
-      sendPushToUsers([chatTarget.id], `💬 ${cu.name}`, txt);
+      sendPushToUsers([chatTarget.id], `💬 ${cu.name}`, txt, 'feed', cu.id);
     } else if(error){
       chatMessages[chatTarget.id]=chatMessages[chatTarget.id].filter(m=>m.id!==tempId);
       renderChatMessages();
@@ -3099,7 +3118,7 @@ async function sendUserDm(){
       if(idx>=0) chatMessages[userDmTarget.id][idx]=data;
       renderUserDmMessages();
       // 푸시 알림
-      sendPushToUsers([userDmTarget.id], `💬 ${cu.name}`, txt);
+      sendPushToUsers([userDmTarget.id], `💬 ${cu.name}`, txt, 'feed', cu.id);
     } else if(error){
       // 전송 실패 시 임시 메시지 제거
       chatMessages[userDmTarget.id] = chatMessages[userDmTarget.id].filter(m=>m.id!==tempId);
