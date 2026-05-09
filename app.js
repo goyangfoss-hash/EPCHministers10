@@ -396,6 +396,7 @@ async function enterApp() {
   await loadMyTeamFromDB();
   window._seenShifts = await loadSeenShiftsFromDB();
   await loadShiftCompletions();
+  await backfillPastShifts(); // 패치 이전 과거 사역 일괄 완료 처리
   // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
   if(!document.getElementById('app-overflow-fix')){
     const s=document.createElement('style');
@@ -1823,15 +1824,28 @@ function renderMyShift(){
         diff===1?'<span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">내일</span>':'';
       const compKey = makeCompKey(y,m,d,type);
       const isDone = FEATURE_HISTORY() && !!shiftCompletions[compKey];
+      const isFuture = dt > today; // 아직 안 온 날
       const doneTime = isDone ? new Date(shiftCompletions[compKey]).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '';
-      const completeBtnHtml = FEATURE_HISTORY() ? `
-        <button onclick="event.stopPropagation();markShiftComplete(${y},${m},${d},'${type}')"
-          style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:${isDone?'none':'0.5px solid #C0DD97'};
-          background:${isDone?'#3B6D11':'#EAF3DE'};color:${isDone?'#fff':'#3B6D11'};
-          font-size:12px;font-weight:500;cursor:${isDone?'default':'pointer'};
+      const completeBtnHtml = FEATURE_HISTORY() ? (
+        isDone ? `
+        <button disabled style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:none;
+          background:#3B6D11;color:#fff;font-size:12px;font-weight:500;cursor:default;
           display:flex;align-items:center;justify-content:center;gap:6px;">
-          ${isDone?`✅ 완료됨 · ${doneTime}`:'사역 완료'}
-        </button>` : '';
+          ✅ 완료됨 · ${doneTime}
+        </button>` :
+        isFuture ? `
+        <button disabled style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:0.5px solid #e0e0e0;
+          background:#f5f5f5;color:#bbb;font-size:12px;font-weight:500;cursor:not-allowed;
+          display:flex;align-items:center;justify-content:center;gap:6px;">
+          🔒 사역일 이후 완료 가능
+        </button>` : `
+        <button onclick="event.stopPropagation();markShiftComplete(${y},${m},${d},'${type}')"
+          style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:0.5px solid #C0DD97;
+          background:#EAF3DE;color:#3B6D11;font-size:12px;font-weight:500;cursor:pointer;
+          display:flex;align-items:center;justify-content:center;gap:6px;">
+          사역 완료
+        </button>`
+      ) : '';
       return monthHeader+`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.5':'1'};transition:opacity 0.3s" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:10px">
@@ -1939,6 +1953,44 @@ async function loadShiftCompletions(){
     shiftCompletions = {};
     (data||[]).forEach(r=>{ shiftCompletions[r.comp_key]=r.completed_at; });
   } catch(e){ console.warn('loadShiftCompletions error:', e); }
+}
+
+// ★ 과거 사역 일괄 완료 처리 (패치 이전 사역 backfill)
+async function backfillPastShifts(){
+  if(!FEATURE_HISTORY() || OFFLINE || !cu?.id) return;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const toInsert = [];
+
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    Object.entries(ym).forEach(([m,data])=>{
+      const myData = data[cu.name] || {};
+      Object.entries(myData).forEach(([ds, type])=>{
+        if(!type) return;
+        const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(ds));
+        if(dt < today){ // 오늘 이전 사역만
+          const key = makeCompKey(parseInt(y),parseInt(m),parseInt(ds),type);
+          if(!shiftCompletions[key]){ // 아직 완료 처리 안 된 것만
+            const completedAt = dt.toISOString();
+            shiftCompletions[key] = completedAt;
+            toInsert.push({
+              user_id: cu.id,
+              comp_key: key,
+              y: parseInt(y), m: parseInt(m), d: parseInt(ds),
+              type,
+              completed_at: completedAt
+            });
+          }
+        }
+      });
+    });
+  });
+
+  if(toInsert.length > 0){
+    await sb.from('shift_completions').upsert(toInsert, {onConflict:'user_id,comp_key'});
+    console.log(`backfill: ${toInsert.length}개 과거 사역 완료 처리`);
+    renderMyShift();
+  }
 }
 
 async function markShiftComplete(y,m,d,type){
