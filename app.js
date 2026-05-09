@@ -42,7 +42,7 @@ let allMembers = [], notices = [], feedPosts = [];
 let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
 let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth() + 1;
 let srchYear = 0, srchMonth = 0, srchName = '';
-let myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]'); // 내 팀 이름 배열
+let myTeam = []; // 내 팀 이름 배열 (DB에서 로드, app_users.my_team 컬럼)
 let srchDept = 'team'; // 검색탭 선택 파트
 
 // 채팅 상태
@@ -164,7 +164,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const raw = localStorage.getItem('ws_session');
   if (raw) {
     try { const s=JSON.parse(raw); if (await doLoginWith(s.name,s.phone,s.birth,true)) return; } catch {}
-    localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
+    localStorage.removeItem('ws_session');localStorage.removeItem('ws_alarms');
   }
   hide('loading'); showScreen('login-screen');
 });
@@ -375,7 +375,7 @@ function doLogout() {
   if(rtChannel){sb?.removeChannel(rtChannel);rtChannel=null;}
   if(window._dmChannel){try{sb?.removeChannel(window._dmChannel);}catch{}window._dmChannel=null;}
   if(window._dmOutChannel){try{sb?.removeChannel(window._dmOutChannel);}catch{}window._dmOutChannel=null;}
-  cu=null; localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
+  cu=null; localStorage.removeItem('ws_session');localStorage.removeItem('ws_alarms');
   allMembers=[];allSchedules={};notices=[];feedPosts=[];shiftComments={};commentLikes={};typeColorMap={};filterType='';
   chatMessages={};chatTarget=null;userDmTarget=null;dmUnreadCount=0;
   showScreen('login-screen'); showLoginCard();
@@ -391,6 +391,8 @@ function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 // ══════════════════════════════════════════════════
 function enterApp() {
   showScreen('main-screen');
+  // ★ DB에서 내 팀 로드 (localStorage는 오프라인 폴백용)
+  loadMyTeamFromDB();
   // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
   if(!document.getElementById('app-overflow-fix')){
     const s=document.createElement('style');
@@ -1851,7 +1853,36 @@ function viewDayInCal(y,m0,d){curY=y;curM=m0;switchTab('cal',$('btn-cal'));rende
 // ══════════════════════════════════════════════════
 //  검색 탭
 // ══════════════════════════════════════════════════
-function saveMyTeam(){ localStorage.setItem('ws_my_team', JSON.stringify(myTeam)); }
+async function saveMyTeam(){
+  // localStorage 백업 (오프라인 대비)
+  localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
+  // DB에 저장 (영구 보존)
+  if(!OFFLINE && cu?.id){
+    await sb.from('app_users').update({my_team: myTeam}).eq('id', cu.id);
+  }
+}
+
+async function loadMyTeamFromDB(){
+  if(OFFLINE || !cu?.id){
+    // 오프라인이면 localStorage 폴백
+    myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]');
+    return;
+  }
+  try {
+    const {data} = await sb.from('app_users').select('my_team').eq('id', cu.id).single();
+    if(data?.my_team && Array.isArray(data.my_team)){
+      myTeam = data.my_team;
+      // localStorage도 동기화
+      localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
+    } else {
+      // DB에 없으면 localStorage 폴백 후 DB에 저장
+      myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]');
+      if(myTeam.length) await saveMyTeam();
+    }
+  } catch(e){
+    myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]');
+  }
+}
 
 const DEPT_META = {
   'team':       { icon:'⭐', label:'내 팀',     color:'#3B6D11', bg:'#EAF3DE', border:'#C0DD97' },
@@ -2481,7 +2512,7 @@ function toggleNotifSetting(key, el){
 function toggleKeepLogin(toggleEl){
   const isOn=toggleEl.classList.contains('on');
   if(isOn){
-    localStorage.removeItem('ws_session');localStorage.removeItem('ws_my_team');localStorage.removeItem('ws_alarms');
+    localStorage.removeItem('ws_session');localStorage.removeItem('ws_alarms');
     toggleEl.classList.remove('on');
     showToastMsg('로그인 유지가 해제되었습니다.');
   } else {
@@ -3375,28 +3406,7 @@ function enlargeProfileImg(src, name){
   document.body.appendChild(modal);
 }
 async function saveMemo(uid){const memo=$(`memo-${uid}`)?.value||'';const u=allMembers.find(x=>x.id===uid);if(!u)return;u.memo=memo;if(!OFFLINE)await sb.from('app_users').update({memo}).eq('id',uid);showToastMsg('저장되었습니다.');}
-// 이름 기반 자동 파트 배정 테이블
-const AUTO_DEPT = {
-  '박지현':  '담임목사님',
-  '최성자':  '교구',
-  '권혜성':  '교구',
-};
-
-async function approveUser(id){
-  if(!OFFLINE){
-    // 승인 처리
-    await sb.from('app_users').update({status:'approved'}).eq('id',id);
-    // ★ 이름 기반 자동 파트 배정
-    const target = (window._pending||[]).find(u=>u.id===id);
-    if(target && AUTO_DEPT[target.name]){
-      await sb.from('app_users').update({department: AUTO_DEPT[target.name]}).eq('id',id);
-    }
-  }
-  window._pending=(window._pending||[]).filter(u=>u.id!==id);
-  const{data}=await sb.from('app_users').select('*');
-  if(data){allMembers=data.filter(u=>u.status==='approved');window._pending=data.filter(u=>u.status==='pending');}
-  renderAdmin();
-}
+async function approveUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'approved'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);const{data}=await sb.from('app_users').select('*');if(data){allMembers=data.filter(u=>u.status==='approved');window._pending=data.filter(u=>u.status==='pending');}renderAdmin();}
 async function rejectUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'rejected'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);renderPending();}
 async function changeRole(id,role){const u=allMembers.find(x=>x.id===id);if(!u)return;u.role=role;if(!OFFLINE)await sb.from('app_users').update({role}).eq('id',id);renderMembers();}
 
