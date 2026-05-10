@@ -170,7 +170,29 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   hide('loading'); showScreen('login-screen');
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && cu) refreshSchedules(); });
+document.addEventListener('visibilitychange', async () => {
+  if(!document.hidden && cu){
+    refreshSchedules();
+    // ★ 포그라운드 복귀 시 DM 최신 메시지 갱신
+    try {
+      const {data} = await sb.from('direct_messages')
+        .select('*').or(`from_id.eq.${cu.id},to_id.eq.${cu.id}`)
+        .order('created_at', {ascending:true});
+      if(data){
+        chatMessages = {};
+        data.forEach(m=>{
+          const otherId = m.from_id===cu.id ? m.to_id : m.from_id;
+          if(!chatMessages[otherId]) chatMessages[otherId]=[];
+          if(!chatMessages[otherId].find(x=>x.id===m.id)) chatMessages[otherId].push(m);
+        });
+        updateFeedBadge();
+        if($('tab-feed')?.style.display!=='none') renderFeedTab();
+        if(chatTarget) renderChatMessages();
+        if(userDmTarget) renderUserDmMessages();
+      }
+    } catch(e){ console.warn('visibilitychange DM reload:', e); }
+  }
+});
 
 // ══════════════════════════════════════════════════
 //  당겨서 새로고침 (Pull to Refresh)
@@ -1117,16 +1139,20 @@ function handleNotifLaunchTab(){
 // ★ Service Worker에서 알림 클릭 메시지 수신 (sw → app)
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message', e=>{
-    const {type, tab} = e.data || {};
-    if(type==='NOTIF_CLICK' && tab && cu){
+    const {type, tab, chatUserId} = e.data || {};
+    if(type==='NOTIF_CLICK' && cu){
+      const targetTab = tab || 'feed';
       const btnMap = {
         feed:   $('btn-feed'),
         notice: $('btn-notice'),
         cal:    $('btn-cal'),
         myshift:$('btn-myshift'),
       };
-      const btn = btnMap[tab];
-      if(btn) switchTab(tab, btn);
+      const btn = btnMap[targetTab];
+      if(btn) switchTab(targetTab, btn);
+      if(chatUserId){
+        setTimeout(()=>{ openChat(Number(chatUserId)); }, 300);
+      }
     }
   });
 }
