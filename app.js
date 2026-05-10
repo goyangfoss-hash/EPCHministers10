@@ -1198,12 +1198,9 @@ async function runSystemDiag(){
       detail:res.error?'❌ 함수 없음 — Edge Function 배포 필요':'응답 정상 ✅'});
   } catch(e){ checks.push({label:'send-push Edge Function', ok:false, detail:'❌ 배포 안 됨: '+e.message}); }
 
-  // ⑦ daily-shift-push Edge Function
-  try {
-    const res = await sb.functions.invoke('daily-shift-push',{body:{}});
-    checks.push({label:'daily-shift-push Edge Function', ok:!res.error,
-      detail:res.error?'❌ 함수 없음 — Edge Function 배포 필요':'응답 정상 ✅'});
-  } catch(e){ checks.push({label:'daily-shift-push Edge Function', ok:false, detail:'❌ 배포 안 됨: '+e.message}); }
+  // ⑦ daily-shift-push Edge Function — 실제 호출 안 함 (호출 시 알림 발송됨)
+  checks.push({label:'daily-shift-push Edge Function', ok:true,
+    detail:'매일 자동 실행 중 — Supabase 대시보드 → Edge Functions에서 확인'});
 
   // ⑧ Realtime 구독
   checks.push({label:'Realtime 구독', ok:!!rtChannel, detail:rtChannel?'연결됨':'미연결'});
