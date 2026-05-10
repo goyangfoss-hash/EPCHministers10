@@ -100,29 +100,29 @@
     #settings-panel{position:fixed;top:56px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#fff;border-bottom:1px solid #ebebeb;z-index:25;box-shadow:0 4px 20px rgba(0,0,0,.1);display:none;flex-direction:column;max-height:calc(100vh - 130px);overflow-y:auto}
 
     /* 네비 — 기기별 자동 대응 */
-    .bottom-nav{background:#fff;border-top:1px solid #ebebeb;display:flex;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:30;
-      /* ★ 아이폰 홈 인디케이터 영역 자동 확보 */
-      padding-bottom:max(env(safe-area-inset-bottom), 4px);
+    .bottom-nav{background:var(--color-background-primary,#fff);border-top:1px solid #ebebeb;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:30;
+      padding:6px 8px max(calc(env(safe-area-inset-bottom) + 6px), 10px);
     }
-    .nav-btn{flex:1;
-      min-height:44px;
-      padding:10px 2px 8px;
-      display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;border:none;background:none;font-size:10px;color:#bbb;transition:all .2s;position:relative;font-weight:500;
-      -webkit-tap-highlight-color:transparent;
-      touch-action:manipulation;
+    .nav-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;}
+    .nav-btn{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+      padding:12px 4px;border:none;background:#f5f5f3;border-radius:12px;
+      font-size:12px;color:#888;font-weight:500;cursor:pointer;position:relative;
+      -webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:all .15s;
+      min-height:60px;
     }
-    .nav-btn.active{color:#185FA5}
-    .nav-btn.active::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:28px;height:2.5px;background:#185FA5;border-radius:0 0 3px 3px}
-    .nav-btn svg{width:22px;height:22px;opacity:.4;transition:all .2s}
-    .nav-btn.active svg{opacity:1;transform:translateY(-1px)}
-    /* ★ 작은 화면 (iPhone SE 등) */
+    .nav-btn.active{background:#E6F1FB;color:#185FA5;}
+    .nav-btn svg{width:24px;height:24px;opacity:.6;transition:all .2s}
+    .nav-btn.active svg{opacity:1;}
+    /* ★ 작은 화면 */
     @media (max-height:680px){
-      .nav-btn{padding:8px 2px 6px;font-size:9px;}
-      .nav-btn svg{width:20px;height:20px;}
+      .nav-btn{padding:9px 4px;font-size:11px;min-height:52px;}
+      .nav-btn svg{width:21px;height:21px;}
     }
-    /* ★ 큰 화면 (iPhone Pro Max 등) */
+    /* ★ 큰 화면 */
     @media (min-height:850px){
-      .nav-btn{padding:12px 2px 10px;}
+      .nav-btn{padding:14px 4px;font-size:13px;}
+      .nav-btn svg{width:26px;height:26px;}
     }
     .nav-badge{position:absolute;top:7px;right:calc(50% - 19px);background:#e74c3c;color:#fff;font-size:9px;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;font-weight:700}
 
@@ -419,9 +419,20 @@
   <div class="app-header">
     <div class="hdr-left">
       <div class="hdr-av" id="hdr-avatar" onclick="openProfileModal()">김</div>
-      <div><h1 id="hdr-title">사역스케줄</h1><div class="hdr-name" id="hdr-name"></div></div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div><h1 id="hdr-title">사역스케줄</h1><div class="hdr-name" id="hdr-name"></div></div>
+        <!-- ★ 관리자 칩 (관리자만 표시) -->
+        <button id="btn-admin" style="display:none;align-items:center;gap:3px;background:#EAF3DE;border:none;border-radius:20px;padding:3px 9px;font-size:11px;color:#3B6D11;font-weight:500;cursor:pointer;" onclick="switchTab('admin',this)">
+          <svg width="11" height="11" viewBox="0 0 22 22" fill="none" style="flex-shrink:0"><circle cx="11" cy="7" r="3.5" stroke="#3B6D11" stroke-width="1.8"/><path d="M4 19c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#3B6D11" stroke-width="1.8" stroke-linecap="round"/><path d="M16 2l1.3 2.7L20 5.5l-2.7.8L16 9l-1.3-2.7L12 5.5l2.7-.8L16 2z" fill="#3B6D11"/></svg>
+          관리자
+        </button>
+      </div>
     </div>
     <div class="hdr-right">
+      <!-- ★ 공지 버튼 (헤더로 이동) -->
+      <button id="btn-notice" onclick="switchTab('notice',this)" title="공지" style="position:relative;width:38px;height:38px;border:none;background:none;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;color:#666"><path d="M4 15V5a3 3 0 013-3h8a3 3 0 013 3v10"/><path d="M2 15h18" stroke-linecap="round"/><path d="M9 18h4" stroke-linecap="round"/><line x1="8" y1="8" x2="14" y2="8" stroke-width="1.5"/><line x1="8" y1="11" x2="12" y2="11" stroke-width="1.5"/></svg>
+      </button>
       <!-- 종 모양 알림 버튼 -->
       <button id="btn-alarm" onclick="toggleAlarmPanel()" title="내 사역 알림">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -557,30 +568,24 @@
 
   <!-- 하단 네비 -->
   <div class="bottom-nav">
-    <button class="nav-btn active" id="btn-cal" onclick="switchTab('cal',this)">
-      <svg viewBox="0 0 22 22" fill="none"><rect x="2" y="3" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/><line x1="2" y1="8" x2="20" y2="8" stroke="currentColor" stroke-width="1.6"/><line x1="7" y1="1" x2="7" y2="5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="15" y1="1" x2="15" y2="5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="13" r="1.3" fill="currentColor"/><circle cx="11" cy="13" r="1.3" fill="currentColor"/><circle cx="15" cy="13" r="1.3" fill="currentColor"/></svg>
-      캘린더
-    </button>
-    <button class="nav-btn" id="btn-myshift" onclick="switchTab('myshift',this)">
-      <svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M4 19c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 5.5l1 1 2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span id="label-myshift">히스토리</span>
-    </button>
-    <button class="nav-btn" id="btn-search" onclick="switchTab('search',this)">
-      <svg viewBox="0 0 22 22" fill="none"><circle cx="9.5" cy="9.5" r="6" stroke="currentColor" stroke-width="1.6"/><line x1="14" y1="14" x2="19.5" y2="19.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-      검색
-    </button>
-    <button class="nav-btn" id="btn-notice" onclick="switchTab('notice',this)">
-      <svg viewBox="0 0 22 22" fill="none"><path d="M4 15V5a3 3 0 013-3h8a3 3 0 013 3v10" stroke="currentColor" stroke-width="1.6"/><path d="M2 15h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9 18h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="8" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="11" x2="12" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-      공지
-    </button>
-    <button class="nav-btn" id="btn-feed" onclick="switchTab('feed',this)">
-      <svg viewBox="0 0 22 22" fill="none"><path d="M4 4h14a2 2 0 012 2v8a2 2 0 01-2 2H8l-4 4V6a2 2 0 012-2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-      소통
-    </button>
-    <button class="nav-btn" id="btn-admin" style="display:none" onclick="switchTab('admin',this)">
-      <svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="7" r="3.5" stroke="currentColor" stroke-width="1.6"/><path d="M4 19c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 2l1.3 2.7L20 5.5l-2.7.8L16 9l-1.3-2.7L12 5.5l2.7-.8L16 2z" fill="currentColor"/></svg>
-      관리자
-    </button>
+    <div class="nav-grid">
+      <button class="nav-btn active" id="btn-cal" onclick="switchTab('cal',this)">
+        <svg viewBox="0 0 22 22" fill="none"><rect x="2" y="3" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/><line x1="2" y1="8" x2="20" y2="8" stroke="currentColor" stroke-width="1.6"/><line x1="7" y1="1" x2="7" y2="5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="15" y1="1" x2="15" y2="5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="13" r="1.3" fill="currentColor"/><circle cx="11" cy="13" r="1.3" fill="currentColor"/><circle cx="15" cy="13" r="1.3" fill="currentColor"/></svg>
+        캘린더
+      </button>
+      <button class="nav-btn" id="btn-myshift" onclick="switchTab('myshift',this)">
+        <svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="8" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M4 19c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 5.5l1 1 2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="label-myshift">히스토리</span>
+      </button>
+      <button class="nav-btn" id="btn-search" onclick="switchTab('search',this)">
+        <svg viewBox="0 0 22 22" fill="none"><circle cx="9.5" cy="9.5" r="6" stroke="currentColor" stroke-width="1.6"/><line x1="14" y1="14" x2="19.5" y2="19.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        검색
+      </button>
+      <button class="nav-btn" id="btn-feed" onclick="switchTab('feed',this)">
+        <svg viewBox="0 0 22 22" fill="none"><path d="M4 4h14a2 2 0 012 2v8a2 2 0 01-2 2H8l-4 4V6a2 2 0 012-2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        소통
+      </button>
+    </div>
   </div>
 </div>
 

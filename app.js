@@ -417,7 +417,7 @@ async function enterApp() {
   if(myTeam.includes(cu.name)){myTeam=myTeam.filter(n=>n!==cu.name);saveMyTeam();}
   // ★ 프로필 이미지 or 이름 첫 글자
   updateHeaderAvatar();
-  $('btn-admin').style.display=isAdmin()?'flex':'none';
+  $('btn-admin').style.display=isAdmin()?'inline-flex':'none';
   assignColors(collectAllTypes());
   // 모든 이용자에게 내 사역만/전체 보기 토글 표시
   const toggleWrap=$('view-toggle-wrap');
@@ -1570,9 +1570,10 @@ function renderCalendar(){
       const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
+      const myDot=hasMy?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
-      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
   }
 
@@ -1970,17 +1971,116 @@ function renderMyShift(){
       </div>` : ''}`;
   }
 
+  // 완료 기록 HTML
+  const completedTotal = Object.keys(shiftCompletions).length;
+  const thisYear2 = new Date().getFullYear();
+  const thisMonth2 = new Date().getMonth()+1;
+  const yearCount2 = Object.keys(shiftCompletions).filter(k=>k.startsWith(thisYear2+'-')).length;
+  const monthCount2 = Object.keys(shiftCompletions).filter(k=>k.startsWith(`${thisYear2}-${thisMonth2}-`)).length;
+
+  const recentCompletions = Object.entries(shiftCompletions)
+    .sort((a,b)=>new Date(b[1])-new Date(a[1])).slice(0,5)
+    .map(([key,completedAt])=>{
+      const parts=key.split('-');
+      const type=parts.slice(3).join('-');
+      const date=`${parts[1]}월 ${parts[2]}일`;
+      const c=tc(type);
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:0.5px solid var(--color-border-tertiary)">
+        <span style="font-size:12px;color:var(--color-text-secondary)">${date}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="background:${c?.bg||'#f0f0ea'};color:${c?.text||'#888'};border:1px solid ${c?.border||'#ddd'};font-size:10px;padding:2px 7px;border-radius:6px">${type}</span>
+          <span style="color:#3B6D11;font-size:16px">✅</span>
+        </div>
+      </div>`;
+    }).join('');
+
+  // 카테고리 행 HTML
+  const catRows = activeCats.map(cat=>{
+    const meta2=MY_CAT_META[cat]||{icon:'📋',label:cat,color:'#888'};
+    const total2=catTotals[cat]?.total||0;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px">
+      <span style="color:var(--color-text-secondary)">${meta2.icon} ${meta2.label||cat}</span>
+      <span style="font-weight:500;color:var(--color-text-primary)">${total2}회</span>
+    </div>`;
+  }).join('');
+
   el.innerHTML=`
-    <div class="my-header-card">
-      <div class="my-name-badge">${cu.name}${isAdmin()?` <span class="role-tag">관리자</span>`:''}</div>
-    </div>
     ${ddayHtml}
-    ${statsHtml}
-    <div class="list-section-title" style="margin-bottom:8px">누적 사역 통계</div>
-    ${catHtml}
-    ${historyHtml}
-    <div class="list-section-title" style="margin-top:14px;margin-bottom:8px">예정된 사역</div>
-    ${listHtml}`;
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+      <div onclick="toggleMySection('stat')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:17px">📊</span>
+          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">사역 현황 · 통계</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;color:#185FA5;font-weight:500">올해 ${yearCount2}회 완료</span>
+          <span id="chev-stat" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
+        </div>
+      </div>
+      <div id="sec-stat" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
+        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 14px">
+          <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:500;color:#3B6D11">${yearCount2}</div>
+            <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">올해 완료</div>
+          </div>
+          <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:500;color:#185FA5">${monthCount2}</div>
+            <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">이번 달</div>
+          </div>
+          <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:500;color:#854F0B">${completedTotal}</div>
+            <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">누적 완료</div>
+          </div>
+        </div>
+        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+        ${catRows}
+      </div>
+    </div>
+
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+      <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:17px">📅</span>
+          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">예정된 사역</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;color:var(--color-text-secondary)">${myFuture.length}개</span>
+          <span id="chev-shift" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s;transform:rotate(180deg)">▼</span>
+        </div>
+      </div>
+      <div id="sec-shift" style="max-height:2000px;overflow:hidden;transition:max-height .3s ease">
+        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+        ${listHtml}
+      </div>
+    </div>
+
+    ${completedTotal>0?`
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+      <div onclick="toggleMySection('rec')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:17px">✅</span>
+          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">완료 기록</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;color:var(--color-text-secondary)">${completedTotal}건</span>
+          <span id="chev-rec" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
+        </div>
+      </div>
+      <div id="sec-rec" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
+        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+        ${recentCompletions}
+      </div>
+    </div>`:''}`;
+}
+
+function toggleMySection(id){
+  const sec = document.getElementById('sec-'+id);
+  const chev = document.getElementById('chev-'+id);
+  if(!sec || !chev) return;
+  const isOpen = sec.style.maxHeight !== '0px' && sec.style.maxHeight !== '0';
+  sec.style.maxHeight = isOpen ? '0' : '2000px';
+  chev.style.transform = isOpen ? '' : 'rotate(180deg)';
 }
 
 function openDayModal_myshift(y,m,d){
