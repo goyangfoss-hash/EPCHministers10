@@ -1722,7 +1722,7 @@ function renderMyShift(){
         cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
         cumTotal++;
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
-        if(dt>=today){
+        if(dt>today){
           myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
         }
       });
