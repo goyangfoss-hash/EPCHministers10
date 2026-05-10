@@ -170,29 +170,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   hide('loading'); showScreen('login-screen');
 });
-document.addEventListener('visibilitychange', async () => {
-  if(!document.hidden && cu){
-    refreshSchedules();
-    // ★ 포그라운드 복귀 시 DM 최신 메시지 갱신
-    try {
-      const {data} = await sb.from('direct_messages')
-        .select('*').or(`from_id.eq.${cu.id},to_id.eq.${cu.id}`)
-        .order('created_at', {ascending:true});
-      if(data){
-        chatMessages = {};
-        data.forEach(m=>{
-          const otherId = m.from_id===cu.id ? m.to_id : m.from_id;
-          if(!chatMessages[otherId]) chatMessages[otherId]=[];
-          if(!chatMessages[otherId].find(x=>x.id===m.id)) chatMessages[otherId].push(m);
-        });
-        updateFeedBadge();
-        if($('tab-feed')?.style.display!=='none') renderFeedTab();
-        if(chatTarget) renderChatMessages();
-        if(userDmTarget) renderUserDmMessages();
-      }
-    } catch(e){ console.warn('visibilitychange DM reload:', e); }
-  }
-});
+document.addEventListener('visibilitychange', () => { if (!document.hidden && cu) refreshSchedules(); });
 
 // ══════════════════════════════════════════════════
 //  당겨서 새로고침 (Pull to Refresh)
@@ -1139,21 +1117,16 @@ function handleNotifLaunchTab(){
 // ★ Service Worker에서 알림 클릭 메시지 수신 (sw → app)
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message', e=>{
-    const {type, tab, chatUserId} = e.data || {};
-    if(type==='NOTIF_CLICK' && cu){
-      const targetTab = tab || 'feed';
+    const {type, tab} = e.data || {};
+    if(type==='NOTIF_CLICK' && tab && cu){
       const btnMap = {
         feed:   $('btn-feed'),
         notice: $('btn-notice'),
         cal:    $('btn-cal'),
         myshift:$('btn-myshift'),
       };
-      const btn = btnMap[targetTab];
-      if(btn) switchTab(targetTab, btn);
-      // ★ 채팅 알림이면 해당 채팅창 자동 오픈
-      if(chatUserId){
-        setTimeout(()=>{ openChat(Number(chatUserId)); }, 300);
-      }
+      const btn = btnMap[tab];
+      if(btn) switchTab(tab, btn);
     }
   });
 }
@@ -1597,10 +1570,9 @@ function renderCalendar(){
       const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
-      const myDot=hasMy?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
-      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
   }
 
