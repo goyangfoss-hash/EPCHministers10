@@ -1763,15 +1763,27 @@ function renderMyShift(){
 
   // 통계 카드
   const myMonths=new Set(Object.entries(allSchedules).flatMap(([y,ym])=>Object.entries(ym).filter(([m,d])=>d[cu.name]).map(([m])=>`${y}-${m}`))).size;
+  // 올해 사역만 카운트
+  const thisYr = new Date().getFullYear();
+  const todayD = new Date(); todayD.setHours(0,0,0,0);
+  let yearTotal = 0;
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    if(parseInt(y)!==thisYr) return;
+    Object.entries(ym).forEach(([m,data])=>{
+      const myData=data[cu.name]||{};
+      Object.keys(myData).forEach(()=>{ yearTotal++; });
+    });
+  });
+
   const statsHtml=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
       <div style="background:#fff;border-radius:10px;border:0.5px solid #f0f0ea;padding:10px;text-align:center">
-        <div style="font-size:20px;font-weight:700;color:#185FA5">${cumTotal}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:2px">전체 사역</div>
+        <div style="font-size:20px;font-weight:700;color:#185FA5">${yearTotal}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:2px">올해 사역</div>
       </div>
       <div style="background:#fff;border-radius:10px;border:0.5px solid #f0f0ea;padding:10px;text-align:center">
         <div style="font-size:20px;font-weight:700;color:#3B6D11">${remaining}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:2px">남은 사역</div>
+        <div style="font-size:10px;color:#aaa;margin-top:2px">예정 사역</div>
       </div>
       <div style="background:#fff;border-radius:10px;border:0.5px solid #f0f0ea;padding:10px;text-align:center">
         <div style="font-size:20px;font-weight:700;color:#BA7517">${myMonths}</div>
