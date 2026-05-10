@@ -1149,7 +1149,40 @@ function renderSystemDiag(){
     <div id="diag-results" style="background:var(--color-background-primary);border-radius:14px;border:1px solid var(--color-border-tertiary);overflow:hidden">
       <div style="padding:16px;text-align:center;color:#bbb;font-size:13px">진단 실행 버튼을 눌러주세요</div>
     </div>
-    <button onclick="runSystemDiag()" style="width:100%;margin-top:10px;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer">🔍 전체 진단 실행</button>`;
+    <button onclick="runSystemDiag()" style="width:100%;margin-top:10px;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer">🔍 전체 진단 실행</button>
+    <button onclick="previewTeamAlarms()" style="width:100%;margin-top:8px;padding:12px;background:#EAF3DE;color:#3B6D11;border:1px solid #C0DD97;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer">👥 내일 팀원 알림 미리보기</button>
+    <div id="team-alarm-preview" style="margin-top:10px"></div>`;
+}
+
+async function previewTeamAlarms(){
+  const el = document.getElementById("team-alarm-preview");
+  if(!el) return;
+  el.innerHTML = "<div style=\"padding:12px;text-align:center;color:#888;font-size:13px\">⏳ Edge Function 호출 중...</div>";
+  try {
+    const res = await sb.functions.invoke("daily-shift-push", { body: { dry_run: true } });
+    if(res.error) throw new Error(res.error.message);
+    const data = res.data;
+    if(!data.recipients || !data.recipients.length){
+      el.innerHTML = "<div style=\"padding:12px;font-size:13px;color:#888;text-align:center\">내일("+data.date+") 발송될 알림이 없어요.</div>";
+      return;
+    }
+    let html = "";
+    data.recipients.forEach(function(r){
+      let nHtml = "";
+      r.notifs.forEach(function(n){
+        const color = n.title.includes("팀원") ? "#3B6D11" : "#185FA5";
+        nHtml += "<div style=\"font-size:12px;color:"+color+";padding:2px 0\">"+n.title+"<br><span style=\"color:#666;font-size:11px\">"+n.body+"</span></div>";
+      });
+      html += "<div style=\"padding:10px 14px;border-bottom:0.5px solid #f0f0ea\">"
+            + "<div style=\"font-size:13px;font-weight:600;margin-bottom:6px\">"+r.name+"</div>"
+            + nHtml + "</div>";
+    });
+    el.innerHTML = "<div style=\"background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden\">"
+      + "<div style=\"padding:10px 14px;background:#EAF3DE;font-size:12px;font-weight:600;color:#3B6D11\">📋 내일("+data.date+") 발송 예정 — "+data.recipients.length+"명</div>"
+      + html + "</div>";
+  } catch(e) {
+    el.innerHTML = "<div style=\"padding:12px;font-size:13px;color:#d00;text-align:center\">오류: "+e.message+"</div>";
+  }
 }
 
 async function runSystemDiag(){
