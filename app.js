@@ -393,15 +393,13 @@ function isAdminRole(u){return u?.role==='admin'||u?.role==='superadmin';}
 // ══════════════════════════════════════════════════
 async function enterApp() {
   showScreen('main-screen');
+  // ★ 히스토리 탭 라벨 고정 (깜빡임 방지)
+  const lbl = document.getElementById('label-myshift');
+  if(lbl) lbl.textContent = '히스토리';
   await loadMyTeamFromDB();
   window._seenShifts = await loadSeenShiftsFromDB();
   await loadShiftCompletions();
-  await backfillPastShifts(); // 패치 이전 과거 사역 일괄 완료 처리
-  // ★ 앱 진입 시 히스토리 탭 라벨 즉시 반영
-  if(FEATURE_HISTORY()){
-    const lbl = document.getElementById('label-myshift');
-    if(lbl) lbl.textContent = '히스토리';
-  }
+  await backfillPastShifts();
   // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
   if(!document.getElementById('app-overflow-fix')){
     const s=document.createElement('style');
@@ -1283,11 +1281,7 @@ function switchTab(tab,btn){
     }
   });
   $('hdr-title').textContent={cal:'캘린더',myshift:FEATURE_HISTORY()?'히스토리':'내 사역',search:'사역 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
-  // ★ 히스토리 기능: 하단 탭 라벨도 동적으로 변경
-  if(tab==='myshift'){
-    const lbl = $('label-myshift');
-    if(lbl) lbl.textContent = FEATURE_HISTORY() ? '히스토리' : '내 사역';
-  }
+
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
