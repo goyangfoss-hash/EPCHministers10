@@ -1791,7 +1791,7 @@ function renderMyShift(){
         cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
         cumTotal++;
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
-        if(dt>today){
+        if(dt>=today){
           myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
         }
       });
@@ -1912,7 +1912,7 @@ function renderMyShift(){
         diff===1?'<span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">내일</span>':'';
       const compKey = makeCompKey(y,m,d,type);
       const isDone = FEATURE_HISTORY() && !!shiftCompletions[compKey];
-      const isFuture = dt > today; // 아직 안 온 날
+      const isFuture = dt > today; // 오늘은 완료 가능, 내일부터 미래
       const doneTime = isDone ? new Date(shiftCompletions[compKey]).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '';
       const completeBtnHtml = FEATURE_HISTORY() ? (
         isDone ? `
