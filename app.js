@@ -2168,7 +2168,7 @@ async function backfillPastShifts(){
       Object.entries(myData).forEach(([ds, rawType])=>{
         if(!rawType) return;
         const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(ds));
-        if(dt <= today){ // 오늘 포함 이전 사역
+        if(dt < today){ // 오늘 제외, 어제까지만 backfill
           // '/' 구분된 복합 사역도 각각 처리
           const types = rawType.includes('/') ? rawType.split('/') : [rawType];
           types.forEach(type=>{
