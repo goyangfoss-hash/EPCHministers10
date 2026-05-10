@@ -1776,20 +1776,25 @@ function renderMyShift(){
     </div>`;
 
   // 카테고리별 누적 accordion
-  const cumByCat=buildCumByCategory(cumCount,[]);
-  // buildCumByCategory가 myMonths 파라미터 필요 — 직접 계산
+  // ★ 실제 데이터에 있는 카테고리만 동적으로 집계 (삭제된 스케줄은 자동 제외)
   const catTotals={};
-  MY_CAT_ORDER.forEach(c=>catTotals[c]={total:0,types:{}});
   Object.entries(cumCount).forEach(([type,cnt])=>{
-    const cat=MY_CAT_ORDER.find(c=>MY_CAT_META[c]&&type.includes(c))||'특새';
+    // MY_CAT_ORDER 순서대로 매칭, 없으면 해당 type 자체를 카테고리로
+    const cat=MY_CAT_ORDER.find(c=>MY_CAT_META[c]&&type.includes(c))||type;
     if(!catTotals[cat]) catTotals[cat]={total:0,types:{}};
     catTotals[cat].total+=cnt;
     catTotals[cat].types[type]=(catTotals[cat].types[type]||0)+cnt;
   });
-  const activeCats=MY_CAT_ORDER.filter(c=>catTotals[c]?.total>0);
+  // MY_CAT_ORDER 순서 우선, 나머지는 뒤에 추가
+  const activeCats=[
+    ...MY_CAT_ORDER.filter(c=>catTotals[c]?.total>0),
+    ...Object.keys(catTotals).filter(c=>!MY_CAT_ORDER.includes(c)&&catTotals[c]?.total>0)
+  ];
   let catHtml='';
   activeCats.forEach(cat=>{
-    const meta=MY_CAT_META[cat]||{icon:'📋',label:cat,color:'#888'};
+    // MY_CAT_META에 없는 카테고리는 타입 색상으로 자동 처리
+    const tc_cat=tc(cat);
+    const meta=MY_CAT_META[cat]||{icon:'📋',label:cat,color:tc_cat?.dot||'#888'};
     const {total,types}=catTotals[cat];
     const key=`mycat-${cat}`;
     const isOpen=collapseState[key]===true;
@@ -1879,6 +1884,19 @@ function renderMyShift(){
     const thisMonth = new Date().getMonth()+1;
     const yearCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(thisYear+'-')).length;
     const monthCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(`${thisYear}-${thisMonth}-`)).length;
+    // 올해 전체 사역 중 오늘 이전(완료 가능) 사역 수
+    const today2 = new Date(); today2.setHours(0,0,0,0);
+    let pastTotal = 0;
+    Object.entries(allSchedules).forEach(([y,ym])=>{
+      if(parseInt(y)!==thisYear) return;
+      Object.entries(ym).forEach(([m,data])=>{
+        const myData=data[cu.name]||{};
+        Object.entries(myData).forEach(([ds])=>{
+          const dt=new Date(parseInt(y),parseInt(m)-1,parseInt(ds));
+          if(dt<=today2) pastTotal++;
+        });
+      });
+    });
 
     const recentItems = Object.entries(shiftCompletions)
       .sort((a,b)=>new Date(b[1])-new Date(a[1]))
@@ -1901,7 +1919,7 @@ function renderMyShift(){
       <div class="list-section-title" style="margin-top:14px;margin-bottom:8px">📊 나의 사역 현황</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
         <div style="background:#EAF3DE;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#3B6D11">${yearCount}</div>
+          <div style="font-size:18px;font-weight:700;color:#3B6D11">${yearCount}<span style="font-size:12px;color:#639922">/${pastTotal}</span></div>
           <div style="font-size:10px;color:#639922;margin-top:2px">올해 완료</div>
         </div>
         <div style="background:#E6F1FB;border-radius:10px;padding:10px;text-align:center">
