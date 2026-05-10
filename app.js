@@ -1714,9 +1714,13 @@ function renderMyShift(){
       const myData=data[cu.name]||{};
       Object.entries(myData).forEach(([ds,type])=>{
         if(!type) return;
-        cumCount[type]=(cumCount[type]||0)+1;
-        cumTotal++;
         const d=parseInt(ds);
+        // 날짜 기반 카테고리 분류
+        const cat=getCategory(type,parseInt(y),parseInt(m),d);
+        if(!cumCount[cat]) cumCount[cat]={total:0,types:{}};
+        cumCount[cat].total++;
+        cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
+        cumTotal++;
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
         if(dt>=today){
           myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
@@ -1776,16 +1780,9 @@ function renderMyShift(){
     </div>`;
 
   // 카테고리별 누적 accordion
-  // ★ 실제 데이터에 있는 카테고리만 동적으로 집계 (삭제된 스케줄은 자동 제외)
-  const catTotals={};
-  Object.entries(cumCount).forEach(([type,cnt])=>{
-    // MY_CAT_ORDER 순서대로 매칭, 없으면 해당 type 자체를 카테고리로
-    const cat=MY_CAT_ORDER.find(c=>MY_CAT_META[c]&&type.includes(c))||type;
-    if(!catTotals[cat]) catTotals[cat]={total:0,types:{}};
-    catTotals[cat].total+=cnt;
-    catTotals[cat].types[type]=(catTotals[cat].types[type]||0)+cnt;
-  });
-  // MY_CAT_ORDER 순서 우선, 나머지는 뒤에 추가
+  // ★ cumCount가 이미 {cat: {total, types}} 구조 — 실제 데이터에 있는 카테고리만 동적 표시
+  const catTotals = cumCount;
+  // MY_CAT_ORDER 순서 우선, 나머지(신규 카테고리)는 뒤에 추가
   const activeCats=[
     ...MY_CAT_ORDER.filter(c=>catTotals[c]?.total>0),
     ...Object.keys(catTotals).filter(c=>!MY_CAT_ORDER.includes(c)&&catTotals[c]?.total>0)
@@ -1988,22 +1985,28 @@ async function backfillPastShifts(){
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
       const myData = data[cu.name] || {};
-      Object.entries(myData).forEach(([ds, type])=>{
-        if(!type) return;
+      Object.entries(myData).forEach(([ds, rawType])=>{
+        if(!rawType) return;
         const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(ds));
         if(dt <= today){ // 오늘 포함 이전 사역
-          const key = makeCompKey(parseInt(y),parseInt(m),parseInt(ds),type);
-          if(!shiftCompletions[key]){ // 아직 완료 처리 안 된 것만
-            const completedAt = dt.toISOString();
-            shiftCompletions[key] = completedAt;
-            toInsert.push({
-              user_id: cu.id,
-              comp_key: key,
-              y: parseInt(y), m: parseInt(m), d: parseInt(ds),
-              type,
-              completed_at: completedAt
-            });
-          }
+          // '/' 구분된 복합 사역도 각각 처리
+          const types = rawType.includes('/') ? rawType.split('/') : [rawType];
+          types.forEach(type=>{
+            type = type.trim();
+            if(!type) return;
+            const key = makeCompKey(parseInt(y),parseInt(m),parseInt(ds),type);
+            if(!shiftCompletions[key]){
+              const completedAt = dt.toISOString();
+              shiftCompletions[key] = completedAt;
+              toInsert.push({
+                user_id: cu.id,
+                comp_key: key,
+                y: parseInt(y), m: parseInt(m), d: parseInt(ds),
+                type,
+                completed_at: completedAt
+              });
+            }
+          });
         }
       });
     });
