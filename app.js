@@ -1791,7 +1791,7 @@ function renderMyShift(){
         cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
         cumTotal++;
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
-        if(dt>=today){
+        if(dt>today){
           myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
         }
       });
@@ -1912,27 +1912,14 @@ function renderMyShift(){
         diff===1?'<span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">내일</span>':'';
       const compKey = makeCompKey(y,m,d,type);
       const isDone = FEATURE_HISTORY() && !!shiftCompletions[compKey];
-      const isFuture = dt > today; // 오늘은 완료 가능, 내일부터 미래
+      const isFuture = dt > today; // 아직 안 온 날
       const doneTime = isDone ? new Date(shiftCompletions[compKey]).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '';
       const completeBtnHtml = FEATURE_HISTORY() ? (
-        isDone ? `
-        <button disabled style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:none;
-          background:#3B6D11;color:#fff;font-size:12px;font-weight:500;cursor:default;
-          display:flex;align-items:center;justify-content:center;gap:6px;">
-          ✅ 완료됨 · ${doneTime}
-        </button>` :
-        isFuture ? `
-        <button disabled style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:0.5px solid #e0e0e0;
-          background:#f5f5f5;color:#bbb;font-size:12px;font-weight:500;cursor:not-allowed;
-          display:flex;align-items:center;justify-content:center;gap:6px;">
-          🔒 사역일 이후 완료 가능
-        </button>` : `
-        <button onclick="event.stopPropagation();markShiftComplete(${y},${m},${d},'${type}')"
-          style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:0.5px solid #C0DD97;
-          background:#EAF3DE;color:#3B6D11;font-size:12px;font-weight:500;cursor:pointer;
-          display:flex;align-items:center;justify-content:center;gap:6px;">
-          사역 완료
-        </button>`
+        isDone ?
+        `<button disabled style="margin-top:8px;padding:5px 12px;border-radius:20px;border:none;background:#3B6D11;color:#fff;font-size:11px;font-weight:500;cursor:default;display:block;">✅ ${doneTime}</button>` :
+        isFuture ?
+        `<button disabled style="margin-top:8px;padding:5px 12px;border-radius:20px;border:0.5px solid #e0e0e0;background:#f5f5f5;color:#bbb;font-size:11px;font-weight:500;cursor:not-allowed;display:block;">🔒 미래</button>` :
+        `<button onclick="event.stopPropagation();markShiftComplete(${y},${m},${d},'${type}')" style="margin-top:8px;padding:5px 12px;border-radius:20px;border:0.5px solid #C0DD97;background:#EAF3DE;color:#3B6D11;font-size:11px;font-weight:500;cursor:pointer;display:block;">✓ 완료</button>`
       ) : '';
       return monthHeader+`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.5':'1'};transition:opacity 0.3s" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;justify-content:space-between">
@@ -2039,13 +2026,48 @@ function renderMyShift(){
       </div>`;
     }).join('');
 
-  // 카테고리 행 HTML
-  const catRows = activeCats.map(cat=>{
+  // ★ 완료 기반 카테고리 집계 (shiftCompletions 기준)
+  const doneBycat = {};
+  Object.keys(shiftCompletions).forEach(key=>{
+    const parts = key.split('-');
+    const type = parts.slice(3).join('-');
+    if(!type) return;
+    const cat = MY_CAT_ORDER.find(c=>MY_CAT_META[c]&&type.includes(c))||'기타';
+    if(!doneBycat[cat]) doneBycat[cat]={total:0,types:{}};
+    doneBycat[cat].total++;
+    doneBycat[cat].types[type]=(doneBycat[cat].types[type]||0)+1;
+  });
+
+  // 완료된 카테고리만 표시
+  const doneCats=[
+    ...MY_CAT_ORDER.filter(c=>doneBycat[c]?.total>0),
+    ...Object.keys(doneBycat).filter(c=>!MY_CAT_ORDER.includes(c)&&doneBycat[c]?.total>0)
+  ];
+
+  const catRows = doneCats.map((cat,idx)=>{
     const meta2=MY_CAT_META[cat]||{icon:'📋',label:cat,color:'#888'};
-    const total2=catTotals[cat]?.total||0;
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px">
-      <span style="color:var(--color-text-secondary)">${meta2.icon} ${meta2.label||cat}</span>
-      <span style="font-weight:500;color:var(--color-text-primary)">${total2}회</span>
+    const {total:catTotal,types:catTypes}=doneBycat[cat];
+    const catId='dcat-'+idx;
+    const typeRows=Object.entries(catTypes).sort((a,b)=>b[1]-a[1]).map(([t,cnt])=>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 20px 7px 40px;border-top:0.5px solid var(--color-border-tertiary);font-size:12px">
+        <span style="color:var(--color-text-secondary)">${t}</span>
+        <span style="font-weight:500;color:#3B6D11">✅ ${cnt}회</span>
+      </div>`
+    ).join('');
+    return `<div>
+      <div onclick="toggleCatDetail('${catId}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-top:0.5px solid var(--color-border-tertiary);cursor:pointer;transition:background .15s">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">${meta2.icon}</span>
+          <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${meta2.label||cat}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:13px;font-weight:500;color:#185FA5">${catTotal}회</span>
+          <span id="chev-${catId}" style="font-size:12px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
+        </div>
+      </div>
+      <div id="${catId}" style="max-height:0;overflow:hidden;transition:max-height .25s ease;background:var(--color-background-secondary)">
+        ${typeRows}
+      </div>
     </div>`;
   }).join('');
 
@@ -2082,6 +2104,24 @@ function renderMyShift(){
         ${catRows}
       </div>
     </div>
+
+    ${completedTotal>0?`
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+      <div onclick="toggleMySection('rec')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:17px">✅</span>
+          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">완료 기록</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:11px;color:var(--color-text-secondary)">${completedTotal}건</span>
+          <span id="chev-rec" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
+        </div>
+      </div>
+      <div id="sec-rec" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
+        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+        ${recentCompletions}
+      </div>
+    </div>`:''}
 
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
       <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
@@ -2168,7 +2208,7 @@ async function backfillPastShifts(){
       Object.entries(myData).forEach(([ds, rawType])=>{
         if(!rawType) return;
         const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(ds));
-        if(dt < today){ // 오늘 제외, 어제까지만 backfill
+        if(dt <= today){ // 오늘 포함 이전 사역
           // '/' 구분된 복합 사역도 각각 처리
           const types = rawType.includes('/') ? rawType.split('/') : [rawType];
           types.forEach(type=>{
@@ -2213,6 +2253,9 @@ async function markShiftComplete(y,m,d,type){
       .upsert({user_id:cu.id, comp_key:key, y, m, d, type, completed_at:now})
       .eq('user_id', cu.id).eq('comp_key', key);
   }
+  // ★ 알림센터에서도 읽음 처리 (해당 날짜 알림 흐림)
+  const seenKey = `${y}-${m}-${d}`;
+  await markShiftSeen(seenKey);
   renderMyShift();
   showCompletionToast(type);
 }
