@@ -1661,7 +1661,27 @@ function renderDayModal(){
   function shiftRank(type){const t=(type||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});return pi===-1?999:pi;}
   const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
-  wHtml+=sorted.length?sorted.map(w=>{const c=tc(w.type);return `<div class="day-worker-row"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span><div style="display:flex;align-items:center;gap:8px"><span class="worker-nm">${w.name}</span><div class="worker-av" style="background:${c.bg};color:${c.text}">${w.name[0]}</div></div></div>`;}).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
+  wHtml+=sorted.length?sorted.map(w=>{
+    const c=tc(w.type);
+    const isMe = w.name===cu.name;
+    const isTeamMember = !isMe && myTeam.includes(w.name);
+    let rowStyle='padding:10px 14px;margin:2px 0;';
+    let nameStyle='';
+    let avBg=c.bg, avColor=c.text;
+    let badge='';
+    if(isMe){
+      rowStyle=`background:${c.bg};border-left:3px solid ${c.text};padding:10px 11px;border-radius:6px;margin:2px 0;`;
+      nameStyle=`font-weight:500;color:${c.text}`;
+      avBg=c.text; avColor='#fff';
+      badge=`<span style="font-size:9px;background:${c.text};color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">나</span>`;
+    } else if(isTeamMember){
+      rowStyle=`background:#EAF3DE;border-left:3px solid #3B6D11;padding:10px 11px;border-radius:6px;margin:2px 0;`;
+      nameStyle=`font-weight:500;color:#27500A`;
+      avBg='#3B6D11'; avColor='#fff';
+      badge=`<span style="font-size:9px;background:#3B6D11;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">팀</span>`;
+    }
+    return `<div class="day-worker-row" style="${rowStyle}"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span><div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle}">${w.name}${badge}</span><div class="worker-av" style="background:${avBg};color:${avColor}">${w.name[0]}</div></div></div>`;
+  }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
   let alarmHtml='';
   if(myType){alarmHtml=`<div class="modal-section"><div class="modal-section-title">알림 설정</div><div class="alarm-setting-row"><div><div style="font-size:13px;font-weight:600">전날 알림 받기</div><div style="font-size:11px;color:#aaa;margin-top:2px">사역 전날 ${alarm.alarmTime||'18:30'}에 알림</div></div><div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${year},${month},${day});renderDayModal();updateAlarmBadge()"></div></div>${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}
