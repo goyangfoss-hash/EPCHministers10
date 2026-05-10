@@ -1916,12 +1916,12 @@ function renderMyShift(){
       <div class="list-section-title" style="margin-top:14px;margin-bottom:8px">📊 나의 사역 현황</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
         <div style="background:#EAF3DE;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:18px;font-weight:700;color:#3B6D11">${yearCount}<span style="font-size:12px;color:#639922">/${pastTotal}</span></div>
+          <div style="font-size:20px;font-weight:700;color:#3B6D11">${yearCount}</div>
           <div style="font-size:10px;color:#639922;margin-top:2px">올해 완료</div>
         </div>
         <div style="background:#E6F1FB;border-radius:10px;padding:10px;text-align:center">
           <div style="font-size:20px;font-weight:700;color:#185FA5">${monthCount}</div>
-          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번 달</div>
+          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번 달 완료</div>
         </div>
         <div style="background:#FAEEDA;border-radius:10px;padding:10px;text-align:center">
           <div style="font-size:20px;font-weight:700;color:#854F0B">${completedTotal}</div>
