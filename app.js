@@ -44,7 +44,7 @@ let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth()
 let srchYear = 0, srchMonth = 0, srchName = '';
 let myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]'); // 내 팀 이름 배열
 let shiftCompletions = {}; // { "2026-5-10-type": {completed_at} }
-const FEATURE_HISTORY = () => cu?.id === 1; // ★ 테스트: id:1(김동권)만 활성화
+const FEATURE_HISTORY = () => true; // ★ 전체 배포
 let srchDept = 'team'; // 검색탭 선택 파트
 
 // 채팅 상태
