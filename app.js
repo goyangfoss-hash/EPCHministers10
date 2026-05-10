@@ -1570,10 +1570,9 @@ function renderCalendar(){
       const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
-      const myDot=hasMy?`<span class="my-dot" style="background:${myC.dot}"></span>`:'';
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
-      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span>${myDot}</div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
   }
 
