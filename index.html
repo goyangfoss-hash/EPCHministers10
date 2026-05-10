@@ -369,6 +369,7 @@
     .chat-input-row input:focus{border-color:#185FA5}
     .chat-send-btn{width:40px;height:40px;background:#185FA5;color:#fff;border:none;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 </head>
 <body>
 <div id="loading"><div class="spinner"></div><p>불러오는 중...</p></div>
@@ -431,7 +432,7 @@
     <div class="hdr-right">
       <!-- ★ 공지 버튼 (헤더로 이동) -->
       <button id="btn-notice" onclick="switchTab('notice',this)" title="공지" style="position:relative;width:38px;height:38px;border:none;background:none;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;color:#666"><path d="M18 8a4 4 0 010 8"/><path d="M20 5a8 8 0 010 14"/><line x1="2" y1="9" x2="2" y2="15"/><path d="M2 9h4l7-5v16l-7-5H2"/></svg>
+        <i class="ti ti-speakerphone" style="font-size:22px;color:#666;"></i>
       </button>
       <!-- 종 모양 알림 버튼 -->
       <button id="btn-alarm" onclick="toggleAlarmPanel()" title="내 사역 알림">
