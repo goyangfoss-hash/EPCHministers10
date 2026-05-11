@@ -3455,7 +3455,10 @@ function openNewDmPicker(){
 
   const wrap = document.createElement('div');
   wrap.id = 'new-dm-picker';
-  wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;justify-content:flex-end';
+  // ★ main-screen 기준으로 위치 계산 (웹/모바일 모두 대응)
+  const ms = document.getElementById('main-screen');
+  const r = ms ? ms.getBoundingClientRect() : {left:0,top:0,width:window.innerWidth,height:window.innerHeight};
+  wrap.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:9999;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden`;
   wrap.innerHTML = `
     <div onclick="closeNewDmPicker()" style="flex:1;background:rgba(0,0,0,.45)"></div>
     <div style="background:#fff;border-radius:20px 20px 0 0;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.15)">
