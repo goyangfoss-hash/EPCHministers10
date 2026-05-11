@@ -1791,7 +1791,7 @@ function renderMyShift(){
         cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
         cumTotal++;
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
-        if(dt>today){
+        if(dt>=today){
           myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
         }
       });
@@ -1914,7 +1914,6 @@ function renderMyShift(){
       const isDone = FEATURE_HISTORY() && !!shiftCompletions[compKey];
       const isFuture = dt > today; // 아직 안 온 날
       const doneTime = isDone ? new Date(shiftCompletions[compKey]).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '';
-      // ★ 완료 버튼 — 작고 둥근 형태, 우측 배치
       const completeBtnHtml = FEATURE_HISTORY() ? (
         isDone ?
         `<button disabled onclick="event.stopPropagation()" style="padding:5px 11px;border-radius:20px;border:none;background:#3B6D11;color:#fff;font-size:11px;font-weight:500;cursor:default;white-space:nowrap;flex-shrink:0;">✅ ${doneTime}</button>` :
@@ -1922,7 +1921,7 @@ function renderMyShift(){
         `<button disabled onclick="event.stopPropagation()" style="padding:5px 11px;border-radius:20px;border:0.5px solid #e0e0e0;background:#f5f5f5;color:#bbb;font-size:11px;font-weight:500;cursor:not-allowed;white-space:nowrap;flex-shrink:0;">🔒 미래</button>` :
         `<button onclick="event.stopPropagation();markShiftComplete(${y},${m},${d},'${type}')" style="padding:5px 11px;border-radius:20px;border:0.5px solid #C0DD97;background:#EAF3DE;color:#3B6D11;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;">✓ 완료</button>`
       ) : '';
-      // 알림 표시 — 꺼져있으면 작게 우측 상단
+      // SVG 종 모양 (알림 꺼진 경우만)
       const alarmIcon = alarm.alarm ? '' : '<span style="opacity:0.4;flex-shrink:0;display:flex;align-items:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>';
       return monthHeader+`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.6':'1'};transition:opacity 0.3s" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;gap:10px">
@@ -2027,13 +2026,49 @@ function renderMyShift(){
       </div>`;
     }).join('');
 
-  // 카테고리 행 HTML
-  const catRows = activeCats.map(cat=>{
+  // ★ 완료 기반 카테고리 집계 (shiftCompletions 기준)
+  const doneBycat = {};
+  Object.keys(shiftCompletions).forEach(key=>{
+    const parts = key.split('-');
+    const type2 = parts.slice(3).join('-');
+    if(!type2) return;
+    const y2=parseInt(parts[0]),m2=parseInt(parts[1]),d2=parseInt(parts[2]);
+    const cat2 = getCategory(type2,y2,m2,d2);
+    const catKey = MY_CAT_ORDER.includes(cat2)?cat2:'특새';
+    if(!doneBycat[catKey]) doneBycat[catKey]={total:0,types:{}};
+    doneBycat[catKey].total++;
+    doneBycat[catKey].types[type2]=(doneBycat[catKey].types[type2]||0)+1;
+  });
+  const doneCats=[
+    ...MY_CAT_ORDER.filter(c=>doneBycat[c]?.total>0),
+    ...Object.keys(doneBycat).filter(c=>!MY_CAT_ORDER.includes(c)&&doneBycat[c]?.total>0)
+  ];
+
+  // 접이식 카테고리 행 HTML
+  const catRows = doneCats.map((cat,cidx)=>{
     const meta2=MY_CAT_META[cat]||{icon:'📋',label:cat,color:'#888'};
-    const total2=catTotals[cat]?.total||0;
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px">
-      <span style="color:var(--color-text-secondary)">${meta2.icon} ${meta2.label||cat}</span>
-      <span style="font-weight:500;color:var(--color-text-primary)">${total2}회</span>
+    const {total:catTotal,types:catTypes}=doneBycat[cat];
+    const catId='dcat-'+cidx;
+    const typeRows=Object.entries(catTypes).sort((a,b)=>b[1]-a[1]).map(([t,cnt])=>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 20px 7px 40px;border-top:0.5px solid var(--color-border-tertiary);font-size:12px">
+        <span style="color:var(--color-text-secondary)">${t}</span>
+        <span style="font-weight:500;color:#3B6D11">✅ ${cnt}회</span>
+      </div>`
+    ).join('');
+    return `<div>
+      <div onclick="toggleCatDetail('${catId}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-top:0.5px solid var(--color-border-tertiary);cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">${meta2.icon}</span>
+          <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${meta2.label||cat}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:13px;font-weight:500;color:#185FA5">${catTotal}회</span>
+          <span id="chev-${catId}" style="font-size:12px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
+        </div>
+      </div>
+      <div id="${catId}" style="max-height:0;overflow:hidden;transition:max-height .25s ease;background:var(--color-background-secondary)">
+        ${typeRows}
+      </div>
     </div>`;
   }).join('');
 
@@ -2071,23 +2106,6 @@ function renderMyShift(){
       </div>
     </div>
 
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
-      <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
-        <div style="display:flex;align-items:center;gap:7px">
-          <span style="font-size:17px">📅</span>
-          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">예정된 사역</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:var(--color-text-secondary)">${myFuture.length}개</span>
-          <span id="chev-shift" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s;transform:rotate(180deg)">▼</span>
-        </div>
-      </div>
-      <div id="sec-shift" style="max-height:2000px;overflow:hidden;transition:max-height .3s ease">
-        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
-        ${listHtml}
-      </div>
-    </div>
-
     ${completedTotal>0?`
     <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
       <div onclick="toggleMySection('rec')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
@@ -2104,7 +2122,32 @@ function renderMyShift(){
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
         ${recentCompletions}
       </div>
-    </div>`:''}`;
+    </div>`:''}"
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+      <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:17px">📅</span>
+          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">예정된 사역</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;color:var(--color-text-secondary)">${myFuture.length}개</span>
+          <span id="chev-shift" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s;transform:rotate(180deg)">▼</span>
+        </div>
+      </div>
+      <div id="sec-shift" style="max-height:2000px;overflow:hidden;transition:max-height .3s ease">
+        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+        ${listHtml}
+      </div>
+    </div>`;
+}
+
+function toggleCatDetail(id){
+  const el=document.getElementById(id);
+  const chev=document.getElementById('chev-'+id);
+  if(!el||!chev) return;
+  const isOpen=el.style.maxHeight!=='0px'&&el.style.maxHeight!=='0';
+  el.style.maxHeight=isOpen?'0':'300px';
+  chev.style.transform=isOpen?'':'rotate(180deg)';
 }
 
 function toggleMySection(id){
@@ -2156,7 +2199,7 @@ async function backfillPastShifts(){
       Object.entries(myData).forEach(([ds, rawType])=>{
         if(!rawType) return;
         const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(ds));
-        if(dt <= today){ // 오늘 포함 이전 사역
+        if(dt < today){ // 오늘 제외, 어제까지만 backfill
           // '/' 구분된 복합 사역도 각각 처리
           const types = rawType.includes('/') ? rawType.split('/') : [rawType];
           types.forEach(type=>{
@@ -2201,6 +2244,9 @@ async function markShiftComplete(y,m,d,type){
       .upsert({user_id:cu.id, comp_key:key, y, m, d, type, completed_at:now})
       .eq('user_id', cu.id).eq('comp_key', key);
   }
+  // ★ 알림센터에서도 읽음 처리
+  const seenKey = `${y}-${m}-${d}`;
+  await markShiftSeen(seenKey);
   renderMyShift();
   showCompletionToast(type);
 }
