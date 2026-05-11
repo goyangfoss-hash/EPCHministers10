@@ -2243,6 +2243,9 @@ function renderTeamMemberShift(el, targetName){
   const thisMonth = now.getMonth() + 1;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const DN = ['일','월','화','수','목','금','토'];
+  // ★ 담당자 직함 가져오기
+  const targetMember = allMembers.find(u=>u.name===targetName);
+  const targetTitle = targetMember?.title||'';
 
   // 이번달 사역만
   const monthData = getMonthData(thisYear, thisMonth);
@@ -2324,7 +2327,7 @@ function renderTeamMemberShift(el, targetName){
     const c = tc(next.type);
     return `<div style="background:#E6F1FB;border-radius:16px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;border:0.5px solid #B5D4F4;">
       <div>
-        <div style="font-size:12px;color:#185FA5;font-weight:500;margin-bottom:4px;">${targetName} 다음 사역</div>
+        <div style="font-size:12px;color:#185FA5;font-weight:500;margin-bottom:4px;">${targetName}${targetTitle?' '+targetTitle:''} 다음 사역</div>
         <div style="display:flex;align-items:baseline;gap:6px;">
           <span style="font-size:26px;font-weight:700;color:#185FA5;">${ddayStr}</span>
           <span style="font-size:13px;color:#378ADD;">${thisMonth}월 ${next.d}일 (${DN[next.dow]})</span>
@@ -2338,7 +2341,7 @@ function renderTeamMemberShift(el, targetName){
     <div style="background:#FFF8E6;border:1px solid #FCD9A0;border-radius:16px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
       <span style="font-size:20px;">👥</span>
       <div>
-        <div style="font-size:13px;font-weight:500;color:#633806;">${targetName} 사역 일정</div>
+        <div style="font-size:13px;font-weight:500;color:#633806;">${targetName}${targetTitle?' '+targetTitle:''} 사역 일정</div>
         <div style="font-size:11px;color:#854F0B;margin-top:2px;">${thisMonth}월 담당자 사역을 표시하고 있어요</div>
       </div>
     </div>
