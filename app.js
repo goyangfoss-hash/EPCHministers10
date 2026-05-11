@@ -882,7 +882,7 @@ function renderAlarmPanel(){
           <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${label} 사역</div>
           <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${m}월 ${d}일(${DN[new Date(y,m-1,d).getDay()]}) <span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:10px">${type}</span></div>
         </div>
-        ${isDone?'':'<div style="width:6px;height:6px;border-radius:50%;background:#639922;flex-shrink:0"></div>'}
+        <div style="width:6px;height:6px;border-radius:50%;background:#639922;flex-shrink:0"></div>
       </div>`;
     }).join('');
   }
