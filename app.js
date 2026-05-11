@@ -1875,7 +1875,12 @@ function renderMyShift(){
   );
 
   if(!cumTotal){
-    el.innerHTML=`<div class="search-empty"><div style="font-size:36px;margin-bottom:12px">📅</div><div style="font-size:14px;font-weight:600;color:#888">등록된 사역 기록이 없습니다</div></div>`;
+    // ★ 사역표 없는 사람 → myTeam 첫 번째 팀원 사역 표시
+    if(myTeam.length > 0){
+      renderTeamMemberShift(el, myTeam[0]);
+    } else {
+      el.innerHTML=`<div class="search-empty"><div style="font-size:36px;margin-bottom:12px">📅</div><div style="font-size:14px;font-weight:600;color:#888">등록된 사역 기록이 없습니다</div><div style="font-size:12px;color:#aaa;margin-top:8px">담당 사역자를 팀원으로 등록해주세요</div></div>`;
+    }
     return;
   }
 
@@ -2162,11 +2167,11 @@ function renderMyShift(){
 
   el.innerHTML=`
     ${ddayHtml}
-    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
-      <div onclick="toggleMySection('stat')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:16px;overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+      <div onclick="toggleMySection('stat')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">📊</span>
-          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">사역 현황 · 통계</span>
+          <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">사역 현황 · 통계</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11px;color:#185FA5;font-weight:500">올해 ${yearCount2}회 완료</span>
@@ -2195,11 +2200,11 @@ function renderMyShift(){
     </div>
 
     ${completedTotal>0?`
-    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
-      <div onclick="toggleMySection('rec')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:16px;overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+      <div onclick="toggleMySection('rec')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">✅</span>
-          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">완료 기록</span>
+          <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">완료 기록</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11px;color:var(--color-text-secondary)">${completedTotal}건</span>
@@ -2212,20 +2217,146 @@ function renderMyShift(){
       </div>
     </div>`:''}
 
-    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
-      <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:16px;overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+      <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">📅</span>
-          <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">예정된 사역</span>
+          <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">예정된 사역</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:var(--color-text-secondary)">${myFutureFiltered.length}개</span>
+          <span style="font-size:11px;color:var(--color-text-secondary)">${myFutureFiltered.length}건</span>
           <span id="chev-shift" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s;transform:rotate(180deg)">▼</span>
         </div>
       </div>
       <div id="sec-shift" style="max-height:2000px;overflow:hidden;transition:max-height .3s ease">
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
         <div style="padding:8px 10px">${listHtml}</div>
+      </div>
+    </div>`;
+}
+
+
+// ★ 사역표 없는 이용자 → 담당 팀원 이번달 사역 표시
+function renderTeamMemberShift(el, targetName){
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const thisMonth = now.getMonth() + 1;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const DN = ['일','월','화','수','목','금','토'];
+
+  // 이번달 사역만
+  const monthData = getMonthData(thisYear, thisMonth);
+  const shifts = Object.entries(monthData[targetName] || {}).map(([ds, rawType]) => {
+    const d = parseInt(ds);
+    const dt = new Date(thisYear, thisMonth-1, d);
+    const splitTypes = rawType.includes('/') ? rawType.split('/').map(t=>t.trim()) : [rawType];
+    return splitTypes.map(type => ({d, type, dt, dow: dt.getDay()}));
+  }).flat().sort((a,b)=>a.d-b.d);
+
+  if(!shifts.length){
+    el.innerHTML=`<div style="background:#FFF8E6;border:1px solid #FCD9A0;border-radius:16px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px;">👥</span>
+      <div>
+        <div style="font-size:13px;font-weight:500;color:#633806;">${targetName} 사역 일정</div>
+        <div style="font-size:11px;color:#854F0B;margin-top:2px;">이번 달 등록된 사역이 없어요</div>
+      </div>
+    </div>`;
+    return;
+  }
+
+  // 카테고리별 집계
+  const catCount = {};
+  shifts.forEach(({type, d}) => {
+    const cat = getCategory(type, thisYear, thisMonth, d);
+    const key = MY_CAT_ORDER.includes(cat) ? cat : '특새';
+    if(!catCount[key]) catCount[key] = {total:0, types:{}};
+    catCount[key].total++;
+    catCount[key].types[type] = (catCount[key].types[type]||0)+1;
+  });
+
+  const doneCats = MY_CAT_ORDER.filter(c=>catCount[c]?.total>0);
+  const catColors = {
+    '주일':{bg:'#FFF8E6',dot:'#854F0B',text:'#633806'},
+    '수요':{bg:'#EAF3DE',dot:'#3B6D11',text:'#27500A'},
+    '금요':{bg:'#FAEEDA',dot:'#EA580C',text:'#9A3412'},
+    '새벽':{bg:'#EEEDFE',dot:'#534AB7',text:'#3C3489'},
+    '특새':{bg:'#E6F1FB',dot:'#185FA5',text:'#0C447C'},
+  };
+
+  const catRows = doneCats.map((cat,cidx)=>{
+    const meta = MY_CAT_META[cat]||{icon:'📋',label:cat};
+    const {total:catTotal, types:catTypes} = catCount[cat];
+    const catId = 'tcat-'+cidx;
+    const typeRows = Object.entries(catTypes).sort((a,b)=>b[1]-a[1]).map(([t,cnt])=>{
+      const c2 = tc(t);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px 8px 16px;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:3px;height:16px;border-radius:2px;background:${c2.dot};flex-shrink:0"></div>
+          <span style="font-size:13px;color:var(--color-text-primary)">${t}</span>
+        </div>
+        <span style="font-size:12px;background:${c2.bg};color:${c2.text};padding:2px 8px;border-radius:10px;font-weight:500">${cnt}건</span>
+      </div>`;
+    }).join('');
+    const cc = catColors[cat]||{bg:'#f5f5f3',dot:'#888',text:'#555'};
+    return `<div style="margin:0 14px 8px;border-radius:12px;overflow:hidden;border:0.5px solid var(--color-border-tertiary)">
+      <div onclick="toggleCatDetail('${catId}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 12px;cursor:pointer;background:${cc.bg}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">${meta.icon}</span>
+          <span style="font-size:14px;font-weight:500;color:${cc.text}">${meta.label}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px;font-weight:500;color:${cc.dot}">${catTotal}건</span>
+          <span id="chev-${catId}" style="font-size:12px;color:${cc.dot};transition:transform .2s;display:inline-block">▼</span>
+        </div>
+      </div>
+      <div id="${catId}" style="max-height:0;overflow:hidden;transition:max-height .25s ease">
+        ${typeRows}
+      </div>
+    </div>`;
+  }).join('');
+
+  // D-Day (이번달 미래 사역 중 첫번째)
+  const futureSorted = shifts.filter(s=>s.dt>=today);
+  const next = futureSorted[0];
+  const ddayHtml = next ? (()=>{
+    const diff = Math.ceil((next.dt-today)/(1000*60*60*24));
+    const ddayStr = diff===0?'오늘':diff===1?'내일':`D-${diff}`;
+    const c = tc(next.type);
+    return `<div style="background:#E6F1FB;border-radius:16px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;border:0.5px solid #B5D4F4;">
+      <div>
+        <div style="font-size:12px;color:#185FA5;font-weight:500;margin-bottom:4px;">${targetName} 다음 사역</div>
+        <div style="display:flex;align-items:baseline;gap:6px;">
+          <span style="font-size:26px;font-weight:700;color:#185FA5;">${ddayStr}</span>
+          <span style="font-size:13px;color:#378ADD;">${thisMonth}월 ${next.d}일 (${DN[next.dow]})</span>
+        </div>
+      </div>
+      <span style="background:#185FA5;color:#fff;font-size:12px;padding:5px 12px;border-radius:20px;font-weight:500;">${next.type}</span>
+    </div>`;
+  })() : '';
+
+  el.innerHTML = `
+    <div style="background:#FFF8E6;border:1px solid #FCD9A0;border-radius:16px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px;">👥</span>
+      <div>
+        <div style="font-size:13px;font-weight:500;color:#633806;">${targetName} 사역 일정</div>
+        <div style="font-size:11px;color:#854F0B;margin-top:2px;">${thisMonth}월 담당자 사역을 표시하고 있어요</div>
+      </div>
+    </div>
+    ${ddayHtml}
+    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:16px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+      <div onclick="toggleMySection('tstat')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="font-size:18px;">📊</span>
+          <span style="font-size:15px;font-weight:500;color:var(--color-text-primary);">이번 달 사역 현황</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span style="font-size:12px;color:#185FA5;font-weight:500;">${shifts.length}건</span>
+          <span id="chev-tstat" style="font-size:12px;color:var(--color-text-secondary);transition:transform .2s;transform:rotate(180deg);">▼</span>
+        </div>
+      </div>
+      <div id="sec-tstat" style="max-height:600px;overflow:hidden;transition:max-height .3s ease;">
+        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
+        <div style="padding:8px 0 4px;">${catRows}</div>
       </div>
     </div>`;
 }
