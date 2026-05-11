@@ -199,7 +199,8 @@ document.addEventListener('visibilitychange', async () => {
 // ══════════════════════════════════════════════════
 function initPullToRefresh(){
   let startY=0, pulling=false, indicator=null;
-  const threshold=110;
+  let atTop=false; // ★ 터치 시작 시 최상단 여부
+  const threshold=140; // ★ 더 많이 당겨야 작동 (110→140)
 
   const createIndicator=()=>{
     if($('ptr-indicator')) return $('ptr-indicator');
@@ -216,7 +217,7 @@ function initPullToRefresh(){
     $('user-dm-modal')?.style.display==='flex' ||
     $('alarm-panel')?.style.display==='block';
 
-  // 터치 시작점에서 스크롤 가능한 조상의 scrollTop 확인
+  // 스크롤 가능한 조상의 scrollTop 확인
   const getTargetScrollTop=(target)=>{
     let el=target;
     while(el && el!==document.body){
@@ -226,37 +227,40 @@ function initPullToRefresh(){
       }
       el=el.parentElement;
     }
-    return 0;
+    // main-screen scrollTop
+    return $('main-screen')?.scrollTop||0;
   };
 
   document.addEventListener('touchstart', e=>{
-    if(isModalOpen()){ pulling=false; return; }
-    // 터치한 곳의 스크롤 컨테이너가 최상단일 때만 PTR 활성
+    if(isModalOpen()){ pulling=false; atTop=false; return; }
     const st=getTargetScrollTop(e.touches[0].target);
-    if(st<=1){
+    // ★ 정확히 최상단(scrollTop===0)일 때만 PTR 준비
+    atTop = (st===0);
+    if(atTop){
       startY=e.touches[0].clientY;
-      pulling=true;
-    } else {
-      pulling=false;
+      pulling=false; // 아직 pulling 아님, touchmove에서 확정
     }
   }, {passive:true});
 
   document.addEventListener('touchmove', e=>{
-    if(isModalOpen()){ pulling=false; return; }
-    if(!pulling) return;
-    // 이동 중 스크롤 컨테이너가 올라갔으면 취소
+    if(isModalOpen()){ pulling=false; if(indicator) indicator.style.display='none'; return; }
+    if(!atTop) return;
     const st=getTargetScrollTop(e.touches[0].target);
-    if(st>2){ pulling=false; if(indicator) indicator.style.display='none'; return; }
+    // ★ 이동 중 스크롤이 생기면 PTR 취소
+    if(st>0){ atTop=false; pulling=false; if(indicator) indicator.style.display='none'; return; }
     const dist=e.touches[0].clientY-startY;
     if(dist<=0){ pulling=false; if(indicator) indicator.style.display='none'; return; }
-    indicator=createIndicator();
-    if(dist>30){
+    // ★ 60px 이상 당겼을 때만 인디케이터 표시 (기존 30px→60px)
+    if(dist>60){
+      pulling=true;
+      indicator=createIndicator();
       indicator.style.display='flex';
       $('ptr-text').textContent=dist>threshold?'놓아서 새로고침':'당겨서 새로고침';
     }
   }, {passive:true});
 
   document.addEventListener('touchend', async e=>{
+    atTop=false;
     if(!pulling){ return; }
     pulling=false;
     const dist=e.changedTouches[0].clientY-startY;
@@ -1327,17 +1331,26 @@ function initOfflineSample(){allSchedules={2026:{5:{'김동권':{'6':'[오전]�
 // ══════════════════════════════════════════════════
 function switchTab(tab,btn){
   closeAllPanels();
+  // ★ 슬라이드 방향 결정
+  const TAB_ORDER=['cal','myshift','search','feed','notice','admin'];
+  const prevTab=window._currentTab||'cal';
+  const prevIdx=TAB_ORDER.indexOf(prevTab);
+  const nextIdx=TAB_ORDER.indexOf(tab);
+  const slideClass=prevIdx<nextIdx?'tab-slide-left':'tab-slide-right';
+  window._currentTab=tab;
+
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   ['cal','myshift','search','notice','feed','admin'].forEach(t=>{
     const el=$(`tab-${t}`);
     if(t===tab){
       el.style.display='block';
-      // ★ 애니메이션 리셋
-      el.style.animation='none';
+      // ★ 슬라이드 애니메이션
+      el.classList.remove('tab-slide-left','tab-slide-right');
       el.offsetHeight; // reflow
-      el.style.animation='';
+      el.classList.add(slideClass);
     } else {
       el.style.display='none';
+      el.classList.remove('tab-slide-left','tab-slide-right');
     }
   });
   $('hdr-title').textContent={cal:'캘린더',myshift:FEATURE_HISTORY()?'히스토리':'내 사역',search:'사역 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
