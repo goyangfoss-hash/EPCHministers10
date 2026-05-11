@@ -872,13 +872,17 @@ function renderAlarmPanel(){
       const c=tc(type);
       const isToday=dt.getTime()===today.getTime();
       const label=isToday?'오늘':'내일';
+      // 복합사역(/ 구분) 포함해서 모두 완료됐으면 알림에서 제거
+      const types2 = type.includes('/') ? type.split('/').map(t=>t.trim()) : [type];
+      const allDone = types2.every(t=>!!shiftCompletions[makeCompKey(y,m,d,t)]);
+      if(allDone) return ''; // ★ 완료된 사역은 알림패널에서 삭제
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="markShiftSeen('${y}-${m}-${d}');viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
         <div style="width:32px;height:32px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📅</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${label} 사역</div>
           <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${m}월 ${d}일(${DN[new Date(y,m-1,d).getDay()]}) <span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:10px">${type}</span></div>
         </div>
-        <div style="width:6px;height:6px;border-radius:50%;background:#639922;flex-shrink:0"></div>
+        ${isDone?'':'<div style="width:6px;height:6px;border-radius:50%;background:#639922;flex-shrink:0"></div>'}
       </div>`;
     }).join('');
   }
@@ -1781,24 +1785,36 @@ function renderMyShift(){
   Object.entries(allSchedules).forEach(([y,ym])=>{
     Object.entries(ym).forEach(([m,data])=>{
       const myData=data[cu.name]||{};
-      Object.entries(myData).forEach(([ds,type])=>{
-        if(!type) return;
+      Object.entries(myData).forEach(([ds,rawType])=>{
+        if(!rawType) return;
         const d=parseInt(ds);
-        // 날짜 기반 카테고리 분류
-        const cat=getCategory(type,parseInt(y),parseInt(m),d);
-        if(!cumCount[cat]) cumCount[cat]={total:0,types:{}};
-        cumCount[cat].total++;
-        cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
-        cumTotal++;
         const dt=new Date(parseInt(y),parseInt(m)-1,d);
-        if(dt>=today){
-          myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
-        }
+        // ★ 복합사역 분리 (예: [금요]기도/[새벽]방송실 → 2개)
+        const splitTypes = rawType.includes('/') ? rawType.split('/').map(t=>t.trim()).filter(Boolean) : [rawType];
+        splitTypes.forEach(type=>{
+          if(!type) return;
+          const cat=getCategory(type,parseInt(y),parseInt(m),d);
+          if(!cumCount[cat]) cumCount[cat]={total:0,types:{}};
+          cumCount[cat].total++;
+          cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
+          cumTotal++;
+          if(dt>=today){
+            const compKey2=makeCompKey(parseInt(y),parseInt(m),d,type);
+            if(!shiftCompletions[compKey2]){
+              myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
+            }
+          }
+        });
       });
     });
   });
 
   myFuture.sort((a,b)=>a.dt-b.dt);
+
+  // ★ 완료된 사역은 예정된 사역 목록에서 제거 (분리된 개별 사역 기준)
+  const myFutureFiltered = myFuture.filter(({y,m,d,type})=>
+    !shiftCompletions[makeCompKey(y,m,d,type)]
+  );
 
   if(!cumTotal){
     el.innerHTML=`<div class="search-empty"><div style="font-size:36px;margin-bottom:12px">📅</div><div style="font-size:14px;font-weight:600;color:#888">등록된 사역 기록이 없습니다</div></div>`;
@@ -1897,9 +1913,9 @@ function renderMyShift(){
 
   // 예정 사역 목록 — 월별 헤더 구분
   let listHtml='';
-  if(myFuture.length){
+  if(myFutureFiltered.length){
     let lastMonth='';
-    listHtml=myFuture.map(({y,m,d,type,dt})=>{
+    listHtml=myFutureFiltered.map(({y,m,d,type,dt})=>{
       const monthKey=`${y}-${m}`;
       const monthHeader=monthKey!==lastMonth?`<div style="font-size:11px;font-weight:600;color:#aaa;letter-spacing:.5px;padding:10px 2px 6px">${m}월</div>`:'';
       lastMonth=monthKey;
@@ -2145,7 +2161,7 @@ function renderMyShift(){
           <span style="font-size:14px;font-weight:500;color:var(--color-text-primary)">예정된 사역</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:var(--color-text-secondary)">${myFuture.length}개</span>
+          <span style="font-size:11px;color:var(--color-text-secondary)">${myFutureFiltered.length}개</span>
           <span id="chev-shift" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s;transform:rotate(180deg)">▼</span>
         </div>
       </div>
