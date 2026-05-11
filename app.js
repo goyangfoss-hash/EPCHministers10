@@ -1918,12 +1918,12 @@ function renderMyShift(){
         isDone ?
         `<button disabled onclick="event.stopPropagation()" style="padding:5px 11px;border-radius:20px;border:none;background:#3B6D11;color:#fff;font-size:11px;font-weight:500;cursor:default;white-space:nowrap;flex-shrink:0;">✅ ${doneTime}</button>` :
         isFuture ?
-        `<button disabled onclick="event.stopPropagation()" style="padding:5px 11px;border-radius:20px;border:0.5px solid #e0e0e0;background:#f5f5f5;color:#bbb;font-size:11px;font-weight:500;cursor:not-allowed;white-space:nowrap;flex-shrink:0;">🔒 미래</button>` :
+        `<button disabled onclick="event.stopPropagation()" style="padding:5px 11px;border-radius:20px;border:0.5px solid #C0DD97;background:#EAF3DE;color:#3B6D11;font-size:11px;font-weight:500;cursor:not-allowed;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>완료</button>` :
         `<button onclick="event.stopPropagation();markShiftComplete(${y},${m},${d},'${type}')" style="padding:5px 11px;border-radius:20px;border:0.5px solid #C0DD97;background:#EAF3DE;color:#3B6D11;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;">✓ 완료</button>`
       ) : '';
       // SVG 종 모양 (알림 꺼진 경우만)
       const alarmIcon = alarm.alarm ? '' : '<span style="opacity:0.4;flex-shrink:0;display:flex;align-items:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>';
-      return monthHeader+`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.6':'1'};transition:opacity 0.3s" onclick="openDayModal_myshift(${y},${m},${d})">
+      return monthHeader+`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.6':isFuture?'0.45':'1'};transition:opacity 0.3s" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${c?.dot||'#185FA5'};flex-shrink:0"></div>
           <div style="flex:1;min-width:0;">
@@ -2049,24 +2049,38 @@ function renderMyShift(){
     const meta2=MY_CAT_META[cat]||{icon:'📋',label:cat,color:'#888'};
     const {total:catTotal,types:catTypes}=doneBycat[cat];
     const catId='dcat-'+cidx;
-    const typeRows=Object.entries(catTypes).sort((a,b)=>b[1]-a[1]).map(([t,cnt])=>
-      `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 20px 7px 40px;border-top:0.5px solid var(--color-border-tertiary);font-size:12px">
-        <span style="color:var(--color-text-secondary)">${t}</span>
-        <span style="font-weight:500;color:#3B6D11">✅ ${cnt}회</span>
-      </div>`
-    ).join('');
-    return `<div>
-      <div onclick="toggleCatDetail('${catId}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-top:0.5px solid var(--color-border-tertiary);cursor:pointer;">
+    const typeRows=Object.entries(catTypes).sort((a,b)=>b[1]-a[1]).map(([t,cnt])=>{
+      const c2=tc(t);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px 8px 16px;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:3px;height:16px;border-radius:2px;background:${c2.dot};flex-shrink:0"></div>
+          <span style="font-size:12px;color:var(--color-text-primary)">${t}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;background:${c2.bg};color:${c2.text};padding:2px 8px;border-radius:10px;font-weight:500">${cnt}회</span>
+        </div>
+      </div>`;
+    }).join('');
+    const catColors={
+      '주일':{bg:'#FFF8E6',dot:'#854F0B',text:'#633806'},
+      '수요':{bg:'#EAF3DE',dot:'#3B6D11',text:'#27500A'},
+      '금요':{bg:'#FAEEDA',dot:'#EA580C',text:'#9A3412'},
+      '새벽':{bg:'#EEEDFE',dot:'#534AB7',text:'#3C3489'},
+      '특새':{bg:'#E6F1FB',dot:'#185FA5',text:'#0C447C'},
+    };
+    const cc=catColors[cat]||{bg:'#f5f5f3',dot:'#888',text:'#555'};
+    return `<div style="margin:0 14px 8px;border-radius:10px;overflow:hidden;border:0.5px solid var(--color-border-tertiary)">
+      <div onclick="toggleCatDetail('${catId}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;background:${cc.bg}">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:15px">${meta2.icon}</span>
-          <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${meta2.label||cat}</span>
+          <span style="font-size:13px;font-weight:500;color:${cc.text}">${meta2.label||cat}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
-          <span style="font-size:13px;font-weight:500;color:#185FA5">${catTotal}회</span>
-          <span id="chev-${catId}" style="font-size:12px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:13px;font-weight:500;color:${cc.dot}">${catTotal}회</span>
+          <span id="chev-${catId}" style="font-size:11px;color:${cc.dot};transition:transform .2s;display:inline-block">▼</span>
         </div>
       </div>
-      <div id="${catId}" style="max-height:0;overflow:hidden;transition:max-height .25s ease;background:var(--color-background-secondary)">
+      <div id="${catId}" style="max-height:0;overflow:hidden;transition:max-height .25s ease">
         ${typeRows}
       </div>
     </div>`;
@@ -2088,17 +2102,17 @@ function renderMyShift(){
       <div id="sec-stat" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 14px">
-          <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px;text-align:center">
-            <div style="font-size:20px;font-weight:500;color:#3B6D11">${yearCount2}</div>
-            <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">올해 완료</div>
+          <div style="background:#EAF3DE;border-radius:10px;padding:12px 8px;text-align:center">
+            <div style="font-size:22px;font-weight:500;color:#3B6D11">${yearCount2}</div>
+            <div style="font-size:10px;color:#639922;margin-top:3px;font-weight:500">올해 완료</div>
           </div>
-          <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px;text-align:center">
-            <div style="font-size:20px;font-weight:500;color:#185FA5">${monthCount2}</div>
-            <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">이번 달</div>
+          <div style="background:#E6F1FB;border-radius:10px;padding:12px 8px;text-align:center">
+            <div style="font-size:22px;font-weight:500;color:#185FA5">${monthCount2}</div>
+            <div style="font-size:10px;color:#378ADD;margin-top:3px;font-weight:500">이번 달</div>
           </div>
-          <div style="background:var(--color-background-secondary);border-radius:8px;padding:10px;text-align:center">
-            <div style="font-size:20px;font-weight:500;color:#854F0B">${completedTotal}</div>
-            <div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px">누적 완료</div>
+          <div style="background:#FAEEDA;border-radius:10px;padding:12px 8px;text-align:center">
+            <div style="font-size:22px;font-weight:500;color:#854F0B">${completedTotal}</div>
+            <div style="font-size:10px;color:#BA7517;margin-top:3px;font-weight:500">누적 완료</div>
           </div>
         </div>
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
@@ -2122,8 +2136,9 @@ function renderMyShift(){
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
         ${recentCompletions}
       </div>
-    </div>`:''}"
-        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+    </div>`:''}}
+
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
       <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">📅</span>
