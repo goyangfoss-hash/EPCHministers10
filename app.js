@@ -273,6 +273,50 @@ function initPullToRefresh(){
   }, {passive:true});
 }
 // ══════════════════════════════════════════════════
+//  캘린더 스와이프로 월 이동
+// ══════════════════════════════════════════════════
+function initCalendarSwipe(){
+  const el = document.getElementById('tab-cal');
+  if(!el) return;
+  let sx=0, sy=0, swiping=false;
+
+  el.addEventListener('touchstart', e=>{
+    // 모달/패널 열려있으면 무시
+    if(document.getElementById('comment-modal')?.style.display==='flex') return;
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    swiping = true;
+  }, {passive:true});
+
+  el.addEventListener('touchmove', e=>{
+    if(!swiping) return;
+    const dx = e.touches[0].clientX - sx;
+    const dy = e.touches[0].clientY - sy;
+    // 수평 이동이 수직보다 크고 30px 이상이면 스크롤 방지
+    if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30){
+      e.preventDefault();
+    }
+  }, {passive:false});
+
+  el.addEventListener('touchend', e=>{
+    if(!swiping) return;
+    swiping = false;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    // 수평 스와이프: 수평 이동 > 수직 이동, 최소 60px
+    if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 60){
+      if(dx < 0){
+        // 왼쪽 스와이프 → 다음 달
+        changeMonth(1);
+      } else {
+        // 오른쪽 스와이프 → 이전 달
+        changeMonth(-1);
+      }
+    }
+  }, {passive:true});
+}
+
+// ══════════════════════════════════════════════════
 async function refreshSchedules() {
   if (OFFLINE||!sb) return;
   try {
@@ -479,6 +523,7 @@ async function enterApp() {
   }
   initFCM();
   initPullToRefresh();
+  initCalendarSwipe();
   // ★ 알림 클릭으로 열렸을 때 URL ?tab= 파라미터로 탭 이동
   handleNotifLaunchTab();
 }
