@@ -1923,7 +1923,7 @@ function renderMyShift(){
       ) : '';
       // SVG 종 모양 (알림 꺼진 경우만)
       const alarmIcon = alarm.alarm ? '' : '<span style="opacity:0.4;flex-shrink:0;display:flex;align-items:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>';
-      return monthHeader+`<div style="background:#fff;border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'#f0f0ea'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.6':isFuture?'0.45':'1'};transition:opacity 0.3s" onclick="openDayModal_myshift(${y},${m},${d})">
+      return monthHeader+`<div style="background:var(--color-background-primary);border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'var(--color-border-secondary)'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.6':isFuture?'0.45':'1'};transition:opacity 0.3s;box-shadow:0 1px 4px rgba(0,0,0,0.06)" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${c?.dot||'#185FA5'};flex-shrink:0"></div>
           <div style="flex:1;min-width:0;">
@@ -2088,7 +2088,7 @@ function renderMyShift(){
 
   el.innerHTML=`
     ${ddayHtml}
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
       <div onclick="toggleMySection('stat')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">📊</span>
@@ -2121,7 +2121,7 @@ function renderMyShift(){
     </div>
 
     ${completedTotal>0?`
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
       <div onclick="toggleMySection('rec')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">✅</span>
@@ -2136,9 +2136,9 @@ function renderMyShift(){
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
         ${recentCompletions}
       </div>
-    </div>`:''}}
+    </div>`:''}
 
-    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px">
+    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
       <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">📅</span>
@@ -2151,7 +2151,7 @@ function renderMyShift(){
       </div>
       <div id="sec-shift" style="max-height:2000px;overflow:hidden;transition:max-height .3s ease">
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
-        ${listHtml}
+        <div style="padding:8px 10px">${listHtml}</div>
       </div>
     </div>`;
 }
