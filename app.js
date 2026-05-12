@@ -273,47 +273,84 @@ function initPullToRefresh(){
   }, {passive:true});
 }
 // ══════════════════════════════════════════════════
-//  캘린더 스와이프로 월 이동
+//  캘린더 스와이프로 월 이동 (자연스러운 실시간 슬라이드)
 // ══════════════════════════════════════════════════
 function initCalendarSwipe(){
   const el = document.getElementById('tab-cal');
   if(!el) return;
-  let sx=0, sy=0, swiping=false;
+  const grid = ()=>document.getElementById('cal-grid');
+
+  let sx=0, sy=0, dx=0;
+  let isHorizontal=false, started=false, locked=false;
+  const W = ()=>el.offsetWidth||375;
+
+  function applyTranslate(x){
+    const g=grid(); if(!g)return;
+    g.style.transition='none';
+    g.style.transform=`translateX(${x}px)`;
+  }
+
+  function snapBack(){
+    const g=grid(); if(!g)return;
+    g.style.transition='transform .28s cubic-bezier(.25,.46,.45,.94)';
+    g.style.transform='translateX(0)';
+  }
+
+  function slideOut(dir, cb){
+    const g=grid(); if(!g)return;
+    const w=W();
+    g.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
+    g.style.transform=`translateX(${dir<0?-w:w}px)`;
+    g.addEventListener('transitionend', function once(){
+      g.removeEventListener('transitionend',once);
+      g.style.transition='none';
+      g.style.transform=`translateX(${dir<0?w:-w}px)`;
+      cb();
+      requestAnimationFrame(()=>{
+        const g2=grid(); if(!g2)return;
+        g2.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
+        g2.style.transform='translateX(0)';
+      });
+    });
+  }
 
   el.addEventListener('touchstart', e=>{
-    // 모달/패널 열려있으면 무시
     if(document.getElementById('comment-modal')?.style.display==='flex') return;
-    sx = e.touches[0].clientX;
-    sy = e.touches[0].clientY;
-    swiping = true;
+    if(e.touches.length>1) return;
+    sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+    dx=0; isHorizontal=false; started=true; locked=false;
   }, {passive:true});
 
   el.addEventListener('touchmove', e=>{
-    if(!swiping) return;
-    const dx = e.touches[0].clientX - sx;
-    const dy = e.touches[0].clientY - sy;
-    // 수평 이동이 수직보다 크고 30px 이상이면 스크롤 방지
-    if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30){
-      e.preventDefault();
+    if(!started||locked) return;
+    dx=e.touches[0].clientX-sx;
+    const dy=e.touches[0].clientY-sy;
+    if(!isHorizontal && Math.abs(dx)<6 && Math.abs(dy)<6) return;
+    if(!isHorizontal){
+      if(Math.abs(dx)>Math.abs(dy)) isHorizontal=true;
+      else { locked=true; return; }
     }
+    e.preventDefault();
+    // 손가락 따라 캘린더 이동 (저항감 추가)
+    const resist=0.4;
+    applyTranslate(dx*resist);
   }, {passive:false});
 
   el.addEventListener('touchend', e=>{
-    if(!swiping) return;
-    swiping = false;
-    const dx = e.changedTouches[0].clientX - sx;
-    const dy = e.changedTouches[0].clientY - sy;
-    // 수평 스와이프: 수평 이동 > 수직 이동, 최소 60px
-    if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 60){
-      if(dx < 0){
-        // 왼쪽 스와이프 → 다음 달
-        changeMonth(1);
-      } else {
-        // 오른쪽 스와이프 → 이전 달
-        changeMonth(-1);
-      }
+    if(!started) return;
+    started=false;
+    if(!isHorizontal||locked){ snapBack(); return; }
+    const threshold=W()*0.3; // 30% 넘기면 다음/이전
+    if(Math.abs(dx)>threshold){
+      const dir=dx<0?1:-1;
+      slideOut(dir, ()=>changeMonth(dir));
+    } else {
+      snapBack();
     }
+    dx=0;
   }, {passive:true});
+
+  el.addEventListener('touchcancel', ()=>{ started=false; snapBack(); }, {passive:true});
 }
 
 // ══════════════════════════════════════════════════
@@ -1578,7 +1615,29 @@ function toggleMyMinistry(){
 }
 function setView(v){calView=v;filterType='';filterCategory='all';renderCalendar();}
 function setFilter(t){filterType=filterType===t?'':t;renderCalendar();}
-function changeMonth(d){curM+=d;if(curM>11){curM=0;curY++;}if(curM<0){curM=11;curY--;}filterType='';filterCategory='all';if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}renderCalendar();});}else renderCalendar();}
+function changeMonth(d){
+  curM+=d;
+  if(curM>11){curM=0;curY++;}
+  if(curM<0){curM=11;curY--;}
+  filterType='';filterCategory='all';
+  const doRender=()=>{renderCalendar(); _animateCalIn(d);};
+  if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){
+    sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{
+      if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}
+      doRender();
+    });
+  } else doRender();
+}
+function _animateCalIn(dir){
+  const g=document.getElementById('cal-grid'); if(!g)return;
+  const w=g.offsetWidth||375;
+  g.style.transition='none';
+  g.style.transform=`translateX(${dir>0?w:-w}px)`;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    g.style.transition='transform .24s cubic-bezier(.4,0,.2,1)';
+    g.style.transform='translateX(0)';
+  }));
+}
 
 function renderCalendar(){
   syncCalBtnStyles(); // ★ 버튼 스타일 항상 동기화
@@ -5163,7 +5222,20 @@ function val(id){return($(id)?.value||'').trim();}
 function hide(id){const e=$(id);if(e)e.style.display='none';}
 function showErr(el,msg){if(el){el.textContent=msg;el.style.display='block';}}
 function toast(id){const e=$(id);if(!e)return;e.style.display='block';setTimeout(()=>e.style.display='none',3000);}
-function showToastMsg(msg){let el=$('g-toast');if(!el){el=document.createElement('div');el.id='g-toast';el.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(26,26,24,.9);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s;white-space:nowrap;pointer-events:none';document.body.appendChild(el);}el.textContent=msg;el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2500);}
+function showToastMsg(msg){
+  let el=$('g-toast');
+  if(!el){
+    el=document.createElement('div');
+    el.id='g-toast';
+    el.style.cssText='position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(8px);background:rgba(26,26,24,.92);color:#fff;padding:10px 20px;border-radius:22px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity .22s,transform .22s;white-space:nowrap;pointer-events:none;max-width:80vw;text-overflow:ellipsis;overflow:hidden;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 4px 20px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg;
+  el.style.opacity='1';
+  el.style.transform='translateX(-50%) translateY(0)';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(-50%) translateY(8px)';},2600);
+}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function escNl(s){return esc(s).replace(/\n/g,"<br>").replace(/\r/g,"");}
 function fmtDate(s){if(!s)return'';try{const d=new Date(s);return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;}catch{return'';}}
