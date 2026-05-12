@@ -278,43 +278,48 @@ function initPullToRefresh(){
 function initCalendarSwipe(){
   const el = document.getElementById('tab-cal');
   if(!el) return;
-  const grid = ()=>document.getElementById('cal-grid');
 
   let sx=0, sy=0, dx=0;
   let isHorizontal=false, started=false, locked=false;
-  const W = ()=>el.offsetWidth||375;
+  let animating=false;
 
-  function applyTranslate(x){
-    const g=grid(); if(!g)return;
-    g.style.transition='none';
-    g.style.transform=`translateX(${x}px)`;
+  const track = ()=>document.getElementById('cal-swipe-track');
+  const W = ()=>document.getElementById('cal-swipe-outer')?.offsetWidth||375;
+
+  // 트랙 위치: 항상 가운데(-33.333%) 기준에서 dx만큼 추가 이동
+  function applyTrackDx(deltaPx){
+    const t=track(); if(!t)return;
+    const pct = (deltaPx/W())*33.333; // 1칸=33.333%
+    t.style.transition='none';
+    t.style.transform=`translateX(calc(-33.333% + ${deltaPx}px))`;
   }
 
   function snapBack(){
-    const g=grid(); if(!g)return;
-    g.style.transition='transform .28s cubic-bezier(.25,.46,.45,.94)';
-    g.style.transform='translateX(0)';
+    const t=track(); if(!t)return;
+    t.style.transition='transform .3s cubic-bezier(.25,.46,.45,.94)';
+    t.style.transform='translateX(-33.333%)';
   }
 
-  function slideOut(dir, cb){
-    const g=grid(); if(!g)return;
-    const w=W();
-    g.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
-    g.style.transform=`translateX(${dir<0?-w:w}px)`;
-    g.addEventListener('transitionend', function once(){
-      g.removeEventListener('transitionend',once);
-      g.style.transition='none';
-      g.style.transform=`translateX(${dir<0?w:-w}px)`;
-      cb();
-      requestAnimationFrame(()=>{
-        const g2=grid(); if(!g2)return;
-        g2.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
-        g2.style.transform='translateX(0)';
-      });
+  function commitSlide(dir, cb){
+    // dir: 1=다음달(왼쪽으로), -1=이전달(오른쪽으로)
+    const t=track(); if(!t)return;
+    animating=true;
+    // 목적지: dir=1이면 -66.666%(오른쪽 패널), dir=-1이면 0%(왼쪽 패널)
+    const targetPct = dir>0 ? -66.666 : 0;
+    t.style.transition='transform .28s cubic-bezier(.4,0,.2,1)';
+    t.style.transform=`translateX(${targetPct}%)`;
+    t.addEventListener('transitionend', function once(){
+      t.removeEventListener('transitionend', once);
+      t.style.transition='none';
+      cb(); // changeMonth → renderCalendar이 cal-grid 교체
+      // renderCalendar 후 트랙을 즉시 중앙으로 복귀(애니 없이)
+      t.style.transform='translateX(-33.333%)';
+      animating=false;
     });
   }
 
   el.addEventListener('touchstart', e=>{
+    if(animating) return;
     if(document.getElementById('comment-modal')?.style.display==='flex') return;
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
@@ -322,7 +327,7 @@ function initCalendarSwipe(){
   }, {passive:true});
 
   el.addEventListener('touchmove', e=>{
-    if(!started||locked) return;
+    if(!started||locked||animating) return;
     dx=e.touches[0].clientX-sx;
     const dy=e.touches[0].clientY-sy;
     if(!isHorizontal && Math.abs(dx)<6 && Math.abs(dy)<6) return;
@@ -331,19 +336,17 @@ function initCalendarSwipe(){
       else { locked=true; return; }
     }
     e.preventDefault();
-    // 손가락 따라 캘린더 이동 (저항감 추가)
-    const resist=0.4;
-    applyTranslate(dx*resist);
+    applyTrackDx(dx); // 1:1 이동 (저항 없음, 이미 실제 다음달이 보임)
   }, {passive:false});
 
   el.addEventListener('touchend', e=>{
     if(!started) return;
     started=false;
     if(!isHorizontal||locked){ snapBack(); return; }
-    const threshold=W()*0.3; // 30% 넘기면 다음/이전
+    const threshold=W()*0.25; // 25% 이상이면 전환
     if(Math.abs(dx)>threshold){
       const dir=dx<0?1:-1;
-      slideOut(dir, ()=>changeMonth(dir));
+      commitSlide(dir, ()=>changeMonth(dir, true));
     } else {
       snapBack();
     }
@@ -1615,12 +1618,15 @@ function toggleMyMinistry(){
 }
 function setView(v){calView=v;filterType='';filterCategory='all';renderCalendar();}
 function setFilter(t){filterType=filterType===t?'':t;renderCalendar();}
-function changeMonth(d){
+function changeMonth(d, fromSwipe){
   curM+=d;
   if(curM>11){curM=0;curY++;}
   if(curM<0){curM=11;curY--;}
   filterType='';filterCategory='all';
-  const doRender=()=>{renderCalendar(); _animateCalIn(d);};
+  const doRender=()=>{
+    if(!fromSwipe) _btnSlideOut(d, ()=>renderCalendar());
+    else renderCalendar();
+  };
   if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){
     sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{
       if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}
@@ -1628,15 +1634,18 @@ function changeMonth(d){
     });
   } else doRender();
 }
-function _animateCalIn(dir){
-  const g=document.getElementById('cal-grid'); if(!g)return;
-  const w=g.offsetWidth||375;
-  g.style.transition='none';
-  g.style.transform=`translateX(${dir>0?w:-w}px)`;
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    g.style.transition='transform .24s cubic-bezier(.4,0,.2,1)';
-    g.style.transform='translateX(0)';
-  }));
+// 버튼 클릭 시 슬라이드 애니메이션 (스와이프와 동일한 트랙 사용)
+function _btnSlideOut(dir, cb){
+  const t=document.getElementById('cal-swipe-track'); if(!t){cb();return;}
+  const targetPct=dir>0?-66.666:0;
+  t.style.transition='transform .26s cubic-bezier(.4,0,.2,1)';
+  t.style.transform=`translateX(${targetPct}%)`;
+  t.addEventListener('transitionend', function once(){
+    t.removeEventListener('transitionend',once);
+    t.style.transition='none';
+    cb();
+    t.style.transform='translateX(-33.333%)';
+  });
 }
 
 function renderCalendar(){
@@ -1724,6 +1733,71 @@ function renderCalendar(){
   }
 
   $('cal-grid').innerHTML=html; renderLegend(); renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap);
+  // 이전/다음 달 사이드 패널 렌더
+  _renderSideMonth(-1);
+  _renderSideMonth(1);
+}
+
+// 이전(dir=-1) 또는 다음(dir=1) 달 캘린더를 사이드 패널에 렌더
+function _renderSideMonth(dir){
+  const targetEl = document.getElementById(dir<0?'cal-grid-prev':'cal-grid-next');
+  if(!targetEl) return;
+  const DN=['일','월','화','수','목','금','토'];
+  let sY=curY, sM=curM+dir;
+  if(sM>11){sM=0;sY++;}
+  if(sM<0){sM=11;sY--;}
+  const fd=new Date(sY,sM,1).getDay();
+  const dim=new Date(sY,sM+1,0).getDate();
+  const now=new Date();
+  const sData=(allSchedules[sY]&&allSchedules[sY][sM+1])||{};
+  const myRaw=sData[cu.name]||{};
+  const myDays=new Set(Object.keys(myRaw).map(Number).filter(n=>!isNaN(n)&&n>=1));
+  const allMap={};
+  Object.keys(sData).forEach(name=>{
+    Object.entries(sData[name]||{}).forEach(([ds,type])=>{
+      const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;
+      if(!allMap[dn])allMap[dn]=[];
+      allMap[dn].push({name,type,c:tc(type)});
+    });
+  });
+  const {fm,fmMy}=getFilteredMap(allMap,myRaw,myDays);
+  let html=DN.map(d=>`<div class="cal-head">${d}</div>`).join('');
+  for(let i=0;i<fd;i++) html+=`<div class="cal-cell empty"></div>`;
+  for(let d=1;d<=dim;d++){
+    const isMy=myDays.has(d);
+    const isToday=now.getFullYear()===sY&&now.getMonth()===sM&&now.getDate()===d;
+    const dow=new Date(sY,sM,d).getDay();
+    const myType=myRaw[String(d)]||'';
+    const myC=myType?tc(myType):null;
+    const workers=fm[d]||[];
+    const myModeActive=calView==='mine';
+    const myHasDay=fmMy.has(d);
+    if(myModeActive){
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay&&!isToday?' dimmed':'');
+      if(myHasDay){
+        const bg=myC?myC.dot:'#185FA5';
+        const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;position:relative`:`background:${bg};border-color:${bg};position:relative`;
+        html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div><div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div></div>`;
+      } else {
+        const todayStyle=isToday?`border:2.5px solid #185FA5;border-radius:8px`:``;
+        const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:``;
+        html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div></div>`;
+      }
+    } else {
+      const dimmed=filterCategory!=='all'&&!workers.length;
+      const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(dimmed?' dimmed':'');
+      const hasMy=isMy&&myC;
+      let bgStyle='',borderStyle='';
+      if(hasMy){bgStyle=`background:${myC.bg}`;borderStyle=`border-color:${myC.border}`;}
+      const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
+      const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
+      const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'' ;
+      const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
+      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:'';
+      html+=`<div class="${cls}" style="${cellStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}</div>`;
+    }
+  }
+  targetEl.innerHTML=html;
 }
 
 function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){

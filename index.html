@@ -627,7 +627,13 @@
     </div>
     <div id="view-toggle-wrap"></div>
     <div id="cal-legend"></div>
-    <div class="cal-grid" id="cal-grid"></div>
+    <div id="cal-swipe-outer" style="overflow:hidden;position:relative;">
+      <div id="cal-swipe-track" style="display:flex;width:300%;transform:translateX(-33.333%);will-change:transform;">
+        <div class="cal-grid" id="cal-grid-prev" style="width:33.333%;flex-shrink:0;box-sizing:border-box;pointer-events:none;opacity:0.85;"></div>
+        <div class="cal-grid" id="cal-grid" style="width:33.333%;flex-shrink:0;box-sizing:border-box;"></div>
+        <div class="cal-grid" id="cal-grid-next" style="width:33.333%;flex-shrink:0;box-sizing:border-box;pointer-events:none;opacity:0.85;"></div>
+      </div>
+    </div>
     <div id="shift-list"></div>
   </div>
 
