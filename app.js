@@ -971,7 +971,7 @@ function renderAlarmPanel(){
         <div style="width:32px;height:32px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📅</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${label} 사역</div>
-          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${m}월 ${d}일(${DN[new Date(y,m-1,d).getDay()]}) <span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:10px">${type}</span></div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${m}월 ${d}일(${DN[new Date(y,m-1,d).getDay()]}) ${type.split('/').map(t=>{const tc2=tc(t.trim());return tc2?`<span style="background:${tc2.bg};color:${tc2.text};padding:1px 6px;border-radius:4px;font-size:10px;margin-right:2px">${t.trim()}</span>`:''}).join('')}</div>
         </div>
         <div style="width:6px;height:6px;border-radius:50%;background:#639922;flex-shrink:0"></div>
       </div>`;
