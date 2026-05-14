@@ -1384,14 +1384,15 @@ async function runSystemDiag(){
 }
 
 async function loadAll(){
-  const[uR,sR,nR,fR,cR,rR]=await Promise.all([
-    sb.from('app_users').select('*'),
-    sb.from('schedules').select('year,month,data,type').order('year').order('month'),
+  const thisYear=new Date().getFullYear();
+  const[uR,sR,nR,fR,cR,rR,dmR]=await Promise.all([
+    sb.from('app_users').select('id,name,role,status,department,title,avatar,memo,my_team,alarm_settings,seen_shifts'),
+    sb.from('schedules').select('year,month,data').eq('year',thisYear).order('month'),
     sb.from('notices').select('*').order('created_at',{ascending:false}),
-    sb.from('feed_posts').select('*,app_users(name)').order('created_at',{ascending:false}),
-    sb.from('shift_comments').select('*,app_users(name)').gte('year',new Date().getFullYear()-1),
-    // ★ 내가 읽은 공지 ID 목록 조회
+    sb.from('feed_posts').select('*,app_users(name)').order('created_at',{ascending:false}).limit(50),
+    sb.from('shift_comments').select('*,app_users(name)').gte('year',thisYear-1),
     sb.from('notice_reads').select('notice_id').eq('user_id', cu?.id || 0),
+    sb.from('direct_messages').select('*').or(`from_id.eq.${cu.id},to_id.eq.${cu.id}`).order('created_at',{ascending:true}),
   ]);
   const all=uR.data||[];
   allMembers=all.filter(u=>u.status==='approved'); window._pending=all.filter(u=>u.status==='pending');
@@ -1403,10 +1404,8 @@ async function loadAll(){
   feedPosts=(fR.data||[]).map(p=>({...p,author_name:p.app_users?.name}));
   shiftComments={};
   (cR.data||[]).forEach(c=>{const k=`${c.year}-${c.month}-${c.day}`;if(!shiftComments[k])shiftComments[k]=[];if(!shiftComments[k].find(x=>x.id===c.id))shiftComments[k].push({...c,author_name:c.app_users?.name});if(!commentLikes[c.id])commentLikes[c.id]=new Set();});
-  // ★ DM 로드
   chatMessages={};
-  const{data:dmData}=await sb.from('direct_messages').select('*').or(`from_id.eq.${cu.id},to_id.eq.${cu.id}`).order('created_at',{ascending:true});
-  (dmData||[]).forEach(m=>{const otherId=m.from_id===cu.id?m.to_id:m.from_id;if(!chatMessages[otherId])chatMessages[otherId]=[];chatMessages[otherId].push(m);});
+  (dmR.data||[]).forEach(m=>{const otherId=m.from_id===cu.id?m.to_id:m.from_id;if(!chatMessages[otherId])chatMessages[otherId]=[];chatMessages[otherId].push(m);});
   updateDmBadge();
 }
 function initOfflineSample(){allSchedules={2026:{5:{'김동권':{'6':'[오전]자막','17':'[새벽]설교','24':'[저녁]기도'},'이미영':{'2':'[금요]기도','10':'[수요]설교','25':'[오전]사회'},'박지훈':{'5':'[새벽]설교','13':'[금요]영상'},'최수연':{'4':'[오전]사회','16':'[금요]자막'}}}};assignColors(collectAllTypes());}
