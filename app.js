@@ -1922,12 +1922,12 @@ function renderDayModal(){
       rowStyle=`background:${c.bg};border-left:3px solid ${c.text};padding:10px 11px;border-radius:6px;margin:2px 0;`;
       nameStyle=`font-weight:500;color:${c.text}`;
       avBg=c.text; avColor='#fff';
-      badge=isFirstOccurrence?`<span style="font-size:9px;background:${c.text};color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">나</span>`:'';
+      badge=`<span style="font-size:9px;background:${c.text};color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">나</span>`;
     } else if(isTeamMember){
       rowStyle=`background:#EAF3DE;border-left:3px solid #3B6D11;padding:10px 11px;border-radius:6px;margin:2px 0;`;
       nameStyle=`font-weight:500;color:#27500A`;
       avBg='#3B6D11'; avColor='#fff';
-      badge=isFirstOccurrence?`<span style="font-size:9px;background:#3B6D11;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">팀</span>`:'';
+      badge=`<span style="font-size:9px;background:#3B6D11;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">팀</span>`;
     }
     const nameCell=`<div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle}">${w.name}${badge}</span><div class="worker-av" style="background:${avBg};color:${avColor}">${w.name[0]}</div></div>`;
     return `<div class="day-worker-row" style="${rowStyle}"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span>${nameCell}</div>`;
