@@ -1464,11 +1464,10 @@ const CATEGORIES = [
 // ★ 요일 + 사역유형으로 카테고리 판별
 function getCategory(type, year, month, day){
   if(!type) return 'all';
-  // ★ 새벽/저녁 통합 유형 처리
+  // 복수 사역(/ 구분)이면 첫 번째 타입으로 카테고리 판별
   const isCombined = type.includes('새벽/저녁') || type.includes('새벽+저녁');
-  const t = isCombined ? type : type.split('/')[0];
+  const t = isCombined ? type : type.split('/')[0].trim();
 
-  // 날짜 정보가 있으면 요일 기반 판별
   if(year && month && day){
     const dow=new Date(year, month-1, day).getDay();
     const isSunday   = dow===0;
@@ -1476,7 +1475,7 @@ function getCategory(type, year, month, day){
     const isFriday   = dow===5;
     const hasSaebyeok= t.includes('새벽');
 
-    if(isCombined) return '새벽'; // 새벽/저녁 통합은 새벽 카테고리
+    if(isCombined) return '새벽';
     if(isSunday)    return '주일';
     if(isWednesday && !hasSaebyeok) return '수요';
     if(isFriday    && !hasSaebyeok) return '금요';
@@ -1484,13 +1483,19 @@ function getCategory(type, year, month, day){
     return '특새';
   }
 
-  // 날짜 정보 없으면 키워드 기반 fallback
   if(isCombined) return '새벽';
   if(t.includes('수요')) return '수요';
   if(t.includes('금요')) return '금요';
   if(t.includes('새벽')) return '새벽';
   if(t.includes('4부')||t.includes('저녁')||t.includes('오전')) return '주일';
   return '특새';
+}
+
+// 복수 사역 타입에서 모든 카테고리 반환 (필터 매칭용)
+function getCategories(type, year, month, day){
+  if(!type) return ['all'];
+  const types = type.split('/').map(t=>t.trim());
+  return [...new Set(types.map(t=>getCategory(t, year, month, day)))];
 }
 
 // 색상 간소화 — 사역 형태 키워드 기반
@@ -1530,7 +1535,7 @@ function renderLegend(){
   const activeCats=new Set();
   Object.keys(d).forEach(name=>{
     Object.entries(d[name]||{}).forEach(([day,type])=>{
-      if(type) activeCats.add(getCategory(type, curY, curM+1, parseInt(day)));
+      if(type) getCategories(type, curY, curM+1, parseInt(day)).forEach(c=>activeCats.add(c));
     });
   });
 
@@ -1539,7 +1544,7 @@ function renderLegend(){
   const myCats=new Set();
   if(myModeActive){
     Object.entries(myRaw).forEach(([day,type])=>{
-      if(type) myCats.add(getCategory(type, curY, curM+1, parseInt(day)));
+      if(type) getCategories(type, curY, curM+1, parseInt(day)).forEach(c=>myCats.add(c));
     });
   }
 
@@ -1575,7 +1580,7 @@ function getFilteredMap(allMap, myRaw, myDays){
   myDays.forEach(d=>{
     const type=myRaw[String(d)];
     if(!type) return;
-    if(filterCategory==='all'||getCategory(type,curY,curM+1,d)===filterCategory){
+    if(filterCategory==='all'||getCategories(type,curY,curM+1,d).includes(filterCategory)){
       fmMy.add(d);
     }
   });
@@ -1683,12 +1688,18 @@ function renderCalendar(){
       // ══ 내 사역 모드 ══
       const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay&&!isToday?' dimmed':'');
       if(myHasDay){
-        // 내 사역 있는 날 — 사역색 배경
+        // 내 사역 있는 날 — 복수 사역 지원
+        const myTypes=myType.split('/').map(t=>t.trim());
         const bg=myC?myC.dot:'#185FA5';
-        const typeLabel=`<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
+        // 복수 사역이면 각 타입을 줄바꿈으로 표시
+        const typeLabel=myTypes.length>1
+          ? myTypes.map(t=>{
+              const c=tc(t); const tbg=c?c.dot:bg;
+              return `<div class="my-type-label" style="background:rgba(0,0,0,.18);font-size:8px;padding:0 2px;margin-bottom:1px">${t.replace(/[\[\]]/g,'').slice(0,5)}</div>`;
+            }).join('')
+          : `<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
         const cmtBadge=cc?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff;border:none">${cc}</div>`:'';
         const alarmOffBadge=alarmOff?`<div style="position:absolute;bottom:2px;right:3px;font-size:10px;opacity:.8">🔕</div>`:'';
-        // ★ 오늘+내사역: 사역색 배경 + 파란 이중 테두리
         const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;outline:2px solid ${bg};outline-offset:1px;position:relative`:`background:${bg};border-color:${bg};position:relative`;
         html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
           <div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div>
@@ -1725,7 +1736,10 @@ function renderCalendar(){
       const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
 
       const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
-      const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
+      const typeTip=myType?(()=>{
+        const mts=myType.split('/').map(t=>t.trim());
+        return mts.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
+      })():'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
@@ -1793,7 +1807,10 @@ function _renderSideMonth(dir){
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
       const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
       const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'' ;
-      const typeTip=myType&&myC?`<div class="type-tip" style="color:${myC.text}">${myType.replace(/[\[\]]/g,'').slice(0,4)}</div>`:'';
+      const typeTip=myType?(()=>{
+        const mts=myType.split('/').map(t=>t.trim());
+        return mts.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
+      })():'';
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:'';
       html+=`<div class="${cls}" style="${cellStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}</div>`;
     }
