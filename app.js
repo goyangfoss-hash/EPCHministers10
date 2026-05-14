@@ -592,9 +592,11 @@ async function initFCM(){
     const messaging = window.firebase.messaging();
     if(Notification.permission !== 'granted') return;
 
-    // ★ firebase-messaging-sw.js 등록 완료 후 토큰 발급
-    const swReg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
-    await navigator.serviceWorker.ready; // SW 활성화 대기
+    // ★ 이미 등록된 SW 재사용, 없으면 새로 등록
+    const existingRegs = await navigator.serviceWorker.getRegistrations();
+    const swReg = existingRegs.find(r=>r.active) 
+      || await navigator.serviceWorker.register('firebase-messaging-sw.js');
+    await navigator.serviceWorker.ready;
 
     // 토큰 발급 (최대 3회 재시도)
     let token = null;
