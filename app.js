@@ -1929,10 +1929,7 @@ function renderDayModal(){
       avBg='#3B6D11'; avColor='#fff';
       badge=isFirstOccurrence?`<span style="font-size:9px;background:#3B6D11;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">팀</span>`:'';
     }
-    // 같은 이름의 두 번째 이후 행은 이름/아바타 숨기고 사역 뱃지만 표시
-    const nameCell=isFirstOccurrence
-      ? `<div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle}">${w.name}${badge}</span><div class="worker-av" style="background:${avBg};color:${avColor}">${w.name[0]}</div></div>`
-      : `<div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle};opacity:0">${w.name}</span><div class="worker-av" style="background:${avBg};color:${avColor};opacity:0">${w.name[0]}</div></div>`;
+    const nameCell=`<div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle}">${w.name}${badge}</span><div class="worker-av" style="background:${avBg};color:${avColor}">${w.name[0]}</div></div>`;
     return `<div class="day-worker-row" style="${rowStyle}"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span>${nameCell}</div>`;
   }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
