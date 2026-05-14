@@ -1688,16 +1688,15 @@ function renderCalendar(){
       // ══ 내 사역 모드 ══
       const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay&&!isToday?' dimmed':'');
       if(myHasDay){
-        // 내 사역 있는 날 — 복수 사역 지원
+        // 내 사역 있는 날 — 필터된 타입만 표시
         const myTypes=myType.split('/').map(t=>t.trim());
-        const bg=myC?myC.dot:'#185FA5';
-        // 복수 사역이면 각 타입을 줄바꿈으로 표시
-        const typeLabel=myTypes.length>1
-          ? myTypes.map(t=>{
-              const c=tc(t); const tbg=c?c.dot:bg;
-              return `<div class="my-type-label" style="background:rgba(0,0,0,.18);font-size:8px;padding:0 2px;margin-bottom:1px">${t.replace(/[\[\]]/g,'').slice(0,5)}</div>`;
-            }).join('')
-          : `<div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
+        const filteredTypes=filterCategory==='all'?myTypes:myTypes.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
+        const displayType=filteredTypes[0]||myTypes[0];
+        const myC2=tc(displayType)||myC;
+        const bg=myC2?myC2.dot:'#185FA5';
+        const typeLabel=filteredTypes.length>1
+          ? filteredTypes.map(t=>`<div class="my-type-label" style="font-size:8px;padding:0 2px;margin-bottom:1px">${t.replace(/[\[\]]/g,'').slice(0,5)}</div>`).join('')
+          : `<div class="my-type-label">${displayType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
         const cmtBadge=cc?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff;border:none">${cc}</div>`:'';
         const alarmOffBadge=alarmOff?`<div style="position:absolute;bottom:2px;right:3px;font-size:10px;opacity:.8">🔕</div>`:'';
         const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;outline:2px solid ${bg};outline-offset:1px;position:relative`:`background:${bg};border-color:${bg};position:relative`;
@@ -1738,7 +1737,8 @@ function renderCalendar(){
       const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType?(()=>{
         const mts=myType.split('/').map(t=>t.trim());
-        return mts.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
+        const filtered=filterCategory==='all'?mts:mts.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
+        return filtered.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
       })():'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
@@ -1809,7 +1809,8 @@ function _renderSideMonth(dir){
       const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'' ;
       const typeTip=myType?(()=>{
         const mts=myType.split('/').map(t=>t.trim());
-        return mts.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
+        const filtered=filterCategory==='all'?mts:mts.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
+        return filtered.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
       })():'';
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:'';
       html+=`<div class="${cls}" style="${cellStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}</div>`;
@@ -1853,7 +1854,11 @@ function renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap){
             <div style="display:flex;gap:6px;align-items:center">
               ${alarm.alarm?'<span>🔔</span>':''}
               ${cc?`<span class="cmt-cnt">${cc}개 댓글</span>`:''}
-              ${type&&c?`<span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${type}</span>`:''}
+              ${(()=>{
+                const types=type.split('/').map(t=>t.trim());
+                const filtered=filterCategory==='all'?types:types.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
+                return filtered.map(t=>{const tc2=tc(t);return tc2?`<span class="duty-badge" style="background:${tc2.bg};color:${tc2.text};border:1px solid ${tc2.border}">${t}</span>`:''}).join('');
+              })()}
             </div>
           </div>
           ${alarm.memo?`<div style="font-size:12px;color:#888;margin-top:4px;border-top:1px solid #f5f5f0;padding-top:4px">📝 ${esc(alarm.memo)}</div>`:''}
