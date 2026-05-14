@@ -2223,7 +2223,7 @@ function renderMyShift(){
   const monthCount2 = Object.keys(shiftCompletions).filter(k=>k.startsWith(`${thisYear2}-${thisMonth2}-`)).length;
 
   const recentCompletions = Object.entries(shiftCompletions)
-    .sort((a,b)=>new Date(b[1])-new Date(a[1])).slice(0,5)
+    .sort((a,b)=>new Date(b[1])-new Date(a[1]))
     .map(([key,completedAt])=>{
       const parts=key.split('-');
       const type=parts.slice(3).join('-');
