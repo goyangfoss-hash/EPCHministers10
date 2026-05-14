@@ -1897,17 +1897,23 @@ function openDayModal(day){
 function renderDayModal(){
   if(!modalDate)return;
   const{year,month,day}=modalDate,key=`${year}-${month}-${day}`,d=getMonthData(year,month);
-  const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).map(n=>({name:n,type:d[n][String(day)]}));
+  const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).flatMap(n=>{
+    const raw=d[n][String(day)];
+    return raw.split('/').map(t=>({name:n,type:t.trim()}));
+  });
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
   const SHIFT_ORDER={0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],2:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],3:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],4:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],5:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],6:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송']};
   const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
   function shiftRank(type){const t=(type||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});return pi===-1?999:pi;}
   const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
+  const seenNames=new Set();
   wHtml+=sorted.length?sorted.map(w=>{
     const c=tc(w.type);
     const isMe = w.name===cu.name;
     const isTeamMember = !isMe && myTeam.includes(w.name);
+    const isFirstOccurrence = !seenNames.has(w.name);
+    seenNames.add(w.name);
     let rowStyle='padding:10px 14px;margin:2px 0;';
     let nameStyle='';
     let avBg=c.bg, avColor=c.text;
@@ -1916,14 +1922,18 @@ function renderDayModal(){
       rowStyle=`background:${c.bg};border-left:3px solid ${c.text};padding:10px 11px;border-radius:6px;margin:2px 0;`;
       nameStyle=`font-weight:500;color:${c.text}`;
       avBg=c.text; avColor='#fff';
-      badge=`<span style="font-size:9px;background:${c.text};color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">나</span>`;
+      badge=isFirstOccurrence?`<span style="font-size:9px;background:${c.text};color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">나</span>`:'';
     } else if(isTeamMember){
       rowStyle=`background:#EAF3DE;border-left:3px solid #3B6D11;padding:10px 11px;border-radius:6px;margin:2px 0;`;
       nameStyle=`font-weight:500;color:#27500A`;
       avBg='#3B6D11'; avColor='#fff';
-      badge=`<span style="font-size:9px;background:#3B6D11;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">팀</span>`;
+      badge=isFirstOccurrence?`<span style="font-size:9px;background:#3B6D11;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">팀</span>`:'';
     }
-    return `<div class="day-worker-row" style="${rowStyle}"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span><div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle}">${w.name}${badge}</span><div class="worker-av" style="background:${avBg};color:${avColor}">${w.name[0]}</div></div></div>`;
+    // 같은 이름의 두 번째 이후 행은 이름/아바타 숨기고 사역 뱃지만 표시
+    const nameCell=isFirstOccurrence
+      ? `<div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle}">${w.name}${badge}</span><div class="worker-av" style="background:${avBg};color:${avColor}">${w.name[0]}</div></div>`
+      : `<div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${nameStyle};opacity:0">${w.name}</span><div class="worker-av" style="background:${avBg};color:${avColor};opacity:0">${w.name[0]}</div></div>`;
+    return `<div class="day-worker-row" style="${rowStyle}"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span>${nameCell}</div>`;
   }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
   wHtml+='</div>';
   let alarmHtml='';
@@ -2191,9 +2201,13 @@ function renderMyShift(){
       if(parseInt(y)!==thisYear) return;
       Object.entries(ym).forEach(([m,data])=>{
         const myData=data[cu.name]||{};
-        Object.entries(myData).forEach(([ds])=>{
+        Object.entries(myData).forEach(([ds,rawType])=>{
           const dt=new Date(parseInt(y),parseInt(m)-1,parseInt(ds));
-          if(dt<=today2) pastTotal++;
+          if(dt<=today2){
+            // 복수 사역 분리하여 각각 카운트
+            const types=rawType.split('/').map(t=>t.trim()).filter(Boolean);
+            pastTotal+=types.length;
+          }
         });
       });
     });
