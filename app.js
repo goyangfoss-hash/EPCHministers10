@@ -473,7 +473,7 @@ async function doRegister() {
     const {data:admins}=await sb.from('app_users').select('id').in('role',['admin','superadmin']).eq('status','approved');
     if(admins?.length){
       const adminIds=admins.map(a=>a.id);
-      await sendPushToUsers(adminIds, '👤 새 가입 신청', `${name}님이 가입을 신청했습니다.`, 'admin');
+      await sendPushToUsers(adminIds, '👤 새 가입 신청', `${name}님이 가입을 신청했습니다.`, 'admin', {action:'openAdmin'});
     }
   } catch(e){ console.warn('가입 신청 푸시 오류:', e.message); }
 }
@@ -655,11 +655,13 @@ async function saveFCMToken(token){
 
 // ★ 푸시 알림 전송 (Edge Function 호출)
 // tab: 알림 클릭 시 이동할 탭 ('feed'|'notice'|'cal' 등)
-async function sendPushToUsers(userIds, title, body, tab='feed'){
+async function sendPushToUsers(userIds, title, body, tab='feed', extra={}){
   if(OFFLINE||!userIds?.length) return;
   try {
+    const urlParams = new URLSearchParams({tab, ...Object.fromEntries(Object.entries(extra).filter(([k])=>k!=='action'||true))});
+    const data = { tab, url: '/?'+urlParams.toString(), ...extra };
     await sb.functions.invoke('send-push', {
-      body: { user_ids: userIds, title, body, data: { tab, url: '/?tab='+tab } }
+      body: { user_ids: userIds, title, body, data }
     });
   } catch(e){ console.warn('Push send error:', e.message); }
 }
@@ -1209,45 +1211,86 @@ function saveShiftMemo(y,m,d){
   if($('tab-myshift')?.style.display!=='none')renderMyShift();
 }
 
-// ★ 알림 클릭 → URL ?tab=xxx 으로 앱 진입 시 해당 탭 바로 열기
+// ★ 알림 클릭 → URL 파라미터로 앱 진입 시 딥링크 처리
 function handleNotifLaunchTab(){
   try {
     const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab');
-    if(!tab) return;
-    // URL 정리 (history 오염 방지)
+    const tab    = params.get('tab');
+    const action = params.get('action');
+    const chatUserId = params.get('chatUserId');
+    const noticeId   = params.get('noticeId');
+    const year   = params.get('year');
+    const month  = params.get('month');
+    const day    = params.get('day');
+    if(!tab && !action) return;
     history.replaceState(null,'',window.location.pathname);
-    // 탭 버튼 매핑
-    const btnMap = {
-      feed:   $('btn-feed'),
-      notice: $('btn-notice'),
-      cal:    $('btn-cal'),
-      myshift:$('btn-myshift'),
-      search: $('btn-search'),
-      admin:  $('btn-admin'),
-    };
-    const btn = btnMap[tab];
-    if(btn) setTimeout(()=>switchTab(tab, btn), 300);
+    handleDeepLink({tab, action, chatUserId, noticeId, year, month, day});
   } catch(e){ console.warn('handleNotifLaunchTab:',e); }
+}
+
+// ★ 딥링크 통합 처리 함수
+function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}){
+  const DELAY = 350;
+  const btnMap = {
+    feed:    $('btn-feed'),
+    notice:  $('btn-notice'),
+    cal:     $('btn-cal'),
+    myshift: $('btn-myshift'),
+    search:  $('btn-search'),
+    admin:   $('btn-admin'),
+  };
+
+  // 탭 전환
+  const targetTab = tab || 'feed';
+  const btn = btnMap[targetTab];
+  if(btn) switchTab(targetTab, btn);
+
+  // 액션별 세부 이동
+  setTimeout(()=>{
+    switch(action){
+      case 'openChat':
+        // 채팅: 소통 탭 → 해당 유저 채팅창
+        if(chatUserId){
+          setFeedTab('dm');
+          setTimeout(()=>openChat(Number(chatUserId)), 100);
+        }
+        break;
+
+      case 'openNotice':
+        // 공지: 공지 탭 → 해당 공지 열기
+        if(noticeId){
+          const n = notices.find(x=>String(x.id)===String(noticeId));
+          if(n) openNoticeDetail(n);
+        }
+        break;
+
+      case 'openDay':
+        // 사역 알림: 해당 월 캘린더 → 해당 날짜 모달
+        if(year && month && day){
+          curY = parseInt(year);
+          curM = parseInt(month) - 1;
+          renderCalendar();
+          setTimeout(()=>openDayModal(parseInt(day)), 100);
+        }
+        break;
+
+      case 'openAdmin':
+        // 관리자 탭 (가입 신청 등)
+        break;
+
+      default:
+        // action 없으면 탭 이동만
+        break;
+    }
+  }, DELAY);
 }
 
 // ★ Service Worker에서 알림 클릭 메시지 수신 (sw → app)
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message', e=>{
-    const {type, tab, chatUserId} = e.data || {};
+    const {type, tab, action, chatUserId, noticeId, year, month, day} = e.data || {};
     if(type==='NOTIF_CLICK' && cu){
-      const targetTab = tab || 'feed';
-      const btnMap = {
-        feed:   $('btn-feed'),
-        notice: $('btn-notice'),
-        cal:    $('btn-cal'),
-        myshift:$('btn-myshift'),
-      };
-      const btn = btnMap[targetTab];
-      if(btn) switchTab(targetTab, btn);
-      if(chatUserId){
-        setTimeout(()=>{ openChat(Number(chatUserId)); }, 300);
-      }
+      handleDeepLink({tab, action, chatUserId, noticeId, year, month, day});
     }
   });
 }
@@ -3830,7 +3873,7 @@ async function sendDm(){
       const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===tempId);
       if(idx>=0)chatMessages[chatTarget.id][idx]=data;
       renderChatMessages();
-      sendPushToUsers([chatTarget.id], `💬 ${cu.name}`, txt);
+      sendPushToUsers([chatTarget.id], `💬 ${cu.name}`, txt, 'feed', {action:'openChat', chatUserId:String(cu.id)});
     } else if(error){
       chatMessages[chatTarget.id]=chatMessages[chatTarget.id].filter(m=>m.id!==tempId);
       renderChatMessages();
@@ -3961,7 +4004,7 @@ async function sendUserDm(){
       if(idx>=0) chatMessages[userDmTarget.id][idx]=data;
       renderUserDmMessages();
       // 푸시 알림
-      sendPushToUsers([userDmTarget.id], `💬 ${cu.name}`, txt);
+      sendPushToUsers([userDmTarget.id], `💬 ${cu.name}`, txt, 'feed', {action:'openChat', chatUserId:String(cu.id)});
     } else if(error){
       // 전송 실패 시 임시 메시지 제거
       chatMessages[userDmTarget.id] = chatMessages[userDmTarget.id].filter(m=>m.id!==tempId);
@@ -4308,7 +4351,7 @@ async function postNotice(){
       await sb.from('notice_reads').upsert({notice_id:n.id, user_id:cu.id});
       // ★ 모든 이용자에게 푸시 알림
       const userIds=allMembers.filter(u=>u.id!==cu.id).map(u=>u.id);
-      sendPushToUsers(userIds, `📢 새 공지: ${title}`, body);
+      sendPushToUsers(userIds, `📢 새 공지: ${title}`, body, 'notice', {action:'openNotice', noticeId:String(n.id)});
     }
   } else { notices.unshift(n); renderNotices(); }
   notices.unshift(n);
@@ -5022,7 +5065,8 @@ async function doApplySchedule(year, month, isMerge){
           ? `${shiftDesc} 사역이 등록되었습니다.`
           : `${shiftDesc} 사역이 변경되었습니다.`;
 
-        sendPushToUsers([userId], title, body).catch(e=>console.warn('push err:', e));
+        const shiftDay=Object.keys(shifts[0]?.days||{})[0]||'';
+        sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(shiftYear||curY), month:String(shiftMonth||curM+1), day:shiftDay}).catch(e=>console.warn('push err:', e));
       }
       console.log(`[알림] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
     }
