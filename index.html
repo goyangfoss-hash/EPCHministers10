@@ -808,21 +808,10 @@
 <input type="file" id="profile-file-input" accept="image/*" style="display:none" onchange="handleProfileFile(this)">
 
 <!-- 채팅(DM) 모달 -->
-<div class="modal-bg" id="chat-modal" style="display:none" onclick="if(event.target===$('chat-modal'))closeChatModal()">
-  <div class="chat-modal-box">
-    <div class="modal-handle"></div>
-    <div class="modal-header">
-      <h3>💬 <span id="chat-target-name"></span></h3>
-      <button class="modal-close" onclick="closeChatModal()">&#x2715;</button>
-    </div>
-    <div id="chat-messages"></div>
-    <div class="chat-input-row">
-      <input id="chat-input" placeholder="메시지를 입력하세요..." maxlength="500"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();event.stopPropagation();sendDm()}">
-      <button class="chat-send-btn" onclick="sendDm()">➤</button>
-    </div>
-  </div>
-</div>
+<div id="chat-modal" style="display:none"></div>
+<div id="chat-messages" style="display:none"></div>
+<span id="chat-target-name" style="display:none"></span>
+<input id="chat-input" style="display:none">
 
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>

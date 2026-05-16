@@ -540,8 +540,7 @@ async function enterApp() {
   }
   renderCalendar(); renderNotices(); updateAlarmBadge();
   updateFeedBadge();
-  // ★ 이용자↔이용자 채팅 모달 동적 생성 (없으면)
-  if(!$('user-dm-modal')) injectUserDmModal();
+  // dm-chat-view는 index.html에 정적으로 포함됨
   startRealtime();
   if(!OFFLINE){
     if(pollTimer)clearInterval(pollTimer);
@@ -3832,6 +3831,11 @@ function openDmWith(userId){
   const user=allMembers.find(u=>u.id===userId);
   if(!user) return;
   dmChatTarget=user;
+
+  // 기존 모달 닫기
+  const cm=$('chat-modal'); if(cm) cm.style.display='none';
+  const dm=$('user-dm-modal'); if(dm) dm.style.display='none';
+  chatTarget=null; userDmTarget=null;
 
   // 읽음 처리
   const msgs=chatMessages[userId]||[];
