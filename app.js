@@ -4042,7 +4042,8 @@ function closeChatModal(){
 // ══════════════════════════════════════════════════
 //  이용자↔이용자 채팅
 // ══════════════════════════════════════════════════
-function openUserDm(userId){
+function openUserDm(userId){ openDmWith(userId); }
+function _openUserDm_legacy(userId){
   const user = allMembers.find(u=>u.id===userId);
   if(!user) return;
   userDmTarget = user;
@@ -4171,7 +4172,7 @@ function closeUserDmModal(){
 }
 
 // ★ 이용자↔이용자 채팅 모달 DOM 생성
-function injectUserDmModal(){
+function injectUserDmModal(){ return; } function _injectUserDmModal_legacy(){
   if($('user-dm-modal')) return;
   const modal = document.createElement('div');
   modal.id = 'user-dm-modal';
