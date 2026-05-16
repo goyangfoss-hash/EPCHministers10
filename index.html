@@ -654,8 +654,24 @@
   </div>
 
   <!-- 소통 탭 (채팅으로 통합) -->
-  <div id="tab-feed" class="content" style="display:none">
+  <div id="tab-feed" class="content" style="display:none;position:relative;overflow:hidden">
     <div id="feed-list"></div>
+    <div id="dm-chat-view" style="position:absolute;top:0;left:0;width:100%;height:100%;background:var(--color-background-tertiary);transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;will-change:transform;">
+      <div id="dm-chat-header" style="background:#fff;padding:0 14px;height:56px;display:flex;align-items:center;gap:10px;border-bottom:0.5px solid #ebebeb;flex-shrink:0;">
+        <button onclick="closeDmChatView()" style="width:32px;height:32px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#888;font-size:20px">&#8249;</button>
+        <div id="dm-chat-av" style="width:36px;height:36px;border-radius:50%;flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div id="dm-chat-name" style="font-size:15px;font-weight:700;color:#1a1a18"></div>
+          <div id="dm-chat-sub" style="font-size:11px;color:#aaa"></div>
+        </div>
+      </div>
+      <div id="dm-chat-messages" style="flex:1;overflow-y:auto;padding:14px 14px 8px;-webkit-overflow-scrolling:touch"></div>
+      <div style="background:#fff;padding:10px 12px;border-top:0.5px solid #ebebeb;flex-shrink:0;display:flex;gap:8px;align-items:center">
+        <input id="dm-chat-input" placeholder="메시지를 입력하세요..." maxlength="500" style="flex:1;padding:10px 14px;border-radius:22px;border:1.5px solid #e8e8e0;background:#f8f8f4;font-size:14px;outline:none"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendDmChat()}">
+        <button onclick="sendDmChat()" style="width:38px;height:38px;border-radius:50%;background:#185FA5;border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">&#10148;</button>
+      </div>
+    </div>
   </div>
 
   <!-- 관리자 탭 -->

@@ -797,6 +797,7 @@ function startRealtime() {
       // 열려있는 채팅창 갱신
       if(chatTarget?.id===otherId)    renderChatMessages();
       if(userDmTarget?.id===otherId)  renderUserDmMessages();
+      if(dmChatTarget?.id===otherId)  renderDmChatMessages();
       if($('tab-feed')?.style.display!=='none') renderFeedTab();
     }).subscribe(s=>console.log('[DM-out]',s));
 }
@@ -1251,8 +1252,7 @@ function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}
       case 'openChat':
         // 채팅: 소통 탭 → 해당 유저 채팅창
         if(chatUserId){
-          setFeedTab('dm');
-          setTimeout(()=>openChat(Number(chatUserId)), 100);
+          setTimeout(()=>openDmWith(Number(chatUserId)), 150);
         }
         break;
 
@@ -1487,7 +1487,13 @@ function switchTab(tab,btn){
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
-  if(tab==='feed'){renderFeedTab();}
+  if(tab==='feed'){
+    renderFeedTab();
+    // 소통 탭 전환 시 채팅뷰 닫기
+    const view=$('dm-chat-view');
+    if(view){ view.style.transition='none'; view.style.transform='translateX(100%)'; setTimeout(()=>view.style.transition='transform .28s cubic-bezier(.4,0,.2,1)',50); }
+    dmChatTarget=null;
+  }
   if(tab==='admin')renderAdmin();
   $('alarm-panel').style.display='none';
 }
@@ -3395,54 +3401,63 @@ function toggleKeepLogin(toggleEl){
   }
 }
 // ══════════════════════════════════════════════════
-let feedTab = 'members'; // 'members' | 'chat' | 'dm'
+// ── 소통 탭 (카카오톡 스타일 통합 친구 목록) ──
+let dmChatTarget = null; // 현재 열린 채팅 상대
 
 function renderFeedTab(){
   const el=$('feed-list'); if(!el) return;
 
-  // 이용자끼리 읽지 않은 메시지 수 (관리자 제외 상대방)
-  const userDmUnread = Object.entries(chatMessages).reduce((sum,[otherId,msgs])=>{
-    const other = allMembers.find(u=>u.id===parseInt(otherId));
-    if(!other || isAdminRole(other)) return sum;
-    return sum + msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
-  }, 0);
-  // 관리자↔이용자 읽지 않은 수
-  // - 이용자 입장: 관리자(isAdminRole)가 보낸 미읽은 메시지
-  // - 관리자 입장: 이용자(!isAdminRole)가 보낸 미읽은 메시지
-  const adminChatUnread = Object.entries(chatMessages).reduce((sum,[otherId,msgs])=>{
-    const other = allMembers.find(u=>u.id===parseInt(otherId));
-    if(!other) return sum;
-    const isOtherAdmin = isAdminRole(other);
-    // 이용자면 관리자가 상대, 관리자면 이용자가 상대
-    if(isAdmin() ? isOtherAdmin : !isOtherAdmin) return sum;
-    return sum + msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
-  }, 0);
+  // 대화 상대 정렬: 대화 있는 사람 최근순 상단, 나머지 하단
+  const others = allMembers.filter(u=>u.id!==cu.id);
+  const withMsg = others
+    .filter(u=>chatMessages[u.id]?.length>0)
+    .sort((a,b)=>{
+      const la=chatMessages[a.id]?.slice(-1)[0]?.created_at||'';
+      const lb=chatMessages[b.id]?.slice(-1)[0]?.created_at||'';
+      return lb.localeCompare(la);
+    });
+  const noMsg = others.filter(u=>!chatMessages[u.id]?.length);
 
-  const tabStyle = (t) => `flex:1;padding:7px 4px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;background:${feedTab===t?'var(--color-background-primary)':'transparent'};color:${feedTab===t?'#185FA5':'var(--color-text-secondary)'};position:relative`;
+  let html='';
 
-  const chatBadge = adminChatUnread > 0 ? `<span style="position:absolute;top:2px;right:4px;background:#e11d48;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;line-height:1">${adminChatUnread}</span>` : '';
-  const dmBadge   = userDmUnread > 0   ? `<span style="position:absolute;top:2px;right:4px;background:#e11d48;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;line-height:1">${userDmUnread}</span>` : '';
-
-  const segHtml=`
-    <div style="display:flex;gap:0;background:var(--color-background-secondary);border-radius:8px;padding:2px;margin-bottom:14px">
-      <button onclick="setFeedTab('members')" style="${tabStyle('members')}">사역자 목록</button>
-      <button onclick="setFeedTab('chat')"    style="${tabStyle('chat')};position:relative">관리자 메시지${chatBadge}</button>
-      <button onclick="setFeedTab('dm')"      style="${tabStyle('dm')};position:relative">멤버 채팅${dmBadge}</button>
-    </div>`;
-
-  if(feedTab==='members'){
-    el.innerHTML = segHtml + renderMemberListHtml();
-  } else if(feedTab==='chat'){
-    el.innerHTML = segHtml + renderChatListHtml();
-  } else {
-    el.innerHTML = segHtml + renderUserDmListHtml();
+  if(withMsg.length){
+    html+=`<div style="font-size:11px;font-weight:600;color:#bbb;letter-spacing:.06em;padding:14px 4px 6px">최근 대화</div>`;
+    withMsg.forEach(u=>{ html+=buildFriendRow(u,true); });
   }
+
+  html+=`<div style="font-size:11px;font-weight:600;color:#bbb;letter-spacing:.06em;padding:${withMsg.length?'18px':'14px'} 4px 6px">사역자</div>`;
+  noMsg.forEach(u=>{ html+=buildFriendRow(u,false); });
+
+  el.innerHTML=html;
 }
 
-function setFeedTab(tab){
-  feedTab = tab;
-  renderFeedTab();
+function buildFriendRow(u, hasMsg){
+  const msgs=chatMessages[u.id]||[];
+  const unread=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).length;
+  const last=msgs[msgs.length-1];
+  const c=PALETTE[allMembers.indexOf(u)%PALETTE.length];
+  const avHtml=u.avatar
+    ?`<img src="${u.avatar}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea">`
+    :`<div style="width:48px;height:48px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:${c.text};flex-shrink:0">${u.name[0]}</div>`;
+  const adminTag=isAdminRole(u)?`<span style="font-size:10px;color:#185FA5;background:#E6F1FB;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:500">관리자</span>`:'';
+  return `<div onclick="openDmWith(${u.id})" style="display:flex;align-items:center;gap:12px;padding:10px 4px;cursor:pointer;border-radius:12px;transition:background .12s;-webkit-tap-highlight-color:transparent" onmousedown="this.style.background='#f0f0ea'" onmouseup="this.style.background=''" onmouseleave="this.style.background=''">
+    <div style="position:relative;flex-shrink:0">
+      ${avHtml}
+      ${unread?`<span style="position:absolute;top:-2px;right:-2px;background:#e11d48;border:2px solid var(--color-background-tertiary);border-radius:50%;min-width:17px;height:17px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0 3px">${unread}</span>`:''}
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:14px;font-weight:${unread?600:500};color:#1a1a18">${esc(u.name)}${adminTag}</span>
+        ${last?`<span style="font-size:11px;color:#bbb;flex-shrink:0">${fmtTime(last.created_at)}</span>`:''}
+      </div>
+      <div style="font-size:12px;color:${unread?'#444':'#bbb'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${unread?500:400}">
+        ${hasMsg?(last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:''):(u.title||'사역자')}
+      </div>
+    </div>
+  </div>`;
 }
+
+function setFeedTab(tab){ renderFeedTab(); }
 
 // ★ 사역자 목록 (파트별)
 function renderMemberListHtml(){
@@ -3704,6 +3719,7 @@ function buildUserDmRowInner(u, hasBorder, dMeta){
 }
 
 // 배지: 받은 읽지 않은 DM 수
+function updateDmBadge(){ updateFeedBadge(); }
 function updateFeedBadge(){
   const cnt=Object.values(chatMessages).flat().filter(m=>m.to_id===cu.id&&!m.is_read).length;
   const btn=$('btn-feed');
@@ -3811,6 +3827,126 @@ function applyViewportToModals(){
   }
 }
 
+// ── 통합 채팅 열기 (슬라이드 인) ──
+function openDmWith(userId){
+  const user=allMembers.find(u=>u.id===userId);
+  if(!user) return;
+  dmChatTarget=user;
+
+  // 읽음 처리
+  const msgs=chatMessages[userId]||[];
+  const unreadIds=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).map(m=>m.id);
+  msgs.forEach(m=>{if(m.to_id===cu.id)m.is_read=true;});
+  if(!OFFLINE&&unreadIds.length>0){
+    sb.from('direct_messages').update({is_read:true}).eq('to_id',cu.id).eq('from_id',userId)
+      .then(({error})=>{if(error)console.warn('DM read:',error.message);});
+  }
+  updateFeedBadge();
+
+  // 헤더 세팅
+  const c=PALETTE[allMembers.indexOf(user)%PALETTE.length];
+  const avEl=$('dm-chat-av');
+  if(avEl){
+    avEl.innerHTML=user.avatar
+      ?`<img src="${user.avatar}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1.5px solid #f0f0ea">`
+      :`<div style="width:36px;height:36px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:${c.text}">${user.name[0]}</div>`;
+  }
+  const nameEl=$('dm-chat-name'); if(nameEl) nameEl.textContent=user.name+(isAdminRole(user)?' (관리자)':'');
+  const subEl=$('dm-chat-sub'); if(subEl) subEl.textContent=user.title||'사역자';
+
+  // 슬라이드 인
+  const view=$('dm-chat-view');
+  if(view){
+    view.style.display='flex';
+    requestAnimationFrame(()=>{
+      view.style.transform='translateX(0)';
+    });
+  }
+
+  renderDmChatMessages();
+  setTimeout(()=>{
+    const msgEl=$('dm-chat-messages');
+    if(msgEl) msgEl.scrollTop=msgEl.scrollHeight;
+    $('dm-chat-input')?.focus();
+  }, 300);
+}
+
+function closeDmChatView(){
+  const view=$('dm-chat-view');
+  if(view){
+    view.style.transform='translateX(100%)';
+    setTimeout(()=>{ dmChatTarget=null; }, 300);
+  }
+  updateFeedBadge();
+  renderFeedTab();
+}
+
+function renderDmChatMessages(){
+  const el=$('dm-chat-messages'); if(!el||!dmChatTarget) return;
+  const msgs=chatMessages[dmChatTarget.id]||[];
+  if(!msgs.length){
+    el.innerHTML='<p style="text-align:center;color:#ccc;font-size:13px;padding:40px 0">첫 메시지를 보내보세요 👋</p>';
+    return;
+  }
+  let lastDate='';
+  el.innerHTML=msgs.map(m=>{
+    const isMine=m.from_id===cu.id;
+    const d=new Date(m.created_at);
+    const dateStr=`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+    let dateDivider='';
+    if(dateStr!==lastDate){
+      lastDate=dateStr;
+      dateDivider=`<div style="text-align:center;margin:10px 0 8px"><span style="font-size:10px;color:#bbb;background:#e8e8e0;padding:3px 10px;border-radius:10px">${dateStr}</span></div>`;
+    }
+    const sender=!isMine?allMembers.find(u=>u.id===m.from_id):null;
+    const c=sender?PALETTE[allMembers.indexOf(sender)%PALETTE.length]:{bg:'#E6F1FB',text:'#185FA5'};
+    const avHtml=!isMine?(sender?.avatar
+      ?`<img src="${sender.avatar}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-top:2px">`
+      :`<div style="width:30px;height:30px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${c.text};flex-shrink:0;margin-top:2px">${(dmChatTarget.name||'?')[0]}</div>`):'';
+    const readMark=isMine?(m.is_read?'':'<span style="font-size:10px;color:#bbb;margin-bottom:2px;flex-shrink:0">1</span>'):'';
+    return `${dateDivider}<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:6px">
+      <div style="display:flex;align-items:flex-end;gap:6px;flex-direction:${isMine?'row-reverse':'row'};max-width:min(78%,280px)">
+        ${isMine?'':avHtml}
+        <div style="padding:9px 13px;border-radius:${isMine?'18px 18px 4px 18px':'18px 18px 18px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.06);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap">${esc(m.content)}</div>
+        ${readMark}
+      </div>
+      <div style="font-size:10px;color:#bbb;margin-top:2px;${isMine?'':'margin-left:36px'}">${fmtTime(m.created_at)}</div>
+    </div>`;
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+let dmChatSending=false;
+async function sendDmChat(){
+  if(dmChatSending||!dmChatTarget) return;
+  const input=$('dm-chat-input');
+  const txt=input?.value.trim();
+  if(!txt) return;
+  dmChatSending=true;
+  const tempId='_tmp_'+Date.now();
+  const msg={id:tempId,_temp:true,from_id:cu.id,to_id:dmChatTarget.id,content:txt,is_read:false,created_at:new Date().toISOString()};
+  if(!chatMessages[dmChatTarget.id])chatMessages[dmChatTarget.id]=[];
+  chatMessages[dmChatTarget.id].push(msg);
+  input.value='';
+  renderDmChatMessages();
+  const el=$('dm-chat-messages');
+  if(el) el.scrollTop=el.scrollHeight;
+  if(!OFFLINE){
+    const{data,error}=await sb.from('direct_messages').insert({from_id:cu.id,to_id:dmChatTarget.id,content:txt}).select('*').single();
+    if(data){
+      const idx=chatMessages[dmChatTarget.id].findIndex(m=>m.id===tempId);
+      if(idx>=0)chatMessages[dmChatTarget.id][idx]=data;
+      renderDmChatMessages();
+      sendPushToUsers([dmChatTarget.id],`💬 ${cu.name}`,txt,'feed',{action:'openChat',chatUserId:String(cu.id)});
+    } else if(error){
+      chatMessages[dmChatTarget.id]=chatMessages[dmChatTarget.id].filter(m=>m.id!==tempId);
+      renderDmChatMessages();
+      showToastMsg('메시지 전송에 실패했습니다.');
+    }
+  }
+  dmChatSending=false;
+}
+
 function openChat(userId){
   const user=allMembers.find(u=>u.id===userId);
   if(!user) return;
@@ -3845,8 +3981,12 @@ function renderChatMessages(){
   if(!msgs.length){el.innerHTML='<p style="text-align:center;color:#ccc;font-size:13px;padding:20px">첫 메시지를 보내보세요</p>';return;}
   el.innerHTML=msgs.map(m=>{
     const isMine=m.from_id===cu.id;
+    const readMark = isMine ? (m.is_read ? '' : '<span style="font-size:10px;color:#bbb;margin-bottom:1px">1</span>') : '';
     return `<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:10px;width:100%">
-      <div style="max-width:min(75%,260px);padding:10px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.1);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap">${esc(m.content)}</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;flex-direction:${isMine?'row-reverse':'row'}">
+        <div style="max-width:min(75%,260px);padding:10px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.1);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap">${esc(m.content)}</div>
+        ${readMark}
+      </div>
       <div style="font-size:10px;color:#bbb;margin-top:3px">${fmtTime(m.created_at)}</div>
     </div>`;
   }).join('');
@@ -3956,10 +4096,12 @@ function renderUserDmMessages(){
     const senderAvHtml = (!isMine && sender?.avatar)
       ? `<img src="${sender.avatar}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-top:2px">`
       : (!isMine ? `<div style="width:28px;height:28px;border-radius:50%;background:#f0f0ea;display:flex;align-items:center;justify-content:center;font-size:11px;color:#888;flex-shrink:0;margin-top:2px">${(userDmTarget.name||'?')[0]}</div>` : '');
+    const dmReadMark = isMine ? (m.is_read ? '' : '<span style="font-size:10px;color:#bbb;flex-shrink:0;margin-bottom:2px">1</span>') : '';
     return `${dateDivider}<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:8px;width:100%">
-      <div style="display:flex;align-items:flex-end;gap:6px;flex-direction:${isMine?'row-reverse':'row'};max-width:min(78%,280px)">
+      <div style="display:flex;align-items:flex-end;gap:4px;flex-direction:${isMine?'row-reverse':'row'};max-width:min(78%,280px)">
         ${isMine?'':senderAvHtml}
-        <div style="padding:9px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.08);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap;min-width:0;flex:1">${esc(m.content)}</div>
+        <div style="padding:9px 13px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.08);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap;min-width:0">${esc(m.content)}</div>
+        ${dmReadMark}
       </div>
       <div style="font-size:10px;color:#bbb;margin-top:3px;${isMine?'':'margin-left:34px'}">${fmtTime(m.created_at)}</div>
     </div>`;
