@@ -1488,9 +1488,8 @@ function switchTab(tab,btn){
   if(tab==='notice')clearNoticeBadge();
   if(tab==='feed'){
     renderFeedTab();
-    // 소통 탭 전환 시 채팅뷰 닫기
     const view=$('dm-chat-view');
-    if(view){ view.style.transition='none'; view.style.transform='translateX(100%)'; setTimeout(()=>view.style.transition='transform .28s cubic-bezier(.4,0,.2,1)',50); }
+    if(view){ view.style.transition='none'; view.style.transform='translateX(100%)'; }
     dmChatTarget=null;
   }
   if(tab==='admin')renderAdmin();
@@ -3830,12 +3829,15 @@ function applyViewportToModals(){
 function openDmWith(userId){
   const user=allMembers.find(u=>u.id===userId);
   if(!user) return;
-  dmChatTarget=user;
 
   // 기존 모달 닫기
   const cm=$('chat-modal'); if(cm) cm.style.display='none';
   const dm=$('user-dm-modal'); if(dm) dm.style.display='none';
   chatTarget=null; userDmTarget=null;
+
+  // 이미 같은 사람 채팅 열려있으면 무시
+  if(dmChatTarget?.id===userId) return;
+  dmChatTarget=user;
 
   // 읽음 처리
   const msgs=chatMessages[userId]||[];
@@ -3858,20 +3860,15 @@ function openDmWith(userId){
   const nameEl=$('dm-chat-name'); if(nameEl) nameEl.textContent=user.name+(isAdminRole(user)?' (관리자)':'');
   const subEl=$('dm-chat-sub'); if(subEl) subEl.textContent=user.title||'사역자';
 
-  // 슬라이드 인 (fixed 레이어 — main-screen 실제 위치에 정확히 맞춤)
+  // 슬라이드 인 (absolute — main-screen 기준)
   const view=$('dm-chat-view');
   if(view){
-    const ms=$('main-screen')||document.body;
-    const r=ms.getBoundingClientRect();
-    view.style.left=r.left+'px';
-    view.style.top='0';
-    view.style.width=r.width+'px';
-    view.style.height='100%';
-    view.style.marginLeft='0';
-    view.style.maxWidth='none';
-    requestAnimationFrame(()=>{
+    view.style.transition='none';
+    view.style.transform='translateX(100%)';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      view.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
       view.style.transform='translateX(0)';
-    });
+    }));
   }
 
   renderDmChatMessages();
@@ -3884,12 +3881,10 @@ function openDmWith(userId){
 
 function closeDmChatView(){
   const view=$('dm-chat-view');
-  if(view){
-    const ms=$('main-screen')||document.body;
-    const r=ms.getBoundingClientRect();
-    view.style.transform=`translateX(${r.width}px)`;
-    setTimeout(()=>{ dmChatTarget=null; }, 300);
-  }
+  if(!view) return;
+  view.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
+  view.style.transform='translateX(100%)';
+  setTimeout(()=>{ dmChatTarget=null; }, 320);
   updateFeedBadge();
   renderFeedTab();
 }
