@@ -1489,7 +1489,12 @@ function switchTab(tab,btn){
   if(tab==='feed'){
     renderFeedTab();
     const view=$('dm-chat-view');
-    if(view){ view.style.transition='none'; view.style.transform='translateX(100%)'; }
+    if(view){
+      view.style.transition='none';
+      view.style.transform='translateX(100%)';
+      view.style.pointerEvents='none';
+      view.style.opacity='0';
+    }
     dmChatTarget=null;
   }
   if(tab==='admin')renderAdmin();
@@ -3860,17 +3865,23 @@ function openDmWith(userId){
   const nameEl=$('dm-chat-name'); if(nameEl) nameEl.textContent=user.name+(isAdminRole(user)?' (관리자)':'');
   const subEl=$('dm-chat-sub'); if(subEl) subEl.textContent=user.title||'사역자';
 
-  // 슬라이드 인 (fixed — main-screen 너비에 맞춤)
+  // 레이어 올리기 — tab-feed 안에서 슬라이드 인
   const view=$('dm-chat-view');
   if(view){
-    const ms=$('main-screen');
-    if(ms){
-      const r=ms.getBoundingClientRect();
+    // tab-feed를 소통 탭으로 전환 보장
+    const tf=$('tab-feed');
+    if(tf) tf.style.display='block';
+    // 위치를 tab-feed의 app 컨테이너 기준으로 맞춤
+    const app=document.getElementById('app');
+    if(app){
+      const r=app.getBoundingClientRect();
       view.style.left=r.left+'px';
       view.style.width=r.width+'px';
     }
+    view.style.pointerEvents='auto';
+    view.style.opacity='1';
     view.style.transition='none';
-    view.style.transform=`translateX(${view.offsetWidth||400}px)`;
+    view.style.transform='translateX(100%)';
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       view.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
       view.style.transform='translateX(0)';
@@ -3888,10 +3899,13 @@ function openDmWith(userId){
 function closeDmChatView(){
   const view=$('dm-chat-view');
   if(!view) return;
-  const w=view.offsetWidth||400;
   view.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
-  view.style.transform=`translateX(${w}px)`;
-  setTimeout(()=>{ dmChatTarget=null; }, 320);
+  view.style.transform='translateX(100%)';
+  setTimeout(()=>{
+    dmChatTarget=null;
+    view.style.pointerEvents='none';
+    view.style.opacity='0';
+  }, 320);
   updateFeedBadge();
   renderFeedTab();
 }
