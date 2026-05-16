@@ -3858,10 +3858,16 @@ function openDmWith(userId){
   const nameEl=$('dm-chat-name'); if(nameEl) nameEl.textContent=user.name+(isAdminRole(user)?' (관리자)':'');
   const subEl=$('dm-chat-sub'); if(subEl) subEl.textContent=user.title||'사역자';
 
-  // 슬라이드 인
+  // 슬라이드 인 (fixed 레이어 — main-screen 기준으로 left 조정)
   const view=$('dm-chat-view');
   if(view){
-    view.style.display='flex';
+    const ms=$('main-screen');
+    if(ms){
+      const r=ms.getBoundingClientRect();
+      view.style.left=r.left+'px';
+      view.style.width=r.width+'px';
+      view.style.marginLeft='0';
+    }
     requestAnimationFrame(()=>{
       view.style.transform='translateX(0)';
     });
@@ -3878,7 +3884,13 @@ function openDmWith(userId){
 function closeDmChatView(){
   const view=$('dm-chat-view');
   if(view){
-    view.style.transform='translateX(100%)';
+    const ms=$('main-screen');
+    if(ms){
+      const r=ms.getBoundingClientRect();
+      view.style.transform=`translateX(${r.width}px)`;
+    } else {
+      view.style.transform='translateX(100%)';
+    }
     setTimeout(()=>{ dmChatTarget=null; }, 300);
   }
   updateFeedBadge();
