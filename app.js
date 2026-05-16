@@ -3919,18 +3919,31 @@ function _dmKeyboardHandler(on){
       if(!dmChatTarget) return;
       const vv=window.visualViewport;
       const inputArea=$('dm-chat-input-area');
-      if(!inputArea) return;
-      const keyboardH = vv ? Math.max(0, window.innerHeight-vv.height-vv.offsetTop) : 0;
-      inputArea.style.paddingBottom=`max(${keyboardH}px, env(safe-area-inset-bottom))`;
+      const panel=$('feed-panel-chat');
+      if(!inputArea||!panel) return;
+      // 키보드 높이 계산 (iOS/Android 공통)
+      const keyboardH = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
+      // 패널 높이를 키보드만큼 줄이기
+      panel.style.height = `calc(100svh - ${keyboardH}px)`;
+      panel.style.maxHeight = `calc(100svh - ${keyboardH}px)`;
       const msgs=$('dm-chat-messages');
       if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
     };
-    (window.visualViewport||window).addEventListener('resize', window._dmVpHandler);
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize', window._dmVpHandler);
+    } else {
+      window.addEventListener('resize', window._dmVpHandler);
+    }
   } else {
     if(!window._dmVpHandler) return;
-    (window.visualViewport||window).removeEventListener('resize', window._dmVpHandler);
-    const inputArea=$('dm-chat-input-area');
-    if(inputArea) inputArea.style.paddingBottom='max(10px, env(safe-area-inset-bottom))';
+    if(window.visualViewport){
+      window.visualViewport.removeEventListener('resize', window._dmVpHandler);
+    } else {
+      window.removeEventListener('resize', window._dmVpHandler);
+    }
+    // 패널 높이 원복
+    const panel=$('feed-panel-chat');
+    if(panel){ panel.style.height='100svh'; panel.style.maxHeight='100svh'; }
     window._dmVpHandler=null;
   }
 }
