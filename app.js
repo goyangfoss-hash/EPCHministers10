@@ -796,7 +796,7 @@ function startRealtime() {
       // 열려있는 채팅창 갱신
       if(chatTarget?.id===otherId)    renderChatMessages();
       if(userDmTarget?.id===otherId)  renderUserDmMessages();
-      if(dmChatTarget?.id===otherId)  renderDmChatMessages();
+      if(dmChatTarget?.id===otherId){ renderDmChatMessages(); const m=$('dm-chat-messages'); if(m) m.scrollTop=m.scrollHeight; }
       if($('tab-feed')?.style.display!=='none') renderFeedTab();
     }).subscribe(s=>console.log('[DM-out]',s));
 }
@@ -1481,20 +1481,23 @@ function switchTab(tab,btn){
       el.classList.remove('tab-slide-left','tab-slide-right');
     }
   });
-  $('hdr-title').textContent={cal:'캘린더',myshift:FEATURE_HISTORY()?'히스토리':'내 사역',search:'사역 검색',notice:'공지사항',feed:'소통',admin:'관리자'}[tab]||tab;
+  $('hdr-title').textContent={cal:'캘린더',myshift:FEATURE_HISTORY()?'히스토리':'내 사역',search:'사역 검색',notice:'공지사항',feed:'채팅',admin:'관리자'}[tab]||tab;
 
   if(tab==='myshift'){myShiftYear=curY;myShiftMonth=curM+1;renderMyShift();}
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
   if(tab==='feed'){
     renderFeedTab();
-    const view=$('dm-chat-view');
-    if(view){
-      view.style.transition='none';
-      view.style.transform='translateX(100%)';
-      view.style.pointerEvents='none';
-      view.style.opacity='0';
+    // 목록 패널로 즉시 복귀 (애니 없이)
+    const track=$('feed-track');
+    if(track){
+      track.style.transition='none';
+      track.style.transform='translateX(0)';
+      requestAnimationFrame(()=>{
+        track.style.transition='transform .32s cubic-bezier(.4,0,.2,1)';
+      });
     }
+    _dmKeyboardHandler(false);
     dmChatTarget=null;
   }
   if(tab==='admin')renderAdmin();
@@ -3423,12 +3426,18 @@ function renderFeedTab(){
 
   let html='';
 
+  const sectionLabel = (text) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 4px 8px">
+      <span style="font-size:11px;font-weight:500;color:var(--color-text-secondary,#888);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap">${text}</span>
+      <div style="flex:1;height:0.5px;background:var(--color-border-tertiary,#ebebeb)"></div>
+    </div>`;
+
   if(withMsg.length){
-    html+=`<div style="font-size:11px;font-weight:600;color:#bbb;letter-spacing:.06em;padding:14px 4px 6px">최근 대화</div>`;
+    html+=sectionLabel('최근 대화');
     withMsg.forEach(u=>{ html+=buildFriendRow(u,true); });
   }
 
-  html+=`<div style="font-size:11px;font-weight:600;color:#bbb;letter-spacing:.06em;padding:${withMsg.length?'18px':'14px'} 4px 6px">사역자</div>`;
+  html+=sectionLabel('멤버');
   noMsg.forEach(u=>{ html+=buildFriendRow(u,false); });
 
   el.innerHTML=html;
@@ -3443,18 +3452,27 @@ function buildFriendRow(u, hasMsg){
     ?`<img src="${u.avatar}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid #f0f0ea">`
     :`<div style="width:48px;height:48px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:${c.text};flex-shrink:0">${u.name[0]}</div>`;
   const adminTag=isAdminRole(u)?`<span style="font-size:10px;color:#185FA5;background:#E6F1FB;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:500">관리자</span>`:'';
+  const subText = hasMsg
+    ? (last ? `${last.from_id===cu.id?'나: ':''}${esc(last.content)}` : '')
+    : (u.title||'사역자');
+  const subColor = hasMsg
+    ? (unread ? 'var(--color-text-primary,#1a1a18)' : 'var(--color-text-secondary,#888)')
+    : 'var(--color-text-tertiary,#bbb)';
+  const subWeight = unread ? 500 : 400;
+
   return `<div onclick="openDmWith(${u.id})" style="display:flex;align-items:center;gap:12px;padding:10px 4px;cursor:pointer;border-radius:12px;transition:background .12s;-webkit-tap-highlight-color:transparent" onmousedown="this.style.background='#f0f0ea'" onmouseup="this.style.background=''" onmouseleave="this.style.background=''">
     <div style="position:relative;flex-shrink:0">
       ${avHtml}
-      ${unread?`<span style="position:absolute;top:-2px;right:-2px;background:#e11d48;border:2px solid var(--color-background-tertiary);border-radius:50%;min-width:17px;height:17px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0 3px">${unread}</span>`:''}
+      ${unread?`<span style="position:absolute;top:-2px;right:-2px;background:#e11d48;border:2px solid var(--color-background-tertiary,#f2f2f0);border-radius:50%;min-width:16px;height:16px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;padding:0 3px">${unread}</span>`:''}
     </div>
     <div style="flex:1;min-width:0">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
-        <span style="font-size:14px;font-weight:${unread?600:500};color:#1a1a18">${esc(u.name)}${adminTag}</span>
-        ${last?`<span style="font-size:11px;color:#bbb;flex-shrink:0">${fmtTime(last.created_at)}</span>`:''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+        <span style="font-size:14px;font-weight:${unread?600:500};color:var(--color-text-primary,#1a1a18)">${esc(u.name)}${adminTag}</span>
+        ${last?`<span style="font-size:11px;color:var(--color-text-tertiary,#bbb);flex-shrink:0">${fmtTime(last.created_at)}</span>`:''}
       </div>
-      <div style="font-size:12px;color:${unread?'#444':'#bbb'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${unread?500:400}">
-        ${hasMsg?(last?`${last.from_id===cu.id?'나: ':''}${esc(last.content)}`:''):(u.title||'사역자')}
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:12px;color:${subColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${subWeight};flex:1;min-width:0">${subText}</div>
+        ${unread?`<span style="background:#e11d48;color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:500;padding:0 4px;flex-shrink:0;margin-left:8px">${unread}</span>`:''}
       </div>
     </div>
   </div>`;
@@ -3831,6 +3849,12 @@ function applyViewportToModals(){
 }
 
 // ── 통합 채팅 열기 (슬라이드 인) ──
+function _slideTrack(toChatPanel){
+  const track=$('feed-track');
+  if(!track) return;
+  track.style.transform = toChatPanel ? 'translateX(-50%)' : 'translateX(0)';
+}
+
 function openDmWith(userId){
   const user=allMembers.find(u=>u.id===userId);
   if(!user) return;
@@ -3840,14 +3864,12 @@ function openDmWith(userId){
   const dm=$('user-dm-modal'); if(dm) dm.style.display='none';
   chatTarget=null; userDmTarget=null;
 
-  // 이미 같은 사람 채팅 열려있으면 무시
-  if(dmChatTarget?.id===userId) return;
   dmChatTarget=user;
 
   // 읽음 처리
   const msgs=chatMessages[userId]||[];
-  const unreadIds=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).map(m=>m.id);
   msgs.forEach(m=>{if(m.to_id===cu.id)m.is_read=true;});
+  const unreadIds=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).map(m=>m.id);
   if(!OFFLINE&&unreadIds.length>0){
     sb.from('direct_messages').update({is_read:true}).eq('to_id',cu.id).eq('from_id',userId)
       .then(({error})=>{if(error)console.warn('DM read:',error.message);});
@@ -3865,78 +3887,52 @@ function openDmWith(userId){
   const nameEl=$('dm-chat-name'); if(nameEl) nameEl.textContent=user.name+(isAdminRole(user)?' (관리자)':'');
   const subEl=$('dm-chat-sub'); if(subEl) subEl.textContent=user.title||'사역자';
 
-  // 레이어 올리기 — tab-feed 안에서 슬라이드 인
-  const view=$('dm-chat-view');
-  if(view){
-    // tab-feed를 소통 탭으로 전환 보장
-    const tf=$('tab-feed');
-    if(tf) tf.style.display='block';
-    // 위치를 tab-feed의 app 컨테이너 기준으로 맞춤
-    const app=document.getElementById('app');
-    if(app){
-      const r=app.getBoundingClientRect();
-      view.style.left=r.left+'px';
-      view.style.width=r.width+'px';
-    }
-    view.style.pointerEvents='auto';
-    view.style.opacity='1';
-    view.style.transition='none';
-    view.style.transform='translateX(100%)';
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      view.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
-      view.style.transform='translateX(0)';
-    }));
-  }
-
   renderDmChatMessages();
+
+  // 트랙을 오른쪽(채팅) 패널로 슬라이드
+  _slideTrack(true);
+
   setTimeout(()=>{
     const msgEl=$('dm-chat-messages');
     if(msgEl) msgEl.scrollTop=msgEl.scrollHeight;
     $('dm-chat-input')?.focus();
-  }, 300);
+  }, 340);
 
-  // 키보드 올라올 때 헤더 고정 유지
-  if(!window._dmVpHandler){
-    window._dmVpHandler = ()=>{
-      const view=$('dm-chat-view');
-      if(!view||!dmChatTarget) return;
-      const vv=window.visualViewport;
-      if(!vv) return;
-      // 헤더는 항상 vv.offsetTop 기준으로 고정
-      const header=$('dm-chat-header');
-      const messages=$('dm-chat-messages');
-      const inputArea=view.querySelector('div:last-child');
-      if(header) header.style.position='sticky';
-      // 채팅뷰 전체를 visualViewport에 맞춤
-      view.style.top=vv.offsetTop+'px';
-      view.style.height=vv.height+'px';
-      if(messages) messages.scrollTop=messages.scrollHeight;
-    };
-    window.visualViewport?.addEventListener('resize', window._dmVpHandler);
-    window.visualViewport?.addEventListener('scroll', window._dmVpHandler);
-  }
+  // 키보드 대응 (모든 모바일 환경)
+  _dmKeyboardHandler(true);
 }
 
 function closeDmChatView(){
-  const view=$('dm-chat-view');
-  if(!view) return;
-  // viewport 핸들러 제거 + 뷰 크기 원복
-  if(window._dmVpHandler){
-    window.visualViewport?.removeEventListener('resize', window._dmVpHandler);
-    window.visualViewport?.removeEventListener('scroll', window._dmVpHandler);
-    window._dmVpHandler=null;
-  }
-  view.style.top='';
-  view.style.height='';
-  view.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
-  view.style.transform='translateX(100%)';
-  setTimeout(()=>{
-    dmChatTarget=null;
-    view.style.pointerEvents='none';
-    view.style.opacity='0';
-  }, 320);
+  // 트랙을 왼쪽(목록) 패널로 복귀
+  _slideTrack(false);
+  // 키보드 핸들러 제거
+  _dmKeyboardHandler(false);
+  setTimeout(()=>{ dmChatTarget=null; }, 340);
   updateFeedBadge();
   renderFeedTab();
+}
+
+function _dmKeyboardHandler(on){
+  if(on){
+    if(window._dmVpHandler) return;
+    window._dmVpHandler = ()=>{
+      if(!dmChatTarget) return;
+      const vv=window.visualViewport;
+      const inputArea=$('dm-chat-input-area');
+      if(!inputArea) return;
+      const keyboardH = vv ? Math.max(0, window.innerHeight-vv.height-vv.offsetTop) : 0;
+      inputArea.style.paddingBottom=`max(${keyboardH}px, env(safe-area-inset-bottom))`;
+      const msgs=$('dm-chat-messages');
+      if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
+    };
+    (window.visualViewport||window).addEventListener('resize', window._dmVpHandler);
+  } else {
+    if(!window._dmVpHandler) return;
+    (window.visualViewport||window).removeEventListener('resize', window._dmVpHandler);
+    const inputArea=$('dm-chat-input-area');
+    if(inputArea) inputArea.style.paddingBottom='max(10px, env(safe-area-inset-bottom))';
+    window._dmVpHandler=null;
+  }
 }
 
 function renderDmChatMessages(){
