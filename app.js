@@ -639,7 +639,7 @@ async function saveFCMToken(token){
     // 현재 토큰 upsert
     await sb.from('fcm_tokens')
       .upsert({ user_id: cu.id, token, updated_at: new Date().toISOString() },
-               { onConflict: 'token' });
+               { onConflict: 'user_id,token' });
     // 오래된 토큰 정리 — 최근 2개만 유지 (Mac + iPhone 등 2기기 기준)
     const { data: tokens } = await sb.from('fcm_tokens')
       .select('token, updated_at')
@@ -3894,11 +3894,40 @@ function openDmWith(userId){
     if(msgEl) msgEl.scrollTop=msgEl.scrollHeight;
     $('dm-chat-input')?.focus();
   }, 300);
+
+  // 키보드 올라올 때 헤더 고정 유지
+  if(!window._dmVpHandler){
+    window._dmVpHandler = ()=>{
+      const view=$('dm-chat-view');
+      if(!view||!dmChatTarget) return;
+      const vv=window.visualViewport;
+      if(!vv) return;
+      // 헤더는 항상 vv.offsetTop 기준으로 고정
+      const header=$('dm-chat-header');
+      const messages=$('dm-chat-messages');
+      const inputArea=view.querySelector('div:last-child');
+      if(header) header.style.position='sticky';
+      // 채팅뷰 전체를 visualViewport에 맞춤
+      view.style.top=vv.offsetTop+'px';
+      view.style.height=vv.height+'px';
+      if(messages) messages.scrollTop=messages.scrollHeight;
+    };
+    window.visualViewport?.addEventListener('resize', window._dmVpHandler);
+    window.visualViewport?.addEventListener('scroll', window._dmVpHandler);
+  }
 }
 
 function closeDmChatView(){
   const view=$('dm-chat-view');
   if(!view) return;
+  // viewport 핸들러 제거 + 뷰 크기 원복
+  if(window._dmVpHandler){
+    window.visualViewport?.removeEventListener('resize', window._dmVpHandler);
+    window.visualViewport?.removeEventListener('scroll', window._dmVpHandler);
+    window._dmVpHandler=null;
+  }
+  view.style.top='';
+  view.style.height='';
   view.style.transition='transform .3s cubic-bezier(.4,0,.2,1)';
   view.style.transform='translateX(100%)';
   setTimeout(()=>{

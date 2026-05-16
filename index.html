@@ -657,7 +657,7 @@
   <div id="tab-feed" class="content" style="display:none;position:relative;min-height:calc(100vh - 56px - 80px)">
     <div id="feed-list"></div>
     <div id="dm-chat-view" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#f2f2f0;z-index:150;display:flex;flex-direction:column;opacity:0;pointer-events:none;clip-path:inset(0);transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s;">
-      <div id="dm-chat-header" style="background:#fff;padding:0 14px;height:56px;display:flex;align-items:center;gap:10px;border-bottom:0.5px solid #ebebeb;flex-shrink:0;">
+      <div id="dm-chat-header" style="background:#fff;padding:0 14px;height:56px;display:flex;align-items:center;gap:10px;border-bottom:0.5px solid #ebebeb;flex-shrink:0;position:sticky;top:0;z-index:10;">
         <button onclick="closeDmChatView()" style="width:40px;height:40px;border:none;background:#f0f0ea;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#1a1a18;font-size:22px;flex-shrink:0">&#8592;</button>
         <div id="dm-chat-av" style="width:36px;height:36px;border-radius:50%;flex-shrink:0"></div>
         <div style="flex:1;min-width:0">
