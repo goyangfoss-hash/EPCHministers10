@@ -165,8 +165,11 @@ function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEa
 function setVhVar(){
   document.documentElement.style.setProperty('--vh', (window.innerHeight*0.01)+'px');
   const nav=document.querySelector('.bottom-nav');
+  const hdr=document.querySelector('.app-header');
   const navH=nav?nav.offsetHeight:80;
+  const hdrH=hdr?hdr.offsetHeight:56;
   document.documentElement.style.setProperty('--nav-h', navH+'px');
+  document.documentElement.style.setProperty('--hdr-h', hdrH+'px');
 }
 setVhVar();
 window.addEventListener('resize', setVhVar);
@@ -3933,8 +3936,9 @@ function _dmKeyboardHandler(on){
       if(!panel) return;
       // 키보드 높이 계산
       const keyboardH = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
-      const navH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||80;
-      panel.style.height = `${window.innerHeight - navH - keyboardH}px`;
+      const navH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||172;
+      const hdrH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h'))||56;
+      panel.style.height = `${window.innerHeight - navH - hdrH - keyboardH}px`;
       const msgs=$('dm-chat-messages');
       if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
     };
@@ -3952,7 +3956,7 @@ function _dmKeyboardHandler(on){
     }
     // 패널 높이 원복
     const panel=$('feed-panel-chat');
-    if(panel){ panel.style.height=`calc(var(--vh,1vh)*100 - var(--nav-h,80px))`; }
+    if(panel){ panel.style.height=`calc(var(--vh,1vh)*100 - var(--nav-h,172px) - var(--hdr-h,56px))`; }
     window._dmVpHandler=null;
   }
 }
