@@ -161,9 +161,12 @@ function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEa
 // ══════════════════════════════════════════════════
 //  초기화
 // ══════════════════════════════════════════════════
-// 모바일 뷰포트 높이 변수 설정
+// 모바일 뷰포트 높이 + 네비게이션 높이 변수 설정
 function setVhVar(){
   document.documentElement.style.setProperty('--vh', (window.innerHeight*0.01)+'px');
+  const nav=document.querySelector('.bottom-nav');
+  const navH=nav?nav.offsetHeight:80;
+  document.documentElement.style.setProperty('--nav-h', navH+'px');
 }
 setVhVar();
 window.addEventListener('resize', setVhVar);
@@ -3896,7 +3899,8 @@ function openDmWith(userId){
 
   renderDmChatMessages();
 
-  // 트랙을 오른쪽(채팅) 패널로 슬라이드
+  // 패널 높이 갱신 후 슬라이드
+  setVhVar();
   _slideTrack(true);
 
   setTimeout(()=>{
@@ -3929,7 +3933,7 @@ function _dmKeyboardHandler(on){
       if(!panel) return;
       // 키보드 높이 계산
       const keyboardH = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
-      const navH = 80;
+      const navH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||80;
       panel.style.height = `${window.innerHeight - navH - keyboardH}px`;
       const msgs=$('dm-chat-messages');
       if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
@@ -3948,7 +3952,7 @@ function _dmKeyboardHandler(on){
     }
     // 패널 높이 원복
     const panel=$('feed-panel-chat');
-    if(panel){ panel.style.height=`calc(var(--vh,1vh)*100 - 80px)`; }
+    if(panel){ panel.style.height=`calc(var(--vh,1vh)*100 - var(--nav-h,80px))`; }
     window._dmVpHandler=null;
   }
 }
