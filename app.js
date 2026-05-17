@@ -773,16 +773,22 @@ function startRealtime() {
       // 해당 채팅창이 열려있으면 즉시 렌더 + 읽음 처리
       const isOpenAdmin = chatTarget?.id===otherId;
       const isOpenUser  = userDmTarget?.id===otherId;
-      if(isOpenAdmin || isOpenUser){
+      const isOpenDm    = dmChatTarget?.id===otherId;
+      if(isOpenAdmin || isOpenUser || isOpenDm){
         m.is_read=true;
         if(!OFFLINE) sb.from('direct_messages').update({is_read:true}).eq('id',m.id).then(()=>{});
         if(isOpenAdmin) renderChatMessages();
         if(isOpenUser)  renderUserDmMessages();
+        if(isOpenDm){
+          renderDmChatMessages();
+          const msgs=$('dm-chat-messages');
+          if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
+        }
       }
       updateFeedBadge();
       if($('tab-feed')?.style.display!=='none') renderFeedTab();
-      // FCM 푸시와 중복 방지 — 앱이 포그라운드(화면이 보이는 상태)일 때만 로컬 알림
-      if(document.visibilityState==='visible'){
+      // FCM 푸시와 중복 방지 — 채팅창 열려있거나 포그라운드일 때만 로컬 알림
+      if(!isOpenDm && document.visibilityState==='visible'){
         const sender=allMembers.find(u=>u.id===otherId);
         pushNotify(`${sender?.name||'누군가'}님의 메시지`, m.content, 'chat');
       }
@@ -1263,7 +1269,17 @@ function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}
       case 'openChat':
         // 채팅: 소통 탭 → 해당 유저 채팅창
         if(chatUserId){
-          setTimeout(()=>openDmWith(Number(chatUserId)), 150);
+          // 탭 전환 애니메이션 + renderFeedTab 완료 후 실행
+          const tryOpen = (retry=0)=>{
+            const track=$('feed-track');
+            const user=allMembers.find(u=>u.id===Number(chatUserId));
+            if(track && user){
+              openDmWith(Number(chatUserId));
+            } else if(retry < 10){
+              setTimeout(()=>tryOpen(retry+1), 100);
+            }
+          };
+          setTimeout(()=>tryOpen(), 200);
         }
         break;
 
