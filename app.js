@@ -161,6 +161,13 @@ function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEa
 // ══════════════════════════════════════════════════
 //  초기화
 // ══════════════════════════════════════════════════
+// 모바일 뷰포트 높이 변수 설정
+function setVhVar(){
+  document.documentElement.style.setProperty('--vh', (window.innerHeight*0.01)+'px');
+}
+setVhVar();
+window.addEventListener('resize', setVhVar);
+
 window.addEventListener('DOMContentLoaded', async () => {
   loadAlarms();
   const raw = localStorage.getItem('ws_session');
@@ -3918,14 +3925,12 @@ function _dmKeyboardHandler(on){
     window._dmVpHandler = ()=>{
       if(!dmChatTarget) return;
       const vv=window.visualViewport;
-      const inputArea=$('dm-chat-input-area');
       const panel=$('feed-panel-chat');
-      if(!inputArea||!panel) return;
-      // 키보드 높이 계산 (iOS/Android 공통)
+      if(!panel) return;
+      // 키보드 높이 계산
       const keyboardH = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
-      // 패널 높이를 키보드만큼 줄이기
-      panel.style.height = `calc(100svh - ${keyboardH}px)`;
-      panel.style.maxHeight = `calc(100svh - ${keyboardH}px)`;
+      const navH = 80;
+      panel.style.height = `${window.innerHeight - navH - keyboardH}px`;
       const msgs=$('dm-chat-messages');
       if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
     };
@@ -3943,7 +3948,7 @@ function _dmKeyboardHandler(on){
     }
     // 패널 높이 원복
     const panel=$('feed-panel-chat');
-    if(panel){ panel.style.height='100svh'; panel.style.maxHeight='100svh'; }
+    if(panel){ panel.style.height=`calc(var(--vh,1vh)*100 - 80px)`; }
     window._dmVpHandler=null;
   }
 }
