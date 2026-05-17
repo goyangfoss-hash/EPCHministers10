@@ -3912,7 +3912,35 @@ function openDmWith(userId){
     $('dm-chat-input')?.focus();
   }, 340);
 
-  // 키보드 대응 (모든 모바일 환경)
+  // 키보드 대응 — 입력창 포커스 시 패널 높이 즉시 조정
+  const inputEl=$('dm-chat-input');
+  if(inputEl && !inputEl._kbListeners){
+    inputEl._kbListeners = true;
+    inputEl.addEventListener('focus', ()=>{
+      // 키보드 올라오면 잠시 후 높이 재계산
+      setTimeout(()=>{
+        if(!dmChatTarget) return;
+        const vv=window.visualViewport;
+        const panel=$('feed-panel-chat');
+        if(!panel) return;
+        const navH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||172;
+        const hdrH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h'))||56;
+        const visH=vv?vv.height:window.innerHeight;
+        panel.style.height=`${visH - hdrH}px`;
+        const msgs=$('dm-chat-messages');
+        if(msgs) msgs.scrollTop=msgs.scrollHeight;
+      }, 350);
+    });
+    inputEl.addEventListener('blur', ()=>{
+      setTimeout(()=>{
+        const panel=$('feed-panel-chat');
+        if(!panel) return;
+        const navH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||172;
+        const hdrH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h'))||56;
+        panel.style.height=`calc(var(--vh,1vh)*100 - var(--nav-h,172px) - var(--hdr-h,56px))`;
+      }, 100);
+    });
+  }
   _dmKeyboardHandler(true);
 }
 
@@ -3983,14 +4011,16 @@ function renderDmChatMessages(){
     const avHtml=!isMine?(sender?.avatar
       ?`<img src="${sender.avatar}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-top:2px">`
       :`<div style="width:30px;height:30px;border-radius:50%;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${c.text};flex-shrink:0;margin-top:2px">${(dmChatTarget.name||'?')[0]}</div>`):'';
-    const readMark=isMine?(m.is_read?'':'<span style="font-size:10px;color:#bbb;margin-bottom:2px;flex-shrink:0">1</span>'):'';
+    const unread=isMine&&!m.is_read;
     return `${dateDivider}<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};margin-bottom:6px">
       <div style="display:flex;align-items:flex-end;gap:6px;flex-direction:${isMine?'row-reverse':'row'};max-width:min(78%,280px)">
         ${isMine?'':avHtml}
         <div style="padding:9px 13px;border-radius:${isMine?'18px 18px 4px 18px':'18px 18px 18px 4px'};background:${isMine?'#185FA5':'#fff'};color:${isMine?'#fff':'#1a1a18'};font-size:13px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,.06);word-break:keep-all;overflow-wrap:break-word;white-space:pre-wrap">${esc(m.content)}</div>
-        ${readMark}
       </div>
-      <div style="font-size:10px;color:#bbb;margin-top:2px;${isMine?'':'margin-left:36px'}">${fmtTime(m.created_at)}</div>
+      <div style="display:flex;align-items:center;gap:4px;margin-top:2px;flex-direction:${isMine?'row-reverse':'row'};${isMine?'':'margin-left:36px'}">
+        ${unread?'<span style="font-size:10px;color:#185FA5;font-weight:600">1</span>':''}
+        <span style="font-size:10px;color:#bbb">${fmtTime(m.created_at)}</span>
+      </div>
     </div>`;
   }).join('');
   el.scrollTop=el.scrollHeight;
