@@ -3900,6 +3900,11 @@ function openDmWith(userId){
 
   renderDmChatMessages();
 
+  // feed-panel-chat 높이 = tab-feed 높이 (네비바 이미 제외됨)
+  const tf=$('tab-feed');
+  const pc=$('feed-panel-chat');
+  if(tf&&pc) pc.style.height=tf.offsetHeight+'px';
+
   _slideTrack(true);
 
   setTimeout(()=>{
