@@ -161,17 +161,13 @@ function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEa
 // ══════════════════════════════════════════════════
 //  초기화
 // ══════════════════════════════════════════════════
-// 모바일 뷰포트 높이 + 네비게이션 높이 변수 설정
+// 네비게이션 실제 높이 CSS 변수로 설정
 function setVhVar(){
-  document.documentElement.style.setProperty('--vh', (window.innerHeight*0.01)+'px');
   const nav=document.querySelector('.bottom-nav');
-  const hdr=document.querySelector('.app-header');
-  const navH=nav?nav.offsetHeight:80;
-  const hdrH=hdr?hdr.offsetHeight:56;
-  document.documentElement.style.setProperty('--nav-h', navH+'px');
-  document.documentElement.style.setProperty('--hdr-h', hdrH+'px');
+  if(nav) document.documentElement.style.setProperty('--nav-h', nav.offsetHeight+'px');
 }
-setVhVar();
+// DOMContentLoaded 후에 측정
+window.addEventListener('load', setVhVar);
 window.addEventListener('resize', setVhVar);
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1484,7 +1480,8 @@ function switchTab(tab,btn){
   ['cal','myshift','search','notice','feed','admin'].forEach(t=>{
     const el=$(`tab-${t}`);
     if(t===tab){
-      el.style.display='block';
+      // feed 탭은 flex 레이아웃
+      el.style.display = t==='feed' ? 'flex' : 'block';
       // ★ 슬라이드 애니메이션
       el.classList.remove('tab-slide-left','tab-slide-right');
       el.offsetHeight; // reflow
@@ -3902,8 +3899,6 @@ function openDmWith(userId){
 
   renderDmChatMessages();
 
-  // 패널 높이 갱신 후 슬라이드
-  setVhVar();
   _slideTrack(true);
 
   setTimeout(()=>{
@@ -3912,82 +3907,47 @@ function openDmWith(userId){
     $('dm-chat-input')?.focus();
   }, 340);
 
-  // 키보드 대응 — 입력창 포커스 시 패널 높이 즉시 조정
+  // 키보드 대응 — visualViewport로 채팅 패널 높이 조정
   const inputEl=$('dm-chat-input');
   if(inputEl && !inputEl._kbListeners){
     inputEl._kbListeners = true;
-    inputEl.addEventListener('focus', ()=>{
-      // 키보드 올라오면 잠시 후 높이 재계산
-      setTimeout(()=>{
-        if(!dmChatTarget) return;
-        const vv=window.visualViewport;
-        const panel=$('feed-panel-chat');
-        if(!panel) return;
-        const navH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||172;
-        const hdrH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h'))||56;
-        const visH=vv?vv.height:window.innerHeight;
-        panel.style.height=`${visH - hdrH}px`;
-        const msgs=$('dm-chat-messages');
-        if(msgs) msgs.scrollTop=msgs.scrollHeight;
-      }, 350);
-    });
-    inputEl.addEventListener('blur', ()=>{
-      setTimeout(()=>{
-        const panel=$('feed-panel-chat');
-        if(!panel) return;
-        const navH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||172;
-        const hdrH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h'))||56;
-        panel.style.height=`calc(var(--vh,1vh)*100 - var(--nav-h,172px) - var(--hdr-h,56px))`;
-      }, 100);
-    });
+    const adjustPanel = ()=>{
+      if(!dmChatTarget) return;
+      const vv=window.visualViewport;
+      const tf=$('tab-feed');
+      if(!tf||!vv) return;
+      // 키보드 높이 = innerHeight - visualViewport.height
+      const kbH = Math.max(0, window.innerHeight - vv.height);
+      tf.style.height = kbH > 0
+        ? `calc(100dvh - 56px - var(--nav-h,172px) - ${kbH}px)`
+        : `calc(100dvh - 56px - var(--nav-h,172px))`;
+      const msgs=$('dm-chat-messages');
+      if(msgs) requestAnimationFrame(()=>msgs.scrollTop=msgs.scrollHeight);
+    };
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize', adjustPanel);
+      inputEl._adjustPanel = adjustPanel;
+    }
   }
-  _dmKeyboardHandler(true);
 }
 
 function closeDmChatView(){
-  // 트랙을 왼쪽(목록) 패널로 복귀
   _slideTrack(false);
-  // 키보드 핸들러 제거
-  _dmKeyboardHandler(false);
+  // visualViewport 리스너 제거 + tab-feed 높이 원복
+  const inputEl=$('dm-chat-input');
+  if(inputEl?._adjustPanel && window.visualViewport){
+    window.visualViewport.removeEventListener('resize', inputEl._adjustPanel);
+    inputEl._adjustPanel=null;
+    inputEl._kbListeners=false;
+  }
+  const tf=$('tab-feed');
+  if(tf) tf.style.height='';
   setTimeout(()=>{ dmChatTarget=null; }, 340);
   updateFeedBadge();
   renderFeedTab();
 }
 
-function _dmKeyboardHandler(on){
-  if(on){
-    if(window._dmVpHandler) return;
-    window._dmVpHandler = ()=>{
-      if(!dmChatTarget) return;
-      const vv=window.visualViewport;
-      const panel=$('feed-panel-chat');
-      if(!panel) return;
-      // 키보드 높이 계산
-      const keyboardH = vv ? Math.max(0, window.innerHeight - vv.height) : 0;
-      const navH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||172;
-      const hdrH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h'))||56;
-      panel.style.height = `${window.innerHeight - navH - hdrH - keyboardH}px`;
-      const msgs=$('dm-chat-messages');
-      if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
-    };
-    if(window.visualViewport){
-      window.visualViewport.addEventListener('resize', window._dmVpHandler);
-    } else {
-      window.addEventListener('resize', window._dmVpHandler);
-    }
-  } else {
-    if(!window._dmVpHandler) return;
-    if(window.visualViewport){
-      window.visualViewport.removeEventListener('resize', window._dmVpHandler);
-    } else {
-      window.removeEventListener('resize', window._dmVpHandler);
-    }
-    // 패널 높이 원복
-    const panel=$('feed-panel-chat');
-    if(panel){ panel.style.height=`calc(var(--vh,1vh)*100 - var(--nav-h,172px) - var(--hdr-h,56px))`; }
-    window._dmVpHandler=null;
-  }
-}
+function _dmKeyboardHandler(on){ /* CSS dvh + visualViewport로 대체 */ }
 
 function renderDmChatMessages(){
   const el=$('dm-chat-messages'); if(!el||!dmChatTarget) return;
