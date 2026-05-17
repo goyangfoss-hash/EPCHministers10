@@ -3900,10 +3900,9 @@ function openDmWith(userId){
 
   renderDmChatMessages();
 
-  // feed-panel-chat 높이 = tab-feed 높이 (네비바 이미 제외됨)
-  const tf=$('tab-feed');
-  const pc=$('feed-panel-chat');
-  if(tf&&pc) pc.style.height=tf.offsetHeight+'px';
+  // 네비바 숨기기 → 입력창 가림 문제 해결
+  const nav=document.querySelector('.bottom-nav');
+  if(nav) nav.style.display='none';
 
   _slideTrack(true);
 
@@ -3939,15 +3938,16 @@ function openDmWith(userId){
 
 function closeDmChatView(){
   _slideTrack(false);
-  // visualViewport 리스너 제거 + tab-feed 높이 원복
+  // 네비바 복원
+  const nav=document.querySelector('.bottom-nav');
+  if(nav) nav.style.display='';
+  // visualViewport 리스너 제거
   const inputEl=$('dm-chat-input');
   if(inputEl?._adjustPanel && window.visualViewport){
     window.visualViewport.removeEventListener('resize', inputEl._adjustPanel);
     inputEl._adjustPanel=null;
     inputEl._kbListeners=false;
   }
-  const tf=$('tab-feed');
-  if(tf) tf.style.height='';
   setTimeout(()=>{ dmChatTarget=null; }, 340);
   updateFeedBadge();
   renderFeedTab();
