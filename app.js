@@ -3876,15 +3876,16 @@ function openDmWith(userId){
 
   dmChatTarget=user;
 
-  // 읽음 처리
+  // 읽음 처리 — unreadIds 먼저 추출 후 로컬 상태 업데이트
   const msgs=chatMessages[userId]||[];
-  msgs.forEach(m=>{if(m.to_id===cu.id)m.is_read=true;});
   const unreadIds=msgs.filter(m=>m.to_id===cu.id&&!m.is_read).map(m=>m.id);
+  msgs.forEach(m=>{if(m.to_id===cu.id)m.is_read=true;});
   if(!OFFLINE&&unreadIds.length>0){
     sb.from('direct_messages').update({is_read:true}).eq('to_id',cu.id).eq('from_id',userId)
       .then(({error})=>{if(error)console.warn('DM read:',error.message);});
   }
   updateFeedBadge();
+  renderFeedTab(); // 목록 뱃지 즉시 갱신
 
   // 헤더 세팅
   const c=PALETTE[allMembers.indexOf(user)%PALETTE.length];
