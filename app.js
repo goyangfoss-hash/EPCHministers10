@@ -5284,8 +5284,8 @@ async function doApplySchedule(year, month, isMerge){
           ? `${shiftDesc} 사역이 등록되었습니다.`
           : `${shiftDesc} 사역이 변경되었습니다.`;
 
-        const shiftDay=Object.keys(shifts[0]?.days||{})[0]||'';
-        sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(shiftYear||curY), month:String(shiftMonth||curM+1), day:shiftDay}).catch(e=>console.warn('push err:', e));
+        const shiftDay=String(shifts[0]?.day||'');
+        sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
       }
       console.log(`[알림] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
     }
