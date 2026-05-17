@@ -781,8 +781,11 @@ function startRealtime() {
       }
       updateFeedBadge();
       if($('tab-feed')?.style.display!=='none') renderFeedTab();
-      const sender=allMembers.find(u=>u.id===otherId);
-      pushNotify(`${sender?.name||'누군가'}님의 메시지`, m.content, 'chat');
+      // FCM 푸시와 중복 방지 — 앱이 포그라운드(화면이 보이는 상태)일 때만 로컬 알림
+      if(document.visibilityState==='visible'){
+        const sender=allMembers.find(u=>u.id===otherId);
+        pushNotify(`${sender?.name||'누군가'}님의 메시지`, m.content, 'chat');
+      }
     }).subscribe(s=>console.log('[DM-in]',s));
 
   // ★ DM 실시간 구독 — 보낸 메시지(from_id) 채널
