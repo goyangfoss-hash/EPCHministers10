@@ -645,19 +645,14 @@ function loadScript(src){
 
 async function saveFCMToken(token){
   try {
-    // 현재 토큰 upsert
-    await sb.from('fcm_tokens')
-      .upsert({ user_id: cu.id, token, updated_at: new Date().toISOString() },
-               { onConflict: 'user_id,token' });
-    // 오래된 토큰 정리 — 최근 2개만 유지 (Mac + iPhone 등 2기기 기준)
-    const { data: tokens } = await sb.from('fcm_tokens')
-      .select('token, updated_at')
-      .eq('user_id', cu.id)
-      .order('updated_at', { ascending: false });
-    if(tokens && tokens.length > 2){
-      const toDelete = tokens.slice(2).map(t => t.token);
-      await sb.from('fcm_tokens').delete().in('token', toDelete);
-    }
+    // 기존 토큰 전부 삭제 후 새 토큰 1개만 저장
+    // → 한 번 발급된 토큰은 FCM이 UNREGISTERED 반환하기 전까지 영구 유지
+    await sb.from('fcm_tokens').delete().eq('user_id', cu.id);
+    await sb.from('fcm_tokens').insert({
+      user_id: cu.id,
+      token,
+      updated_at: new Date().toISOString()
+    });
   } catch(e){ console.warn('FCM token save error:', e.message); }
 }
 
