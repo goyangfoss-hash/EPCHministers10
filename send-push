@@ -1,89 +1,69 @@
-// supabase/functions/send-push/index.ts
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
+firebase.initializeApp({
+  apiKey: "AIzaSyAQLc0H_AoD7E2JF8Tji3ZgMWAiJxQ2SPY",
+  authDomain: "epchminister.firebaseapp.com",
+  projectId: "epchminister",
+  storageBucket: "epchminister.firebasestorage.app",
+  messagingSenderId: "110307544897",
+  appId: "1:110307544897:web:12e73220454bba67aedbc0"
+});
 
-async function getAccessToken() {
-  const sa = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!)
-  const now = Math.floor(Date.now() / 1000)
-  const encode = (obj: object) =>
-    btoa(JSON.stringify(obj)).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')
-  const header = encode({ alg: 'RS256', typ: 'JWT' })
-  const payload = encode({
-    iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/firebase.messaging',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now, exp: now + 3600,
-  })
-  const signingInput = `${header}.${payload}`
-  const keyData = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g,'')
-  const binaryKey = Uint8Array.from(atob(keyData), c => c.charCodeAt(0))
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8', binaryKey.buffer,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
-  )
-  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(signingInput))
-  const signature = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')
-  const jwt = `${signingInput}.${signature}`
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  })
-  return (await r.json()).access_token as string
-}
+const messaging = firebase.messaging();
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+let _isForeground = false;
+let _foregroundTimer = null;
 
-  try {
-    const body = await req.json().catch(() => ({}))
-    const { user_ids, title = '', body: msg = '', data = {} } = body
-
-    if (!user_ids?.length) {
-      return new Response(JSON.stringify({ sent: 0, ok: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
-
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-    const { data: tokens } = await supabase.from('fcm_tokens').select('user_id,token').in('user_id', user_ids)
-    if (!tokens?.length) return new Response(JSON.stringify({ sent: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-
-    const projectId = Deno.env.get('FIREBASE_PROJECT_ID')!
-    const accessToken = await getAccessToken()
-    const invalid: string[] = []
-    let sent = 0
-
-    await Promise.all(tokens.map(async ({ token }) => {
-      const r = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: {
-            token,
-            notification: { title, body: msg },
-            data,
-            webpush: {
-              notification: { title, body: msg, icon: '/icon-192.png', badge: '/icon-192.png',
-                tag: `epch-${data.tab||'msg'}`, renotify: true },
-              fcm_options: { link: data.url || '/' },
-            },
-          },
-        }),
-      })
-      const j = await r.json()
-      if (j.error?.details?.some((d: any) => ['UNREGISTERED','INVALID_ARGUMENT'].includes(d.errorCode))) invalid.push(token)
-      else if (r.ok) sent++
-    }))
-
-    if (invalid.length) await supabase.from('fcm_tokens').delete().in('token', invalid)
-    return new Response(JSON.stringify({ sent }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-  } catch(e) {
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+self.addEventListener('message', event => {
+  if(event.data?.type === 'FOREGROUND'){
+    _isForeground = true;
+    clearTimeout(_foregroundTimer);
+    _foregroundTimer = setTimeout(() => { _isForeground = false; }, 5000);
   }
-})
+});
+
+messaging.onBackgroundMessage(payload => {
+  if(_isForeground) return;
+
+  // notification 또는 data 필드에서 제목/내용 추출
+  const title = payload.notification?.title || payload.data?.title || '은평교회 사역스케줄러';
+  const body  = payload.notification?.body  || payload.data?.body  || '';
+  const data  = payload.data || {};
+  const tab   = data.tab || 'feed';
+
+  if ('setAppBadge' in self.navigator) {
+    self.navigator.setAppBadge(1).catch(() => {});
+  }
+
+  self.registration.showNotification(title, {
+    body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: 'epch-' + tab,
+    renotify: true,
+    data: { tab, chatUserId: data.chatUserId||'', url: data.url || '/?tab=' + tab },
+  });
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  if ('clearAppBadge' in self.navigator) {
+    self.navigator.clearAppBadge().catch(() => {});
+  }
+  const tab = event.notification.data?.tab || 'feed';
+  const chatUserId = event.notification.data?.chatUserId || '';
+  const targetUrl = new URL('/?tab=' + tab + (chatUserId ? '&chat=' + chatUserId : ''), self.location.origin).href;
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      for (const client of windowClients) {
+        if (new URL(client.url).origin === self.location.origin) {
+          client.focus();
+          client.postMessage({ type: 'NOTIF_CLICK', tab, chatUserId });
+          return;
+        }
+      }
+      return clients.openWindow(targetUrl);
+    })
+  );
+});
