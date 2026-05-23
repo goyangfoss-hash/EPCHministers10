@@ -653,6 +653,10 @@ async function saveFCMToken(token){
       token,
       updated_at: new Date().toISOString()
     });
+    // 로컬스토리지에도 저장
+    const s = JSON.parse(localStorage.getItem('euip_settings')||'{}');
+    s.fcmToken = token;
+    localStorage.setItem('euip_settings', JSON.stringify(s));
   } catch(e){ console.warn('FCM token save error:', e.message); }
 }
 
