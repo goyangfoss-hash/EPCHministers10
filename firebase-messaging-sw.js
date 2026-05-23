@@ -12,7 +12,6 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// ★ 포그라운드 상태 추적 (앱에서 postMessage로 전달)
 let _isForeground = false;
 let _foregroundTimer = null;
 
@@ -24,16 +23,16 @@ self.addEventListener('message', event => {
   }
 });
 
-// data 전용 메시지 처리
 messaging.onBackgroundMessage(payload => {
-  // ★ 포그라운드면 배너 표시 안 함 (앱이 토스트로 처리)
   if(_isForeground) return;
+
+  // notification 필드가 있으면 FCM이 자동으로 배너 표시 → SW에서 중복 표시 안 함
+  if(payload.notification) return;
 
   const data = payload.data || {};
   const title = data.title || '은평교회 사역스케줄러';
   const body  = data.body  || '';
   const tab   = data.tab   || 'feed';
-  const chatUserId = data.chatUserId || '';
 
   if ('setAppBadge' in self.navigator) {
     self.navigator.setAppBadge(1).catch(() => {});
@@ -45,11 +44,10 @@ messaging.onBackgroundMessage(payload => {
     badge: '/icon-192.png',
     tag: 'epch-' + tab,
     renotify: false,
-    data: { tab, chatUserId, url: data.url || '/?tab=' + tab },
+    data: { tab, url: data.url || '/?tab=' + tab },
   });
 });
 
-// 알림 클릭 → 앱 열고 해당 탭 이동
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   if ('clearAppBadge' in self.navigator) {
