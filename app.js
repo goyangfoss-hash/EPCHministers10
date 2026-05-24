@@ -1279,11 +1279,26 @@ function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}
       case 'openChat':
         // 채팅: 소통 탭 → 해당 유저 채팅창
         if(chatUserId){
-          // 탭 전환 애니메이션 + renderFeedTab 완료 후 실행
-          const tryOpen = (retry=0)=>{
-            const track=$('feed-track');
+          const tryOpen = async (retry=0)=>{
             const user=allMembers.find(u=>u.id===Number(chatUserId));
-            if(track && user){
+            if(user){
+              // ★ DM 먼저 로드 후 채팅창 열기
+              if(!chatMessages[user.id]?.length){
+                try {
+                  const {data} = await sb.from('direct_messages')
+                    .select('*')
+                    .or(`from_id.eq.${cu.id},to_id.eq.${cu.id}`)
+                    .order('created_at', {ascending:true});
+                  if(data){
+                    chatMessages = {};
+                    data.forEach(m=>{
+                      const otherId = m.from_id===cu.id ? m.to_id : m.from_id;
+                      if(!chatMessages[otherId]) chatMessages[otherId]=[];
+                      chatMessages[otherId].push(m);
+                    });
+                  }
+                } catch(e){ console.warn('DM reload:', e); }
+              }
               openDmWith(Number(chatUserId));
             } else if(retry < 10){
               setTimeout(()=>tryOpen(retry+1), 100);
