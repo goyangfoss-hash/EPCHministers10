@@ -786,9 +786,13 @@ function startRealtime() {
         if(isOpenAdmin) renderChatMessages();
         if(isOpenUser)  renderUserDmMessages();
         if(isOpenDm){
-          renderDmChatMessages();
-          const msgs=$('dm-chat-messages');
-          if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
+          // 슬라이드 닫히는 중이면 렌더 스킵 (transform이 0이면 채팅패널 보임)
+          const track=$('feed-track');
+          if(track && track.style.transform==='translateX(-50%)'){
+            renderDmChatMessages();
+            const msgs=$('dm-chat-messages');
+            if(msgs) requestAnimationFrame(()=>{ msgs.scrollTop=msgs.scrollHeight; });
+          }
         }
       }
       updateFeedBadge();
@@ -1522,6 +1526,11 @@ function switchTab(tab,btn){
   if(tab==='search'){renderSearchFilters();renderSearchResult();}
   if(tab==='notice')clearNoticeBadge();
   if(tab==='feed'){
+    // tab-feed height 설정 (네비바 높이 반영)
+    const tf=$('tab-feed');
+    const nav=document.querySelector('.bottom-nav');
+    const navH=nav?nav.offsetHeight:172;
+    if(tf) tf.style.height=`calc(100dvh - 56px - ${navH}px)`;
     renderFeedTab();
     // 목록 패널로 즉시 복귀 (애니 없이)
     const track=$('feed-track');
@@ -3910,7 +3919,7 @@ function openDmWith(userId){
       .then(({error})=>{if(error)console.warn('DM read:',error.message);});
   }
   updateFeedBadge();
-  renderFeedTab(); // 목록 뱃지 즉시 갱신
+  // 목록은 closeDmChatView에서 갱신하므로 여기선 생략
 
   // 헤더 세팅
   const c=PALETTE[allMembers.indexOf(user)%PALETTE.length];
@@ -3946,11 +3955,11 @@ function openDmWith(userId){
       const vv=window.visualViewport;
       const tf=$('tab-feed');
       if(!tf||!vv) return;
-      // 키보드 높이 = innerHeight - visualViewport.height
+      // 네비바가 숨겨진 상태이므로 헤더(56px)만 제외
       const kbH = Math.max(0, window.innerHeight - vv.height);
       tf.style.height = kbH > 0
-        ? `calc(100dvh - 56px - var(--nav-h,172px) - ${kbH}px)`
-        : `calc(100dvh - 56px - var(--nav-h,172px))`;
+        ? `calc(100dvh - 56px - ${kbH}px)`
+        : `calc(100dvh - 56px)`;
       const msgs=$('dm-chat-messages');
       if(msgs) requestAnimationFrame(()=>msgs.scrollTop=msgs.scrollHeight);
     };
@@ -3963,17 +3972,27 @@ function openDmWith(userId){
 
 function closeDmChatView(){
   _slideTrack(false);
-  // 네비바 복원
-  const nav=document.querySelector('.bottom-nav');
-  if(nav) nav.style.display='';
-  // visualViewport 리스너 제거
+
+  // visualViewport 리스너 완전 정리
   const inputEl=$('dm-chat-input');
-  if(inputEl?._adjustPanel && window.visualViewport){
-    window.visualViewport.removeEventListener('resize', inputEl._adjustPanel);
+  if(inputEl){
+    if(inputEl._adjustPanel && window.visualViewport){
+      window.visualViewport.removeEventListener('resize', inputEl._adjustPanel);
+    }
     inputEl._adjustPanel=null;
     inputEl._kbListeners=false;
   }
-  setTimeout(()=>{ dmChatTarget=null; }, 340);
+
+  // 슬라이드 애니메이션 완료 후 네비바 복원 + height 원복
+  setTimeout(()=>{
+    const nav=document.querySelector('.bottom-nav');
+    if(nav) nav.style.display='';
+    const tf=$('tab-feed');
+    const navH=nav?nav.offsetHeight:172;
+    if(tf) tf.style.height=`calc(100dvh - 56px - ${navH}px)`;
+    dmChatTarget=null;
+  }, 340);
+
   updateFeedBadge();
   renderFeedTab();
 }
@@ -4114,7 +4133,7 @@ async function sendDm(){
       const idx=chatMessages[chatTarget.id].findIndex(m=>m.id===tempId);
       if(idx>=0)chatMessages[chatTarget.id][idx]=data;
       renderChatMessages();
-      sendPushToUsers([chatTarget.id], `💬 ${cu.name}`, txt, 'feed', {action:'openChat', chatUserId:String(cu.id)});
+      // 푸시는 sendDmChat에서 통합 처리
     } else if(error){
       chatMessages[chatTarget.id]=chatMessages[chatTarget.id].filter(m=>m.id!==tempId);
       renderChatMessages();
@@ -4248,7 +4267,7 @@ async function sendUserDm(){
       if(idx>=0) chatMessages[userDmTarget.id][idx]=data;
       renderUserDmMessages();
       // 푸시 알림
-      sendPushToUsers([userDmTarget.id], `💬 ${cu.name}`, txt, 'feed', {action:'openChat', chatUserId:String(cu.id)});
+      // 푸시는 sendDmChat에서 통합 처리
     } else if(error){
       // 전송 실패 시 임시 메시지 제거
       chatMessages[userDmTarget.id] = chatMessages[userDmTarget.id].filter(m=>m.id!==tempId);
