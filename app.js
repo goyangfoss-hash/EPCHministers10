@@ -3934,9 +3934,11 @@ function openDmWith(userId){
 
   renderDmChatMessages();
 
-  // 네비바 숨기기 → 입력창 가림 문제 해결
+  // 네비바 숨기고 tab-feed 높이 전체로 확장
   const nav=document.querySelector('.bottom-nav');
   if(nav) nav.style.display='none';
+  const tf=$('tab-feed');
+  if(tf) tf.style.height='calc(100dvh - 56px)';
 
   _slideTrack(true);
 
