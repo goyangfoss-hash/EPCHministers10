@@ -1283,22 +1283,16 @@ function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}
             const user=allMembers.find(u=>u.id===Number(chatUserId));
             if(user){
               // ★ DM 먼저 로드 후 채팅창 열기
-              if(!chatMessages[user.id]?.length){
-                try {
-                  const {data} = await sb.from('direct_messages')
-                    .select('*')
-                    .or(`from_id.eq.${cu.id},to_id.eq.${cu.id}`)
-                    .order('created_at', {ascending:true});
-                  if(data){
-                    chatMessages = {};
-                    data.forEach(m=>{
-                      const otherId = m.from_id===cu.id ? m.to_id : m.from_id;
-                      if(!chatMessages[otherId]) chatMessages[otherId]=[];
-                      chatMessages[otherId].push(m);
-                    });
-                  }
-                } catch(e){ console.warn('DM reload:', e); }
-              }
+              // ★ 항상 해당 유저와의 최신 DM을 DB에서 가져와 merge
+              try {
+                const {data} = await sb.from('direct_messages')
+                  .select('*')
+                  .or(`and(from_id.eq.${cu.id},to_id.eq.${user.id}),and(from_id.eq.${user.id},to_id.eq.${cu.id})`)
+                  .order('created_at', {ascending:true});
+                if(data){
+                  chatMessages[user.id] = data; // 해당 유저 메시지만 교체
+                }
+              } catch(e){ console.warn('DM reload:', e); }
               openDmWith(Number(chatUserId));
             } else if(retry < 10){
               setTimeout(()=>tryOpen(retry+1), 100);
