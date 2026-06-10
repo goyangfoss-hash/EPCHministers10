@@ -1279,20 +1279,11 @@ function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}
       case 'openChat':
         // 채팅: 소통 탭 → 해당 유저 채팅창
         if(chatUserId){
-          const tryOpen = async (retry=0)=>{
+          // 탭 전환 애니메이션 + renderFeedTab 완료 후 실행
+          const tryOpen = (retry=0)=>{
+            const track=$('feed-track');
             const user=allMembers.find(u=>u.id===Number(chatUserId));
-            if(user){
-              // ★ DM 먼저 로드 후 채팅창 열기
-              // ★ 항상 해당 유저와의 최신 DM을 DB에서 가져와 merge
-              try {
-                const {data} = await sb.from('direct_messages')
-                  .select('*')
-                  .or(`and(from_id.eq.${cu.id},to_id.eq.${user.id}),and(from_id.eq.${user.id},to_id.eq.${cu.id})`)
-                  .order('created_at', {ascending:true});
-                if(data){
-                  chatMessages[user.id] = data; // 해당 유저 메시지만 교체
-                }
-              } catch(e){ console.warn('DM reload:', e); }
+            if(track && user){
               openDmWith(Number(chatUserId));
             } else if(retry < 10){
               setTimeout(()=>tryOpen(retry+1), 100);
@@ -3033,13 +3024,18 @@ function renderSearchResult(){
     const c = u ? PALETTE[allMembers.indexOf(u)%PALETTE.length] : {bg:'#f0f0ea',text:'#888'};
     const isOpen = srchOpenPerson === name;
 
-    // 사역 집계
+    // 사역 집계 (복합사역 / 분리하여 각각 카운트)
     const shifts = [];
     Object.entries(allSchedules).forEach(([y,ym])=>{
       Object.entries(ym).forEach(([m,d])=>{
         const days = d[name]||{};
-        Object.entries(days).forEach(([day,type])=>{
-          if(type) shifts.push({y:parseInt(y),m:parseInt(m),d:parseInt(day),type,dt:new Date(parseInt(y),parseInt(m)-1,parseInt(day))});
+        Object.entries(days).forEach(([day,rawType])=>{
+          if(!rawType) return;
+          const dt = new Date(parseInt(y),parseInt(m)-1,parseInt(day));
+          const types = rawType.includes('/') ? rawType.split('/').map(t=>t.trim()).filter(Boolean) : [rawType];
+          types.forEach(type=>{
+            shifts.push({y:parseInt(y),m:parseInt(m),d:parseInt(day),type,dt});
+          });
         });
       });
     });
@@ -3103,7 +3099,15 @@ function renderSearchResult(){
                 : `전체 ${totalCount}건 · 남은 ${futureCount}건`}
             </div>
           </div>
-          ${!isPending?`<span style="font-size:16px;color:${isOpen?meta.color:'var(--color-text-secondary)'};transition:transform .2s;display:inline-block;transform:${isOpen?'rotate(90deg)':'rotate(0deg)'}">${isOpen?'∨':'›'}</span>`:''}
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            ${!isPending?(()=>{
+              const isInTeam = myTeam.includes(name);
+              return isInTeam
+                ? `<button onclick="event.stopPropagation();removeFromTeam('${name}',this)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid #3B6D11;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:11px;color:#3B6D11;cursor:pointer;flex-shrink:0">✓</button>`
+                : `<button onclick="event.stopPropagation();addToTeam('${name}',this)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid #185FA5;background:none;display:flex;align-items:center;justify-content:center;font-size:16px;color:#185FA5;cursor:pointer;flex-shrink:0">+</button>`;
+            })():''}
+            ${!isPending?`<span style="font-size:16px;color:${isOpen?meta.color:'var(--color-text-secondary)'};transition:transform .2s;display:inline-block;transform:${isOpen?'rotate(90deg)':'rotate(0deg)'}">${isOpen?'∨':'›'}</span>`:''}
+          </div>
         </div>
         ${statsHtml}
       </div>`;
