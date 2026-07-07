@@ -2021,11 +2021,16 @@ function openDayModal(day){
   modalDate={year:curY,month:curM+1,day};
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
-  // ★ 모달 열릴 때 캘린더 완전 잠금 (스크롤 + 터치)
+  // ★ 모달 열릴 때 배경 스크롤 완전 잠금
+  const _st = window.scrollY||document.documentElement.scrollTop;
+  document.body.style.overflow='hidden';
+  document.body.style.position='fixed';
+  document.body.style.top=`-${_st}px`;
+  document.body.style.width='100%';
+  document.body.dataset.scrollY=String(_st);
   const tabCal=$('tab-cal');
   if(tabCal){
     tabCal.style.pointerEvents='none';
-    tabCal.style.overflow='hidden';
     tabCal.style.touchAction='none';
   }
   initDayModalSwipe();
@@ -2244,11 +2249,16 @@ function closeModalById(id){
   $(id).style.display='none';
   if(id==='comment-modal'){
     modalDate=null;
-    // ★ 모달 닫힐 때 캘린더 복원
+    // ★ 모달 닫힐 때 배경 스크롤 복원
+    const _savedY = parseInt(document.body.dataset.scrollY||'0');
+    document.body.style.overflow='';
+    document.body.style.position='';
+    document.body.style.top='';
+    document.body.style.width='';
+    window.scrollTo(0, _savedY);
     const tabCal=$('tab-cal');
     if(tabCal){
       tabCal.style.pointerEvents='';
-      tabCal.style.overflow='';
       tabCal.style.touchAction='';
     }
   }
