@@ -1762,6 +1762,19 @@ function renderCalendar(){
   const allMap={};
   Object.keys(d).forEach((name)=>{Object.entries(d[name]||{}).forEach(([ds,type])=>{const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;if(!allMap[dn])allMap[dn]=[];allMap[dn].push({name,type,c:tc(type)});});});
 
+  // ★ 새벽 사역이 항상 앞에 오도록 정렬
+  const SABYEOK_TYPES = ['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
+  Object.keys(allMap).forEach(dn=>{
+    allMap[dn].sort((a,b)=>{
+      const ai = SABYEOK_TYPES.indexOf(a.type.split('/')[0]);
+      const bi = SABYEOK_TYPES.indexOf(b.type.split('/')[0]);
+      if(ai>=0 && bi<0) return -1;
+      if(ai<0 && bi>=0) return 1;
+      if(ai>=0 && bi>=0) return ai-bi;
+      return 0;
+    });
+  });
+
   // ★ 카테고리 필터 적용
   const {fm, fmMy}=getFilteredMap(allMap, myRaw, myDays);
 
@@ -1872,6 +1885,18 @@ function _renderSideMonth(dir){
       const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;
       if(!allMap[dn])allMap[dn]=[];
       allMap[dn].push({name,type,c:tc(type)});
+    });
+  });
+  // ★ 새벽 사역 앞에 오도록 정렬
+  const SABYEOK_TYPES2=['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
+  Object.keys(allMap).forEach(dn=>{
+    allMap[dn].sort((a,b)=>{
+      const ai=SABYEOK_TYPES2.indexOf(a.type.split('/')[0]);
+      const bi=SABYEOK_TYPES2.indexOf(b.type.split('/')[0]);
+      if(ai>=0&&bi<0)return -1;
+      if(ai<0&&bi>=0)return 1;
+      if(ai>=0&&bi>=0)return ai-bi;
+      return 0;
     });
   });
   const {fm,fmMy}=getFilteredMap(allMap,myRaw,myDays);
