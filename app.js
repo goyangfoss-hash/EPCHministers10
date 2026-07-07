@@ -2001,7 +2001,7 @@ function renderDayModal(){
     return raw.split('/').map(t=>({name:n,type:t.trim()}));
   });
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
-  const SHIFT_ORDER={0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],2:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],3:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],4:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],5:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],6:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송']};
+  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[주일새벽]설교','[주일새벽]백업'],2:['[주일새벽]설교','[주일새벽]백업'],3:['[주일새벽]설교','[주일새벽]백업','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[주일새벽]설교','[주일새벽]백업'],5:['[주일새벽]설교','[주일새벽]백업','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
   const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
   function shiftRank(type){const t=(type||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});return pi===-1?999:pi;}
   const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
@@ -5048,11 +5048,257 @@ function editAIName(oldName){
   showToastMsg(`"${oldName}" → "${newName}" 수정됨`);
 }
 
-function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
-    const header=rows[0]||[];const hasNameCol=header.some(h=>h&&String(h).trim()==='이름');
+function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+
+    // ★ 원본 행정 엑셀 감지: '주일 새벽'+'주일 4부' 컬럼이 있으면 원본 형식
+    for(const sn of wb.SheetNames){
+      const ws=wb.Sheets[sn];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+      const flat=rows.flat().map(v=>String(v||''));
+      if(flat.some(v=>v.includes('주일 새벽'))&&flat.some(v=>v.includes('주일 4부'))){
+        processOriginalScheduleExcel(rows,file.name);
+        return;
+      }
+    }
+
+    // 기존 형식 처리
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+    const header=rows[0]||[];
+    const hasNameCol=header.some(h=>h&&String(h).trim()==='이름');
     if(hasNameCol){processExcelRows(rows,file.name,wb.SheetNames[0]);}
     else{processExcelRows2(rows,file.name,wb.SheetNames[0]);}
   }catch(err){showExcelErr('파일 읽기 오류: '+err.message);}};reader.readAsArrayBuffer(file);}
+
+// ════════════════════════════════════════════════════
+// ★ 원본 행정 엑셀 파서
+//   구조: 주일새벽|주일4부|주일저녁|수요설교|수요오전|수요저녁|금요기도회
+// ════════════════════════════════════════════════════
+function processOriginalScheduleExcel(allRows, fileName){
+  // 확정된 컬럼 인덱스 (행597 기준)
+  const COL_MAP = {
+    3:  '[주일새벽]설교',
+    4:  '[주일4부]설교',
+    5:  '[주일저녁]설교',
+    9:  '[수요]설교',
+    10: '[수요오전]사회',
+    11: '[수요오전]자막',
+    // 12: 수요오전 영상 → 이옥수 고정, 무시
+    13: '[수요저녁]사회',
+    14: '[수요저녁]자막',
+    15: '[수요저녁]영상',
+    17: '[금요]설교',
+    18: '[금요]자막',
+    19: '[금요]영상',
+  };
+  const 봉독_cols = { 5: '[주일저녁]봉독지원', 17: '[금요]기도지원' };
+
+  // ★ 가장 최신 블록 찾기
+  let lastBlockRow = -1, lastBlockYear = curY, lastBlockMonths = [curM+1];
+  for(let i=0; i<allRows.length; i++){
+    const flat = allRows[i].map(v=>String(v||'')).join(' ');
+    const m = flat.match(/(\d{4})년\s*(\d{1,2})-?(\d{1,2})?월.*설교/);
+    if(m){
+      lastBlockRow = i;
+      lastBlockYear = parseInt(m[1]);
+      lastBlockMonths = [parseInt(m[2])];
+      if(m[3]) lastBlockMonths.push(parseInt(m[3]));
+    }
+  }
+  if(lastBlockRow < 0){ showExcelErr('연도-월 블록을 찾을 수 없습니다.'); return; }
+
+  // 데이터 행 추출 (블록+3행 ~ 순서표 이전)
+  const dataRows = [];
+  for(let i=lastBlockRow+3; i<allRows.length; i++){
+    const row = allRows[i];
+    const first = String(row[0]||'').trim();
+    const second = String(row[1]||'').trim();
+    if(['①','②','③','④','⑤','⑥','⑦','⑧'].some(c=>first.includes(c)||second.includes(c))) break;
+    if(first.includes('수+금')||first.includes('주+금')) break;
+    if(row.every(v=>!v||String(v).trim()===''||String(v).trim()==='null')) continue;
+    dataRows.push(row);
+  }
+
+  const result = {}; // { name: { day: type } }
+  const 주일새벽_list = [];
+  let curMonth = lastBlockMonths[0];
+
+  function parseCell(v){
+    const val = String(v||'').trim().replace(/\r?\n/g,'');
+    if(!val||val==='null'||val==='undefined'||val==='nan') return [null,null];
+    const m = val.match(/^(.+?)[（(](.+?)[)）]/);
+    if(m) return [m[1].trim(), m[2].trim()];
+    return [val, null];
+  }
+
+  function cleanName(n){
+    if(!n) return null;
+    n = n.trim();
+    if(!n||['nan','None','undefined','null','이옥수'].includes(n)) return null;
+    if((n.includes('목사님')||n.includes('교수님'))&&n!=='담임목사님') return '담임목사님';
+    return n;
+  }
+
+  function addShift(name, dayStr, role){
+    name = cleanName(name);
+    if(!name||!dayStr||!role) return;
+    if(!result[name]) result[name]={};
+    const ex = result[name][dayStr];
+    if(ex){ if(!ex.includes(role)) result[name][dayStr]=ex+'/'+role; }
+    else result[name][dayStr]=role;
+  }
+
+  for(const row of dataRows){
+    // 월 감지 (col 1)
+    const mv = String(row[1]||'').trim();
+    if(/^\d{1,2}$/.test(mv)&&parseInt(mv)>=1&&parseInt(mv)<=12) curMonth=parseInt(mv);
+
+    const 주일일 = String(row[2]||'').trim();
+    const 수요일  = String(row[6]||'').trim();
+    const 금요일  = String(row[16]||'').trim();
+
+    // ── 주일 ──
+    if(/^\d{1,2}$/.test(주일일)){
+      const d = String(parseInt(주일일));
+      for(const col of [3,4,5]){
+        if(col>=row.length) continue;
+        const [main,sub] = parseCell(row[col]);
+        const mn = cleanName(main);
+        if(mn){ addShift(mn, d, COL_MAP[col]); if(col===3) 주일새벽_list.push([d,mn]); }
+        if(봉독_cols[col]&&sub) addShift(cleanName(sub), d, 봉독_cols[col]);
+      }
+    }
+
+    // ── 수요 ──
+    if(/^\d{1,2}$/.test(수요일)){
+      const d = String(parseInt(수요일));
+      for(const col of [9,10,11,13,14,15]){
+        if(col>=row.length) continue;
+        const [main] = parseCell(row[col]);
+        addShift(cleanName(main), d, COL_MAP[col]);
+      }
+    }
+
+    // ── 금요 ──
+    if(/^\d{1,2}$/.test(금요일)){
+      const d = String(parseInt(금요일));
+      for(const col of [17,18,19]){
+        if(col>=row.length) continue;
+        const [main,sub] = parseCell(row[col]);
+        addShift(cleanName(main), d, COL_MAP[col]);
+        if(col===17&&sub) addShift(cleanName(sub), d, 봉독_cols[17]);
+      }
+    }
+  }
+
+  // ★ 주일새벽 백업: 다음 주 설교자 자동 추가
+  for(let i=0;i<주일새벽_list.length-1;i++){
+    const [d] = 주일새벽_list[i];
+    const [,nextName] = 주일새벽_list[i+1];
+    if(nextName) addShift(nextName, d, '[주일새벽]백업');
+  }
+
+  const names = Object.keys(result);
+  if(!names.length){ showExcelErr('사역자 데이터를 찾을 수 없습니다.'); return; }
+
+  const year = lastBlockYear;
+
+  // 두 달치 처리
+  if(lastBlockMonths.length>1){
+    // 날짜 숫자만 있어서 월을 알 수 없음 → 날짜 범위로 구분
+    // 주일새벽_list의 날짜 순서로 월 구분
+    // dataRows에서 월 변경 시점을 추적해서 분리
+    const m1={}, m2={};
+    let splitMonth = lastBlockMonths[1];
+
+    // 각 이름별로 날짜+월 재추적
+    let cm = lastBlockMonths[0];
+    const dayMonthMap = {}; // { dayStr: month }
+    for(const row of dataRows){
+      const mv2 = String(row[1]||'').trim();
+      if(/^\d{1,2}$/.test(mv2)&&parseInt(mv2)>=1&&parseInt(mv2)<=12) cm=parseInt(mv2);
+      const 주일일2 = String(row[2]||'').trim();
+      const 수요일2 = String(row[6]||'').trim();
+      const 금요일2 = String(row[16]||'').trim();
+      if(/^\d{1,2}$/.test(주일일2)) dayMonthMap[String(parseInt(주일일2))+'_주일_'+cm] = cm;
+      if(/^\d{1,2}$/.test(수요일2)) dayMonthMap[String(parseInt(수요일2))+'_수요_'+cm] = cm;
+      if(/^\d{1,2}$/.test(금요일2)) dayMonthMap[String(parseInt(금요일2))+'_금요_'+cm] = cm;
+    }
+
+    // 단순하게: 월별로 분리된 데이터를 다시 수집
+    let cm2 = lastBlockMonths[0];
+    const resultByMonth = {};
+    for(const row of dataRows){
+      const mv2 = String(row[1]||'').trim();
+      if(/^\d{1,2}$/.test(mv2)&&parseInt(mv2)>=1&&parseInt(mv2)<=12) cm2=parseInt(mv2);
+      if(!resultByMonth[cm2]) resultByMonth[cm2]={};
+      const 주일일2=String(row[2]||'').trim();
+      const 수요일2=String(row[6]||'').trim();
+      const 금요일2=String(row[16]||'').trim();
+      const collectForMonth=(col_list, dayStr, withSub)=>{
+        if(!/^\d{1,2}$/.test(dayStr)) return;
+        const d=String(parseInt(dayStr));
+        for(const col of col_list){
+          if(col>=row.length) continue;
+          const [main,sub]=parseCell(row[col]);
+          const mn=cleanName(main);
+          if(mn){
+            if(!resultByMonth[cm2][mn]) resultByMonth[cm2][mn]={};
+            const ex=resultByMonth[cm2][mn][d];
+            const role=COL_MAP[col];
+            if(!role) continue;
+            if(ex){if(!ex.includes(role))resultByMonth[cm2][mn][d]=ex+'/'+role;}
+            else resultByMonth[cm2][mn][d]=role;
+          }
+          if(withSub&&봉독_cols[col]&&sub){
+            const sn=cleanName(sub);
+            if(sn){
+              if(!resultByMonth[cm2][sn]) resultByMonth[cm2][sn]={};
+              resultByMonth[cm2][sn][d]=봉독_cols[col];
+            }
+          }
+        }
+      };
+      collectForMonth([3,4,5], 주일일2, true);
+      collectForMonth([9,10,11,13,14,15], 수요일2, false);
+      collectForMonth([17,18,19], 금요일2, true);
+    }
+
+    // 주일새벽 백업 재적용
+    let sb_list=[];
+    for(const row of dataRows){
+      const mv2=String(row[1]||'').trim();
+      if(/^\d{1,2}$/.test(mv2)&&parseInt(mv2)>=1&&parseInt(mv2)<=12) cm2=parseInt(mv2);
+      const 주일일2=String(row[2]||'').trim();
+      if(/^\d{1,2}$/.test(주일일2)){
+        const [main]=parseCell(row[3]);
+        const mn=cleanName(main);
+        if(mn) sb_list.push([String(parseInt(주일일2)), cm2, mn]);
+      }
+    }
+    for(let i=0;i<sb_list.length-1;i++){
+      const [d,m,]= sb_list[i];
+      const [,,nextName]=sb_list[i+1];
+      if(nextName&&resultByMonth[m]){
+        if(!resultByMonth[m][nextName]) resultByMonth[m][nextName]={};
+        const ex=resultByMonth[m][nextName][d];
+        if(ex){if(!ex.includes('[주일새벽]백업'))resultByMonth[m][nextName][d]=ex+'/[주일새벽]백업';}
+        else resultByMonth[m][nextName][d]='[주일새벽]백업';
+      }
+    }
+
+    const months_data = lastBlockMonths.map(m=>({year, month:m, data:resultByMonth[m]||{}, fileName}));
+    window.parsedExcelMulti = months_data;
+    parsedExcel = {year, month:lastBlockMonths[0], data:months_data[0].data, fileName};
+    showAIPreviewMulti(months_data, `원본 엑셀 파싱 완료 — ${year}년 ${lastBlockMonths[0]}-${lastBlockMonths[1]}월`, fileName);
+
+  } else {
+    parsedExcel = {year, month:lastBlockMonths[0], data:result, fileName};
+    showAIPreview({year, month:lastBlockMonths[0], data:result,
+      summary:`원본 엑셀 파싱 완료 — ${names.length}명 / ${year}년 ${lastBlockMonths[0]}월`}, fileName);
+  }
+}
 
 // ★ 새 형식 파서: 날짜가 열, 이름이 셀값인 형식
 // 구조: 날짜행(5월 4일...) + 사역행(설교: 이름, 방송실: 이름...)
