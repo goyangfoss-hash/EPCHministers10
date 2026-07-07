@@ -2021,16 +2021,17 @@ function openDayModal(day){
   modalDate={year:curY,month:curM+1,day};
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
-  // ★ 모달 열릴 때 캘린더 스크롤만 잠금 (모달 스크롤은 유지)
+  // ★ 모달 열릴 때 캘린더 터치 잠금
   const tabCal=$('tab-cal');
   if(tabCal){
     tabCal._savedScrollTop = tabCal.scrollTop;
-    tabCal.style.overflow='hidden';
     tabCal.style.pointerEvents='none';
     tabCal.style.touchAction='none';
+    tabCal.style.userSelect='none';
+    // 스크롤 위치 고정
+    tabCal.style.overflow='hidden';
+    tabCal.style.height=tabCal.offsetHeight+'px';
   }
-  const calOuter=$('cal-swipe-outer');
-  if(calOuter) calOuter.style.touchAction='none';
   initDayModalSwipe();
 }
 
@@ -2247,19 +2248,19 @@ function closeModalById(id){
   $(id).style.display='none';
   if(id==='comment-modal'){
     modalDate=null;
-    // ★ 모달 닫힐 때 캘린더 스크롤 복원
+    // ★ 모달 닫힐 때 캘린더 복원
     const tabCal=$('tab-cal');
     if(tabCal){
-      tabCal.style.overflow='';
       tabCal.style.pointerEvents='';
       tabCal.style.touchAction='';
+      tabCal.style.userSelect='';
+      tabCal.style.overflow='';
+      tabCal.style.height='';
       if(tabCal._savedScrollTop!=null){
         tabCal.scrollTop=tabCal._savedScrollTop;
         tabCal._savedScrollTop=null;
       }
     }
-    const calOuter=$('cal-swipe-outer');
-    if(calOuter) calOuter.style.touchAction='';
   }
 }
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
