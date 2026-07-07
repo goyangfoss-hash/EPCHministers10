@@ -2018,6 +2018,9 @@ function openDayModal(day){
   modalDate={year:curY,month:curM+1,day};
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
+  // ★ 모달 열릴 때 캘린더 터치 차단
+  const tabCal=$('tab-cal');
+  if(tabCal) tabCal.style.pointerEvents='none';
   initDayModalSwipe();
 }
 
@@ -2230,7 +2233,15 @@ function renderDayModal(){
   curPanel.innerHTML = wHtml+alarmHtml;
   curPanel.scrollTop = 0;
 }
-function closeModalById(id){$(id).style.display='none';if(id==='comment-modal')modalDate=null;}
+function closeModalById(id){
+  $(id).style.display='none';
+  if(id==='comment-modal'){
+    modalDate=null;
+    // ★ 모달 닫힐 때 캘린더 터치 복원
+    const tabCal=$('tab-cal');
+    if(tabCal) tabCal.style.pointerEvents='';
+  }
+}
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
 async function submitComment(){
   const txt=$('comment-input').value.trim();if(!txt||!modalDate)return;
