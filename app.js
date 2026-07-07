@@ -181,6 +181,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 document.addEventListener('visibilitychange', async () => {
   if(!document.hidden && cu){
+    // ★ 날짜 모달이 열려있으면 새로고침 스킵
+    if($('comment-modal')?.style.display==='flex') return;
     refreshSchedules();
     // ★ 포그라운드 복귀 시 DM 최신 메시지 갱신
     try {
@@ -224,6 +226,7 @@ function initPullToRefresh(){
   const isModalOpen=()=>
     $('chat-modal')?.style.display==='flex' ||
     $('user-dm-modal')?.style.display==='flex' ||
+    $('comment-modal')?.style.display==='flex' ||
     $('alarm-panel')?.style.display==='block';
 
   // 스크롤 가능한 조상의 scrollTop 확인
