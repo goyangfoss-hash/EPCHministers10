@@ -340,6 +340,7 @@ function initCalendarSwipe(){
 
   el.addEventListener('touchmove', e=>{
     if(!started||locked||animating) return;
+    if(document.getElementById('comment-modal')?.style.display==='flex'){started=false;return;}
     dx=e.touches[0].clientX-sx;
     const dy=e.touches[0].clientY-sy;
     if(!isHorizontal && Math.abs(dx)<6 && Math.abs(dy)<6) return;
@@ -354,6 +355,7 @@ function initCalendarSwipe(){
   el.addEventListener('touchend', e=>{
     if(!started) return;
     started=false;
+    if(document.getElementById('comment-modal')?.style.display==='flex'){snapBack();return;}
     if(!isHorizontal||locked){ snapBack(); return; }
     const threshold=W()*0.25; // 25% 이상이면 전환
     if(Math.abs(dx)>threshold){
@@ -2045,6 +2047,7 @@ function initDayModalSwipe(){
   }
 
   box._touchStart = e=>{
+    e.stopPropagation(); // ★ 캘린더로 버블링 차단
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
     dx=0; dy=0; direction=null;
