@@ -2028,18 +2028,32 @@ function initDayModalSwipe(){
   if(box._touchEnd)   box.removeEventListener('touchend',   box._touchEnd);
   if(box._touchCancel)box.removeEventListener('touchcancel',box._touchCancel);
 
-  let sx=0, sy=0, dx=0, dy=0, direction=null;
-  let bodyScrollTop=0; // ★ 터치 시작 시 modal-body 스크롤 위치
+  let sx=0, sy=0, dx=0, dy=0, direction=null, bodyScrollTop=0;
   const H_THRESHOLD=55, V_THRESHOLD=90;
+
+  function preloadAdjacentPanels(){
+    if(!modalDate) return;
+    const {year,month,day}=modalDate;
+    const dim=new Date(year,month,0).getDate();
+    let pd=day-1,pm=month,py=year;
+    if(pd<1){pm--;if(pm<1){pm=12;py--;}pd=new Date(py,pm,0).getDate();}
+    let nd=day+1,nm=month,ny=year;
+    if(nd>dim){nm++;if(nm>12){nm=1;ny++;}nd=1;}
+    const prev=$('modal-panel-prev'), next=$('modal-panel-next');
+    if(prev) prev.innerHTML=getDayModalHTML(py,pm,pd);
+    if(next) next.innerHTML=getDayModalHTML(ny,nm,nd);
+  }
 
   box._touchStart = e=>{
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
     dx=0; dy=0; direction=null;
-    // ★ 현재 modal-body 스크롤 위치 기록
-    bodyScrollTop = $('modal-body')?.scrollTop || 0;
-    box.style.transition='none';
+    bodyScrollTop=$('modal-panel-cur')?.scrollTop||0;
+    preloadAdjacentPanels();
+    const track=$('modal-track');
+    if(track) track.style.transition='none';
   };
+
   box._touchMove = e=>{
     dx=e.touches[0].clientX-sx;
     dy=e.touches[0].clientY-sy;
@@ -2048,40 +2062,64 @@ function initDayModalSwipe(){
       direction=Math.abs(dx)>Math.abs(dy)?'horizontal':'vertical';
     }
     if(direction==='vertical'){
-      // ★ 스크롤이 최상단이고 아래로 드래그할 때만 dismiss
-      if(bodyScrollTop > 5 || dy < 0) return;
+      if(bodyScrollTop>5||dy<0) return;
       e.preventDefault();
       box.style.transform=`translateY(${dy}px)`;
       box.style.opacity=String(Math.max(0.4,1-dy/300));
     } else {
       e.preventDefault();
+      const track=$('modal-track');
+      if(track) track.style.transform=`translateX(calc(-33.333% + ${dx}px))`;
     }
   };
+
   box._touchEnd = e=>{
-    box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
-    if(direction==='vertical' && bodyScrollTop <= 5){
+    if(direction==='vertical'&&bodyScrollTop<=5){
+      box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
       if(dy>V_THRESHOLD){
         box.style.transform='translateY(100%)';
         box.style.opacity='0';
         setTimeout(()=>{
           closeModalById('comment-modal');
           box.style.transform=''; box.style.opacity=''; box.style.transition='';
+          const track=$('modal-track');
+          if(track){track.style.transition='none';track.style.transform='translateX(-33.333%)';}
         },250);
       } else {
         box.style.transform='translateY(0)'; box.style.opacity='1';
-        setTimeout(()=>{ box.style.transition=''; },250);
+        setTimeout(()=>{box.style.transition='';},250);
       }
     } else if(direction==='horizontal'){
-      box.style.transform=''; box.style.opacity=''; box.style.transition='';
-      if(Math.abs(dx)>H_THRESHOLD) moveDayModal(dx<0?1:-1);
+      const track=$('modal-track');
+      if(!track){direction=null;return;}
+      if(Math.abs(dx)>H_THRESHOLD){
+        const dir=dx<0?1:-1;
+        const targetX=dir>0?'-66.666%':'0%';
+        track.style.transition='transform .28s cubic-bezier(.25,.46,.45,.94)';
+        track.style.transform=`translateX(${targetX})`;
+        setTimeout(()=>commitDayMove(dir),280);
+      } else {
+        track.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
+        track.style.transform='translateX(-33.333%)';
+        setTimeout(()=>{track.style.transition='';},260);
+      }
     } else {
+      const track=$('modal-track');
+      if(track){
+        track.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
+        track.style.transform='translateX(-33.333%)';
+        setTimeout(()=>{track.style.transition='';},260);
+      }
       box.style.transform=''; box.style.opacity=''; box.style.transition='';
     }
     direction=null;
   };
+
   box._touchCancel = ()=>{
     direction=null;
     box.style.transform=''; box.style.opacity=''; box.style.transition='';
+    const track=$('modal-track');
+    if(track){track.style.transition='none';track.style.transform='translateX(-33.333%)';}
   };
 
   box.addEventListener('touchstart', box._touchStart, {passive:true});
@@ -2090,69 +2128,55 @@ function initDayModalSwipe(){
   box.addEventListener('touchcancel',box._touchCancel,{passive:true});
 }
 
-function moveDayModal(dir){
+function commitDayMove(dir){
   if(!modalDate) return;
   const {year,month,day}=modalDate;
   const dim=new Date(year,month,0).getDate();
-  let newDay=day+dir, newMonth=month, newYear=year;
-  if(newDay<1){
-    newMonth--; if(newMonth<1){newMonth=12;newYear--;}
-    newDay=new Date(newYear,newMonth,0).getDate();
-    curY=newYear; curM=newMonth-1; renderCalendar();
-  } else if(newDay>dim){
-    newMonth++; if(newMonth>12){newMonth=1;newYear++;}
-    newDay=1; curY=newYear; curM=newMonth-1; renderCalendar();
-  }
+  let nd=day+dir,nm=month,ny=year;
+  if(nd<1){nm--;if(nm<1){nm=12;ny--;}nd=new Date(ny,nm,0).getDate();curY=ny;curM=nm-1;renderCalendar();}
+  else if(nd>dim){nm++;if(nm>12){nm=1;ny++;}nd=1;curY=ny;curM=nm-1;renderCalendar();}
+  modalDate={year:ny,month:nm,day:nd};
   const DN=['일','월','화','수','목','금','토'];
   const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  modalDate={year:newYear,month:newMonth,day:newDay};
+  $('modal-title').textContent=`${MN[nm-1]} ${nd}일 (${DN[new Date(ny,nm-1,nd).getDay()]})`;
+  const prev=$('modal-panel-prev'),cur=$('modal-panel-cur'),next=$('modal-panel-next');
+  const track=$('modal-track');
+  if(!track||!prev||!cur||!next) return;
+  if(dir>0){prev.innerHTML=cur.innerHTML;cur.innerHTML=next.innerHTML;next.innerHTML='';}
+  else{next.innerHTML=cur.innerHTML;cur.innerHTML=prev.innerHTML;prev.innerHTML='';}
+  cur.scrollTop=0;
+  track.style.transition='none';
+  track.style.transform='translateX(-33.333%)';
+}
 
-  // ★ 타이틀 슬라이드 애니메이션
-  const title=$('modal-title');
-  if(title){
-    title.style.transition='none';
-    title.style.transform=`translateX(${dir>0?'30px':'-30px'})`;
-    title.style.opacity='0';
-    requestAnimationFrame(()=>{
-      title.textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
-      title.style.transition='transform .22s ease, opacity .22s ease';
-      title.style.transform='translateX(0)';
-      title.style.opacity='1';
-      setTimeout(()=>{ title.style.transition=''; },230);
-    });
-  } else {
-    $('modal-title').textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
-  }
+function moveDayModal(dir){ commitDayMove(dir); }
 
-  // ★ 바디 슬라이드 애니메이션 — 캘린더처럼 기존 내용이 나가고 새 내용이 들어옴
-  const body=$('modal-body');
-  const box=document.querySelector('#comment-modal .modal-box');
-  if(body && box){
-    // 1. 현재 내용을 반대 방향으로 내보냄
-    const outDir = dir>0 ? '-100%' : '100%';
-    const inDir  = dir>0 ? '100%'  : '-100%';
-    body.style.transition='transform .22s ease, opacity .22s ease';
-    body.style.transform=`translateX(${outDir})`;
-    body.style.opacity='0';
-    setTimeout(()=>{
-      // 2. 새 내용을 반대편에서 들어오게
-      renderDayModal();
-      body.style.transition='none';
-      body.style.transform=`translateX(${inDir})`;
-      body.style.opacity='0';
-      body.scrollTop=0;
-      requestAnimationFrame(()=>{
-        body.style.transition='transform .22s ease, opacity .22s ease';
-        body.style.transform='translateX(0)';
-        body.style.opacity='1';
-        setTimeout(()=>{
-          body.style.transition='';
-          body.style.transform='';
-          body.style.opacity='';
-        },230);
-      });
-    },220);
-  } else { renderDayModal(); }
+function getDayModalHTML(year,month,day){
+  if(!cu) return '';
+  const d=getMonthData(year,month);
+  const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).flatMap(n=>{
+    const raw=d[n][String(day)];
+    return raw.split('/').map(t=>({name:n,type:t.trim()}));
+  });
+  const myType=d[cu.name]?.[String(day)]||'';
+  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
+  const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
+  function shiftRank(t){const e=orderList.findIndex(o=>o.replace(/\s/g,'')===(t||'').replace(/\s/g,''));return e!==-1?e:999;}
+  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
+  let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
+  wHtml+=sorted.length?sorted.map(w=>{
+    const c=tc(w.type);
+    const isMe=w.name===cu.name,isTeam=!isMe&&myTeam?.includes(w.name);
+    let rs='padding:10px 14px;margin:2px 0;',ns='',ab=c.bg,ac=c.text,bg='';
+    if(isMe){rs=`background:${c.bg};border-left:3px solid ${c.text};padding:10px 11px;border-radius:6px;margin:2px 0;`;ns=`font-weight:500;color:${c.text}`;ab=c.text;ac='#fff';bg=`<span style="font-size:9px;background:${c.text};color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">나</span>`;}
+    else if(isTeam){rs=`background:#EAF3DE;border-left:3px solid #3B6D11;padding:10px 11px;border-radius:6px;margin:2px 0;`;ns=`font-weight:500;color:#27500A`;ab='#3B6D11';ac='#fff';bg=`<span style="font-size:9px;background:#3B6D11;color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">팀</span>`;}
+    return `<div class="day-worker-row" style="${rs}"><span class="duty-badge" style="background:${c.bg};color:${c.text};border:1px solid ${c.border}">${w.type}</span><div style="display:flex;align-items:center;gap:8px"><span class="worker-nm" style="${ns}">${w.name}${bg}</span><div class="worker-av" style="background:${ab};color:${ac}">${w.name[0]}</div></div></div>`;
+  }).join(''):`<p class="empty-state" style="padding:10px 0">사역자가 없습니다</p>`;
+  wHtml+='</div>';
+  const alarm=getAlarm(year,month,day);
+  let alarmHtml='';
+  if(myType){alarmHtml=`<div class="modal-section"><div class="modal-section-title">알림 설정</div><div class="alarm-setting-row"><div><div style="font-size:13px;font-weight:600">전날 알림 받기</div><div style="font-size:11px;color:#aaa;margin-top:2px">사역 전날 ${alarm.alarmTime||'18:30'}에 알림</div></div><div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${year},${month},${day});renderDayModal();updateAlarmBadge()"></div></div>${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}</div>`;}
+  return wHtml+alarmHtml;
 }
 function renderDayModal(){
   if(!modalDate)return;
@@ -2198,7 +2222,10 @@ function renderDayModal(){
   let alarmHtml='';
   if(myType){alarmHtml=`<div class="modal-section"><div class="modal-section-title">알림 설정</div><div class="alarm-setting-row"><div><div style="font-size:13px;font-weight:600">전날 알림 받기</div><div style="font-size:11px;color:#aaa;margin-top:2px">사역 전날 ${alarm.alarmTime||'18:30'}에 알림</div></div><div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${year},${month},${day});renderDayModal();updateAlarmBadge()"></div></div>${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}
     </div>`;}
-  $('modal-body').innerHTML=wHtml+alarmHtml;
+  // ★ 트랙 구조: modal-panel-cur에 렌더
+  const curPanel = $('modal-panel-cur') || $('modal-body');
+  curPanel.innerHTML = wHtml+alarmHtml;
+  curPanel.scrollTop = 0;
 }
 function closeModalById(id){$(id).style.display='none';if(id==='comment-modal')modalDate=null;}
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
