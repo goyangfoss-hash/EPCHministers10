@@ -2065,7 +2065,9 @@ function initDayModalSwipe(){
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
     dx=0; dy=0; direction=null;
-    bodyScrollTop=$('modal-panel-cur')?.scrollTop||0;
+    // ★ 터치 시작 시 패널 스크롤 위치 정확히 읽기
+    const curPanel=$('modal-panel-cur');
+    bodyScrollTop = curPanel ? curPanel.scrollTop : 0;
     preloadAdjacentPanels();
     const track=$('modal-track');
     if(track) track.style.transition='none';
@@ -2079,7 +2081,10 @@ function initDayModalSwipe(){
       direction=Math.abs(dx)>Math.abs(dy)?'horizontal':'vertical';
     }
     if(direction==='vertical'){
-      if(bodyScrollTop>5||dy<0) return;
+      // ★ 패널이 스크롤 중이거나 위로 드래그면 dismiss 안 함
+      const curPanel=$('modal-panel-cur');
+      const curScroll = curPanel ? curPanel.scrollTop : 0;
+      if(curScroll>10||dy<0) return;
       e.preventDefault();
       box.style.transform=`translateY(${dy}px)`;
       box.style.opacity=String(Math.max(0.4,1-dy/300));
