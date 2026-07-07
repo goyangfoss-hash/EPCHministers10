@@ -223,11 +223,13 @@ function initPullToRefresh(){
     return el;
   };
 
-  const isModalOpen=()=>
-    $('chat-modal')?.style.display==='flex' ||
-    $('user-dm-modal')?.style.display==='flex' ||
-    $('comment-modal')?.style.display==='flex' ||
-    $('alarm-panel')?.style.display==='block';
+  const isModalOpen=()=>{
+    if($('chat-modal')?.style.display==='flex') return true;
+    if($('user-dm-modal')?.style.display==='flex') return true;
+    if($('comment-modal')?.style.display==='flex') return true;
+    if($('alarm-panel')?.style.display==='block') return true;
+    return false;
+  };
 
   // 스크롤 가능한 조상의 scrollTop 확인
   const getTargetScrollTop=(target)=>{
@@ -244,18 +246,19 @@ function initPullToRefresh(){
   };
 
   document.addEventListener('touchstart', e=>{
-    if(isModalOpen()){ pulling=false; atTop=false; return; }
+    pulling=false; atTop=false;
+    if(isModalOpen()) return;
+    // ★ modal-panel 내부 터치면 PTR 비활성
+    if(e.target.closest('#comment-modal')) return;
     const st=getTargetScrollTop(e.touches[0].target);
-    // ★ 정확히 최상단(scrollTop===0)일 때만 PTR 준비
     atTop = (st===0);
     if(atTop){
       startY=e.touches[0].clientY;
-      pulling=false; // 아직 pulling 아님, touchmove에서 확정
     }
   }, {passive:true});
 
   document.addEventListener('touchmove', e=>{
-    if(isModalOpen()){ pulling=false; if(indicator) indicator.style.display='none'; return; }
+    if(isModalOpen()||e.target.closest('#comment-modal')){ pulling=false; atTop=false; if(indicator) indicator.style.display='none'; return; }
     if(!atTop) return;
     const st=getTargetScrollTop(e.touches[0].target);
     // ★ 이동 중 스크롤이 생기면 PTR 취소
@@ -2018,9 +2021,13 @@ function openDayModal(day){
   modalDate={year:curY,month:curM+1,day};
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
-  // ★ 모달 열릴 때 캘린더 터치 차단
+  // ★ 모달 열릴 때 캘린더 완전 잠금 (스크롤 + 터치)
   const tabCal=$('tab-cal');
-  if(tabCal) tabCal.style.pointerEvents='none';
+  if(tabCal){
+    tabCal.style.pointerEvents='none';
+    tabCal.style.overflow='hidden';
+    tabCal.style.touchAction='none';
+  }
   initDayModalSwipe();
 }
 
@@ -2237,9 +2244,13 @@ function closeModalById(id){
   $(id).style.display='none';
   if(id==='comment-modal'){
     modalDate=null;
-    // ★ 모달 닫힐 때 캘린더 터치 복원
+    // ★ 모달 닫힐 때 캘린더 복원
     const tabCal=$('tab-cal');
-    if(tabCal) tabCal.style.pointerEvents='';
+    if(tabCal){
+      tabCal.style.pointerEvents='';
+      tabCal.style.overflow='';
+      tabCal.style.touchAction='';
+    }
   }
 }
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
