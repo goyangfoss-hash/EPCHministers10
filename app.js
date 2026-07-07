@@ -1762,19 +1762,6 @@ function renderCalendar(){
   const allMap={};
   Object.keys(d).forEach((name)=>{Object.entries(d[name]||{}).forEach(([ds,type])=>{const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;if(!allMap[dn])allMap[dn]=[];allMap[dn].push({name,type,c:tc(type)});});});
 
-  // ★ 새벽 사역이 항상 앞에 오도록 정렬
-  const SABYEOK_TYPES = ['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
-  Object.keys(allMap).forEach(dn=>{
-    allMap[dn].sort((a,b)=>{
-      const ai = SABYEOK_TYPES.indexOf(a.type.split('/')[0]);
-      const bi = SABYEOK_TYPES.indexOf(b.type.split('/')[0]);
-      if(ai>=0 && bi<0) return -1;
-      if(ai<0 && bi>=0) return 1;
-      if(ai>=0 && bi>=0) return ai-bi;
-      return 0;
-    });
-  });
-
   // ★ 카테고리 필터 적용
   const {fm, fmMy}=getFilteredMap(allMap, myRaw, myDays);
 
@@ -1885,18 +1872,6 @@ function _renderSideMonth(dir){
       const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;
       if(!allMap[dn])allMap[dn]=[];
       allMap[dn].push({name,type,c:tc(type)});
-    });
-  });
-  // ★ 새벽 사역 앞에 오도록 정렬
-  const SABYEOK_TYPES2=['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
-  Object.keys(allMap).forEach(dn=>{
-    allMap[dn].sort((a,b)=>{
-      const ai=SABYEOK_TYPES2.indexOf(a.type.split('/')[0]);
-      const bi=SABYEOK_TYPES2.indexOf(b.type.split('/')[0]);
-      if(ai>=0&&bi<0)return -1;
-      if(ai<0&&bi>=0)return 1;
-      if(ai>=0&&bi>=0)return ai-bi;
-      return 0;
     });
   });
   const {fm,fmMy}=getFilteredMap(allMap,myRaw,myDays);
@@ -2017,6 +1992,90 @@ function openDayModal(day){
   modalDate={year:curY,month:curM+1,day};
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
+  initDayModalSwipe();
+}
+
+// ★ 날짜 모달 좌우 스와이프 — 이전/다음 날 이동
+function initDayModalSwipe(){
+  const box = document.querySelector('#comment-modal .modal-box');
+  if(!box || box._swipeInit) return;
+  box._swipeInit = true;
+
+  let sx=0, sy=0, dx=0, started=false, locked=false;
+  const THRESHOLD = 60;
+
+  box.addEventListener('touchstart', e=>{
+    if(e.touches.length>1) return;
+    sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+    dx=0; started=true; locked=false;
+  }, {passive:true});
+
+  box.addEventListener('touchmove', e=>{
+    if(!started||locked) return;
+    dx=e.touches[0].clientX-sx;
+    const dy=e.touches[0].clientY-sy;
+    if(!locked){
+      if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
+      if(Math.abs(dy)>Math.abs(dx)){ locked=true; return; } // 세로 스크롤 허용
+    }
+    e.preventDefault();
+  }, {passive:false});
+
+  box.addEventListener('touchend', e=>{
+    if(!started||locked){ started=false; return; }
+    started=false;
+    if(Math.abs(dx)<THRESHOLD) return;
+    const dir = dx<0 ? 1 : -1; // 왼쪽=-1(다음), 오른쪽=1(이전)
+    moveDayModal(dir);
+  }, {passive:true});
+
+  box.addEventListener('touchcancel', ()=>{ started=false; }, {passive:true});
+}
+
+function moveDayModal(dir){
+  if(!modalDate) return;
+  const {year, month, day} = modalDate;
+  const dim = new Date(year, month, 0).getDate(); // 해당 월 마지막 날
+  let newDay = day + dir;
+  let newMonth = month;
+  let newYear = year;
+
+  if(newDay < 1){
+    // 이전 달로
+    newMonth--;
+    if(newMonth < 1){ newMonth=12; newYear--; }
+    newDay = new Date(newYear, newMonth, 0).getDate();
+    curY=newYear; curM=newMonth-1;
+    renderCalendar();
+  } else if(newDay > dim){
+    // 다음 달로
+    newMonth++;
+    if(newMonth > 12){ newMonth=1; newYear++; }
+    newDay = 1;
+    curY=newYear; curM=newMonth-1;
+    renderCalendar();
+  }
+
+  const DN=['일','월','화','수','목','금','토'];
+  const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  modalDate={year:newYear, month:newMonth, day:newDay};
+  $('modal-title').textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
+
+  // 슬라이드 애니메이션
+  const body = $('modal-body');
+  if(body){
+    body.style.transition='none';
+    body.style.transform=`translateX(${dir>0?'-':'+'}40px)`;
+    body.style.opacity='0';
+    requestAnimationFrame(()=>{
+      renderDayModal();
+      body.style.transition='transform .2s ease, opacity .2s ease';
+      body.style.transform='translateX(0)';
+      body.style.opacity='1';
+    });
+  } else {
+    renderDayModal();
+  }
 }
 function renderDayModal(){
   if(!modalDate)return;
@@ -2026,7 +2085,7 @@ function renderDayModal(){
     return raw.split('/').map(t=>({name:n,type:t.trim()}));
   });
   const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
-  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
+  const SHIFT_ORDER={0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],2:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],3:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],4:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],5:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],6:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송']};
   const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
   function shiftRank(type){const t=(type||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});return pi===-1?999:pi;}
   const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
@@ -5073,161 +5132,11 @@ function editAIName(oldName){
   showToastMsg(`"${oldName}" → "${newName}" 수정됨`);
 }
 
-function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{
-    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-
-    // ★ 원본 행정 엑셀 감지: '주일 새벽' + '주일 4부' 컬럼 포함 여부
-    for(const sn of wb.SheetNames){
-      const ws=wb.Sheets[sn];
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-      const flat=rows.flat().map(v=>String(v||''));
-      if(flat.some(v=>v.includes('주일 새벽'))&&flat.some(v=>v.includes('주일 4부'))){
-        processOriginalScheduleExcel(rows,file.name);
-        return;
-      }
-    }
-
-    // 기존 형식 처리
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-    const header=rows[0]||[];
-    const hasNameCol=header.some(h=>h&&String(h).trim()==='이름');
+function parseExcelFile(file){const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});// 형식 자동 감지: 1행에 '이름'이 있으면 기존 형식, 없으면 새 형식
+    const header=rows[0]||[];const hasNameCol=header.some(h=>h&&String(h).trim()==='이름');
     if(hasNameCol){processExcelRows(rows,file.name,wb.SheetNames[0]);}
     else{processExcelRows2(rows,file.name,wb.SheetNames[0]);}
   }catch(err){showExcelErr('파일 읽기 오류: '+err.message);}};reader.readAsArrayBuffer(file);}
-
-// ════════════════════════════════════════════════════
-// ★ 원본 행정 엑셀 파서
-// ════════════════════════════════════════════════════
-function processOriginalScheduleExcel(allRows, fileName){
-  const COL_MAP = {
-    3:  '[주일새벽]설교',
-    4:  '[주일4부]설교',
-    5:  '[주일저녁]설교',
-    9:  '[수요]설교',
-    10: '[수요오전]사회',
-    11: '[수요오전]자막',
-    13: '[수요저녁]사회',
-    14: '[수요저녁]자막',
-    15: '[수요저녁]영상',
-    17: '[금요]설교',
-    18: '[금요]자막',
-    19: '[금요]영상',
-  };
-  const 봉독_cols = { 5: '[주일저녁]봉독지원', 17: '[금요]기도지원' };
-
-  // 최신 블록 찾기
-  let lastBlockRow=-1, lastBlockYear=curY, lastBlockMonths=[curM+1];
-  for(let i=0;i<allRows.length;i++){
-    const flat=allRows[i].map(v=>String(v||'')).join(' ');
-    const m=flat.match(/(\d{4})년\s*(\d{1,2})-?(\d{1,2})?월.*설교/);
-    if(m){lastBlockRow=i;lastBlockYear=parseInt(m[1]);lastBlockMonths=[parseInt(m[2])];if(m[3])lastBlockMonths.push(parseInt(m[3]));}
-  }
-  if(lastBlockRow<0){showExcelErr('연도-월 블록을 찾을 수 없습니다.');return;}
-
-  // 데이터 행 추출
-  const dataRows=[];
-  for(let i=lastBlockRow+3;i<allRows.length;i++){
-    const row=allRows[i];
-    const first=String(row[0]||'').trim();
-    if(['①','②','③','④','⑤','⑥','⑦','⑧'].some(c=>first.includes(c)))break;
-    if(row.every(v=>!v||String(v).trim()===''||String(v).trim()==='null'))continue;
-    dataRows.push(row);
-  }
-
-  const resultByMonth={};
-  const 주일새벽_list=[];
-  let curMonth=lastBlockMonths[0];
-
-  function parseCell(v){
-    const val=String(v||'').trim().replace(/\r?\n/g,'');
-    if(!val||val==='null'||val==='undefined'||val==='nan')return[null,null];
-    const m=val.match(/^(.+?)[（(](.+?)[)）]/);
-    if(m)return[m[1].trim(),m[2].trim()];
-    return[val,null];
-  }
-
-  function cleanName(n){
-    if(!n)return null;
-    n=n.trim();
-    if(!n||['nan','None','undefined','null','이옥수'].includes(n))return null;
-    if((n.includes('목사님')||n.includes('교수님'))&&n!=='담임목사님')return '담임목사님';
-    return n;
-  }
-
-  function addShift(name,dayStr,role){
-    name=cleanName(name);
-    if(!name||!dayStr||!role)return;
-    if(!resultByMonth[curMonth])resultByMonth[curMonth]={};
-    if(!resultByMonth[curMonth][name])resultByMonth[curMonth][name]={};
-    const ex=resultByMonth[curMonth][name][dayStr];
-    if(ex){if(!ex.includes(role))resultByMonth[curMonth][name][dayStr]=ex+'/'+role;}
-    else resultByMonth[curMonth][name][dayStr]=role;
-  }
-
-  for(const row of dataRows){
-    const mv=String(row[1]||'').trim();
-    if(/^\d{1,2}$/.test(mv)&&parseInt(mv)>=1&&parseInt(mv)<=12)curMonth=parseInt(mv);
-
-    const 주일일=String(row[2]||'').trim();
-    const 수요일=String(row[6]||'').trim();
-    const 금요일=String(row[16]||'').trim();
-
-    if(/^\d{1,2}$/.test(주일일)){
-      const d=String(parseInt(주일일));
-      for(const col of[3,4,5]){
-        if(col>=row.length)continue;
-        const[main,sub]=parseCell(row[col]);
-        const mn=cleanName(main);
-        if(mn){addShift(mn,d,COL_MAP[col]);if(col===3)주일새벽_list.push([d,curMonth,mn]);}
-        if(봉독_cols[col]&&sub)addShift(cleanName(sub),d,봉독_cols[col]);
-      }
-    }
-    if(/^\d{1,2}$/.test(수요일)){
-      const d=String(parseInt(수요일));
-      for(const col of[9,10,11,13,14,15]){
-        if(col>=row.length)continue;
-        const[main]=parseCell(row[col]);
-        addShift(cleanName(main),d,COL_MAP[col]);
-      }
-    }
-    if(/^\d{1,2}$/.test(금요일)){
-      const d=String(parseInt(금요일));
-      for(const col of[17,18,19]){
-        if(col>=row.length)continue;
-        const[main,sub]=parseCell(row[col]);
-        addShift(cleanName(main),d,COL_MAP[col]);
-        if(col===17&&sub)addShift(cleanName(sub),d,봉독_cols[17]);
-      }
-    }
-  }
-
-  // 주일새벽 백업
-  for(let i=0;i<주일새벽_list.length-1;i++){
-    const[d,m]=주일새벽_list[i];
-    const[,,nextName]=주일새벽_list[i+1];
-    if(nextName){
-      if(!resultByMonth[m])resultByMonth[m]={};
-      if(!resultByMonth[m][nextName])resultByMonth[m][nextName]={};
-      const ex=resultByMonth[m][nextName][d];
-      if(ex){if(!ex.includes('[주일새벽]백업'))resultByMonth[m][nextName][d]=ex+'/[주일새벽]백업';}
-      else resultByMonth[m][nextName][d]='[주일새벽]백업';
-    }
-  }
-
-  const year=lastBlockYear;
-  if(lastBlockMonths.length>1){
-    const months_data=lastBlockMonths.map(m=>({year,month:m,data:resultByMonth[m]||{},fileName}));
-    window.parsedExcelMulti=months_data;
-    parsedExcel={year,month:lastBlockMonths[0],data:months_data[0].data,fileName};
-    showAIPreviewMulti(months_data,`원본 엑셀 파싱 완료 — ${year}년 ${lastBlockMonths[0]}-${lastBlockMonths[1]}월`,fileName);
-  } else {
-    const data=resultByMonth[lastBlockMonths[0]]||{};
-    parsedExcel={year,month:lastBlockMonths[0],data,fileName};
-    const names=Object.keys(data);
-    showAIPreview({year,month:lastBlockMonths[0],data,summary:`원본 엑셀 파싱 완료 — ${names.length}명 / ${year}년 ${lastBlockMonths[0]}월`},fileName);
-  }
-}
 
 // ★ 새 형식 파서: 날짜가 열, 이름이 셀값인 형식
 // 구조: 날짜행(5월 4일...) + 사역행(설교: 이름, 방송실: 이름...)
