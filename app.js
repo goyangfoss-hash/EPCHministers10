@@ -2023,19 +2023,21 @@ function openDayModal(day){
 function initDayModalSwipe(){
   const box = document.querySelector('#comment-modal .modal-box');
   if(!box) return;
-  // 기존 리스너 제거 후 재등록
   if(box._touchStart) box.removeEventListener('touchstart', box._touchStart);
   if(box._touchMove)  box.removeEventListener('touchmove',  box._touchMove);
   if(box._touchEnd)   box.removeEventListener('touchend',   box._touchEnd);
   if(box._touchCancel)box.removeEventListener('touchcancel',box._touchCancel);
 
   let sx=0, sy=0, dx=0, dy=0, direction=null;
-  const H_THRESHOLD=60, V_THRESHOLD=80;
+  let bodyScrollTop=0; // ★ 터치 시작 시 modal-body 스크롤 위치
+  const H_THRESHOLD=55, V_THRESHOLD=90;
 
   box._touchStart = e=>{
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
     dx=0; dy=0; direction=null;
+    // ★ 현재 modal-body 스크롤 위치 기록
+    bodyScrollTop = $('modal-body')?.scrollTop || 0;
     box.style.transition='none';
   };
   box._touchMove = e=>{
@@ -2046,7 +2048,8 @@ function initDayModalSwipe(){
       direction=Math.abs(dx)>Math.abs(dy)?'horizontal':'vertical';
     }
     if(direction==='vertical'){
-      if(dy<0) return;
+      // ★ 스크롤이 최상단이고 아래로 드래그할 때만 dismiss
+      if(bodyScrollTop > 5 || dy < 0) return;
       e.preventDefault();
       box.style.transform=`translateY(${dy}px)`;
       box.style.opacity=String(Math.max(0.4,1-dy/300));
@@ -2056,7 +2059,7 @@ function initDayModalSwipe(){
   };
   box._touchEnd = e=>{
     box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
-    if(direction==='vertical'){
+    if(direction==='vertical' && bodyScrollTop <= 5){
       if(dy>V_THRESHOLD){
         box.style.transform='translateY(100%)';
         box.style.opacity='0';
@@ -2103,19 +2106,52 @@ function moveDayModal(dir){
   const DN=['일','월','화','수','목','금','토'];
   const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   modalDate={year:newYear,month:newMonth,day:newDay};
-  $('modal-title').textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
-  const body=$('modal-body');
-  if(body){
-    body.style.transition='none';
-    body.style.transform=`translateX(${dir>0?'-':'+'}40px)`;
-    body.style.opacity='0';
+
+  // ★ 타이틀 슬라이드 애니메이션
+  const title=$('modal-title');
+  if(title){
+    title.style.transition='none';
+    title.style.transform=`translateX(${dir>0?'30px':'-30px'})`;
+    title.style.opacity='0';
     requestAnimationFrame(()=>{
-      renderDayModal();
-      body.style.transition='transform .2s ease, opacity .2s ease';
-      body.style.transform='translateX(0)';
-      body.style.opacity='1';
-      setTimeout(()=>{ body.style.transition=''; body.style.transform=''; body.style.opacity=''; },220);
+      title.textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
+      title.style.transition='transform .22s ease, opacity .22s ease';
+      title.style.transform='translateX(0)';
+      title.style.opacity='1';
+      setTimeout(()=>{ title.style.transition=''; },230);
     });
+  } else {
+    $('modal-title').textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
+  }
+
+  // ★ 바디 슬라이드 애니메이션 — 캘린더처럼 기존 내용이 나가고 새 내용이 들어옴
+  const body=$('modal-body');
+  const box=document.querySelector('#comment-modal .modal-box');
+  if(body && box){
+    // 1. 현재 내용을 반대 방향으로 내보냄
+    const outDir = dir>0 ? '-100%' : '100%';
+    const inDir  = dir>0 ? '100%'  : '-100%';
+    body.style.transition='transform .22s ease, opacity .22s ease';
+    body.style.transform=`translateX(${outDir})`;
+    body.style.opacity='0';
+    setTimeout(()=>{
+      // 2. 새 내용을 반대편에서 들어오게
+      renderDayModal();
+      body.style.transition='none';
+      body.style.transform=`translateX(${inDir})`;
+      body.style.opacity='0';
+      body.scrollTop=0;
+      requestAnimationFrame(()=>{
+        body.style.transition='transform .22s ease, opacity .22s ease';
+        body.style.transform='translateX(0)';
+        body.style.opacity='1';
+        setTimeout(()=>{
+          body.style.transition='';
+          body.style.transform='';
+          body.style.opacity='';
+        },230);
+      });
+    },220);
   } else { renderDayModal(); }
 }
 function renderDayModal(){
