@@ -1992,139 +1992,6 @@ function openDayModal(day){
   modalDate={year:curY,month:curM+1,day};
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
-  initDayModalSwipe();
-}
-
-// ★ 날짜 모달 좌우 스와이프 — 이전/다음 날 이동
-function initDayModalSwipe(){
-  const box = document.querySelector('#comment-modal .modal-box');
-  if(!box || box._swipeInit) return;
-  box._swipeInit = true;
-
-  let sx=0, sy=0, dx=0, dy=0, started=false, direction=null;
-  const H_THRESHOLD = 60;  // 좌우 스와이프 임계값
-  const V_THRESHOLD = 80;  // 아래로 드래그 닫기 임계값
-
-  box.addEventListener('touchstart', e=>{
-    if(e.touches.length>1) return;
-    sx=e.touches[0].clientX; sy=e.touches[0].clientY;
-    dx=0; dy=0; started=true; direction=null;
-    box.style.transition='none';
-  }, {passive:true});
-
-  box.addEventListener('touchmove', e=>{
-    if(!started) return;
-    dx=e.touches[0].clientX-sx;
-    dy=e.touches[0].clientY-sy;
-
-    // 방향 확정
-    if(!direction){
-      if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
-      direction = Math.abs(dx)>Math.abs(dy) ? 'horizontal' : 'vertical';
-    }
-
-    if(direction==='vertical'){
-      // 아래로만 드래그 허용 (위로는 막음)
-      if(dy<0) return;
-      e.preventDefault();
-      box.style.transform=`translateY(${dy}px)`;
-      box.style.opacity=String(Math.max(0.4, 1-dy/300));
-    } else {
-      // 좌우 스와이프 — 세로 스크롤 차단
-      e.preventDefault();
-    }
-  }, {passive:false});
-
-  box.addEventListener('touchend', e=>{
-    if(!started){ return; }
-    started=false;
-    box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
-
-    if(direction==='vertical'){
-      if(dy>V_THRESHOLD){
-        // 아래로 충분히 드래그 → 닫기
-        box.style.transform='translateY(100%)';
-        box.style.opacity='0';
-        setTimeout(()=>{
-          closeModalById('comment-modal');
-          box.style.transform='';
-          box.style.opacity='';
-          box.style.transition='';
-        }, 250);
-      } else {
-        // 원위치 복귀
-        box.style.transform='translateY(0)';
-        box.style.opacity='1';
-        setTimeout(()=>{ box.style.transition=''; }, 250);
-      }
-    } else if(direction==='horizontal'){
-      box.style.transform='';
-      box.style.opacity='';
-      box.style.transition='';
-      if(Math.abs(dx)>H_THRESHOLD){
-        const dir = dx<0 ? 1 : -1;
-        moveDayModal(dir);
-      }
-    } else {
-      box.style.transform='';
-      box.style.opacity='';
-      box.style.transition='';
-    }
-    direction=null;
-  }, {passive:true});
-
-  box.addEventListener('touchcancel', ()=>{
-    started=false; direction=null;
-    box.style.transform='';
-    box.style.opacity='';
-    box.style.transition='';
-  }, {passive:true});
-}
-
-function moveDayModal(dir){
-  if(!modalDate) return;
-  const {year, month, day} = modalDate;
-  const dim = new Date(year, month, 0).getDate(); // 해당 월 마지막 날
-  let newDay = day + dir;
-  let newMonth = month;
-  let newYear = year;
-
-  if(newDay < 1){
-    // 이전 달로
-    newMonth--;
-    if(newMonth < 1){ newMonth=12; newYear--; }
-    newDay = new Date(newYear, newMonth, 0).getDate();
-    curY=newYear; curM=newMonth-1;
-    renderCalendar();
-  } else if(newDay > dim){
-    // 다음 달로
-    newMonth++;
-    if(newMonth > 12){ newMonth=1; newYear++; }
-    newDay = 1;
-    curY=newYear; curM=newMonth-1;
-    renderCalendar();
-  }
-
-  const DN=['일','월','화','수','목','금','토'];
-  const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  modalDate={year:newYear, month:newMonth, day:newDay};
-  $('modal-title').textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
-
-  // 슬라이드 애니메이션
-  const body = $('modal-body');
-  if(body){
-    body.style.transition='none';
-    body.style.transform=`translateX(${dir>0?'-':'+'}40px)`;
-    body.style.opacity='0';
-    requestAnimationFrame(()=>{
-      renderDayModal();
-      body.style.transition='transform .2s ease, opacity .2s ease';
-      body.style.transform='translateX(0)';
-      body.style.opacity='1';
-    });
-  } else {
-    renderDayModal();
-  }
 }
 function renderDayModal(){
   if(!modalDate)return;
@@ -2133,8 +2000,10 @@ function renderDayModal(){
     const raw=d[n][String(day)];
     return raw.split('/').map(t=>({name:n,type:t.trim()}));
   });
-  const myType=d[cu.name]?.[String(day)]||'',alarm=getAlarm(year,month,day);
-  const SHIFT_ORDER={0:['[새벽/저녁]설교','[새벽]설교','[백업]설교','[주일4부]설교','[저녁]설교','[저녁]기도'],1:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],2:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],3:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[수요]설교','[수요]사회','[오전]사회','[수요]자막','[오전]자막','[저녁]사회','[저녁]자막','[저녁]영상'],4:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송'],5:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송','[금요]설교','[금요]기도','[금요]자막','[금요]영상'],6:['[새벽/저녁]설교','[새벽]설교','[새벽]방송실','[새벽]방송']};
+  // ★ modalDate 기준으로 정확하게 내 사역 읽기
+  const myType=getMonthData(year,month)[cu.name]?.[String(day)]||'';
+  const alarm=getAlarm(year,month,day);
+  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
   const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
   function shiftRank(type){const t=(type||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});return pi===-1?999:pi;}
   const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
