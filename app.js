@@ -1762,6 +1762,16 @@ function renderCalendar(){
   const allMap={};
   Object.keys(d).forEach((name)=>{Object.entries(d[name]||{}).forEach(([ds,type])=>{const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;if(!allMap[dn])allMap[dn]=[];allMap[dn].push({name,type,c:tc(type)});});});
 
+  // ★ 새벽 사역 항상 앞에 오도록 정렬
+  const _SBT=['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
+  Object.keys(allMap).forEach(dn=>{
+    allMap[dn].sort((a,b)=>{
+      const ai=_SBT.indexOf(a.type.split('/')[0].trim());
+      const bi=_SBT.indexOf(b.type.split('/')[0].trim());
+      if(ai>=0&&bi<0)return -1; if(ai<0&&bi>=0)return 1;
+      if(ai>=0&&bi>=0)return ai-bi; return 0;
+    });
+  });
   // ★ 카테고리 필터 적용
   const {fm, fmMy}=getFilteredMap(allMap, myRaw, myDays);
 
@@ -1872,6 +1882,17 @@ function _renderSideMonth(dir){
       const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;
       if(!allMap[dn])allMap[dn]=[];
       allMap[dn].push({name,type,c:tc(type)});
+    });
+  });
+
+  // ★ 새벽 사역 항상 앞에 오도록 정렬
+  const _SBT2=['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
+  Object.keys(allMap).forEach(dn=>{
+    allMap[dn].sort((a,b)=>{
+      const ai=_SBT2.indexOf(a.type.split('/')[0].trim());
+      const bi=_SBT2.indexOf(b.type.split('/')[0].trim());
+      if(ai>=0&&bi<0)return -1; if(ai<0&&bi>=0)return 1;
+      if(ai>=0&&bi>=0)return ai-bi; return 0;
     });
   });
   const {fm,fmMy}=getFilteredMap(allMap,myRaw,myDays);
@@ -1992,6 +2013,107 @@ function openDayModal(day){
   modalDate={year:curY,month:curM+1,day};
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
+  initDayModalSwipe();
+}
+
+// ★ 날짜 모달 스와이프 — 좌우: 이전/다음 날, 아래: 닫기
+function initDayModalSwipe(){
+  const box = document.querySelector('#comment-modal .modal-box');
+  if(!box) return;
+  // 기존 리스너 제거 후 재등록
+  if(box._touchStart) box.removeEventListener('touchstart', box._touchStart);
+  if(box._touchMove)  box.removeEventListener('touchmove',  box._touchMove);
+  if(box._touchEnd)   box.removeEventListener('touchend',   box._touchEnd);
+  if(box._touchCancel)box.removeEventListener('touchcancel',box._touchCancel);
+
+  let sx=0, sy=0, dx=0, dy=0, direction=null;
+  const H_THRESHOLD=60, V_THRESHOLD=80;
+
+  box._touchStart = e=>{
+    if(e.touches.length>1) return;
+    sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+    dx=0; dy=0; direction=null;
+    box.style.transition='none';
+  };
+  box._touchMove = e=>{
+    dx=e.touches[0].clientX-sx;
+    dy=e.touches[0].clientY-sy;
+    if(!direction){
+      if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
+      direction=Math.abs(dx)>Math.abs(dy)?'horizontal':'vertical';
+    }
+    if(direction==='vertical'){
+      if(dy<0) return;
+      e.preventDefault();
+      box.style.transform=`translateY(${dy}px)`;
+      box.style.opacity=String(Math.max(0.4,1-dy/300));
+    } else {
+      e.preventDefault();
+    }
+  };
+  box._touchEnd = e=>{
+    box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
+    if(direction==='vertical'){
+      if(dy>V_THRESHOLD){
+        box.style.transform='translateY(100%)';
+        box.style.opacity='0';
+        setTimeout(()=>{
+          closeModalById('comment-modal');
+          box.style.transform=''; box.style.opacity=''; box.style.transition='';
+        },250);
+      } else {
+        box.style.transform='translateY(0)'; box.style.opacity='1';
+        setTimeout(()=>{ box.style.transition=''; },250);
+      }
+    } else if(direction==='horizontal'){
+      box.style.transform=''; box.style.opacity=''; box.style.transition='';
+      if(Math.abs(dx)>H_THRESHOLD) moveDayModal(dx<0?1:-1);
+    } else {
+      box.style.transform=''; box.style.opacity=''; box.style.transition='';
+    }
+    direction=null;
+  };
+  box._touchCancel = ()=>{
+    direction=null;
+    box.style.transform=''; box.style.opacity=''; box.style.transition='';
+  };
+
+  box.addEventListener('touchstart', box._touchStart, {passive:true});
+  box.addEventListener('touchmove',  box._touchMove,  {passive:false});
+  box.addEventListener('touchend',   box._touchEnd,   {passive:true});
+  box.addEventListener('touchcancel',box._touchCancel,{passive:true});
+}
+
+function moveDayModal(dir){
+  if(!modalDate) return;
+  const {year,month,day}=modalDate;
+  const dim=new Date(year,month,0).getDate();
+  let newDay=day+dir, newMonth=month, newYear=year;
+  if(newDay<1){
+    newMonth--; if(newMonth<1){newMonth=12;newYear--;}
+    newDay=new Date(newYear,newMonth,0).getDate();
+    curY=newYear; curM=newMonth-1; renderCalendar();
+  } else if(newDay>dim){
+    newMonth++; if(newMonth>12){newMonth=1;newYear++;}
+    newDay=1; curY=newYear; curM=newMonth-1; renderCalendar();
+  }
+  const DN=['일','월','화','수','목','금','토'];
+  const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  modalDate={year:newYear,month:newMonth,day:newDay};
+  $('modal-title').textContent=`${MN[newMonth-1]} ${newDay}일 (${DN[new Date(newYear,newMonth-1,newDay).getDay()]})`;
+  const body=$('modal-body');
+  if(body){
+    body.style.transition='none';
+    body.style.transform=`translateX(${dir>0?'-':'+'}40px)`;
+    body.style.opacity='0';
+    requestAnimationFrame(()=>{
+      renderDayModal();
+      body.style.transition='transform .2s ease, opacity .2s ease';
+      body.style.transform='translateX(0)';
+      body.style.opacity='1';
+      setTimeout(()=>{ body.style.transition=''; body.style.transform=''; body.style.opacity=''; },220);
+    });
+  } else { renderDayModal(); }
 }
 function renderDayModal(){
   if(!modalDate)return;
