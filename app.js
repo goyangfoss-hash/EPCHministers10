@@ -2001,35 +2001,84 @@ function initDayModalSwipe(){
   if(!box || box._swipeInit) return;
   box._swipeInit = true;
 
-  let sx=0, sy=0, dx=0, started=false, locked=false;
-  const THRESHOLD = 60;
+  let sx=0, sy=0, dx=0, dy=0, started=false, direction=null;
+  const H_THRESHOLD = 60;  // 좌우 스와이프 임계값
+  const V_THRESHOLD = 80;  // 아래로 드래그 닫기 임계값
 
   box.addEventListener('touchstart', e=>{
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
-    dx=0; started=true; locked=false;
+    dx=0; dy=0; started=true; direction=null;
+    box.style.transition='none';
   }, {passive:true});
 
   box.addEventListener('touchmove', e=>{
-    if(!started||locked) return;
+    if(!started) return;
     dx=e.touches[0].clientX-sx;
-    const dy=e.touches[0].clientY-sy;
-    if(!locked){
+    dy=e.touches[0].clientY-sy;
+
+    // 방향 확정
+    if(!direction){
       if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
-      if(Math.abs(dy)>Math.abs(dx)){ locked=true; return; } // 세로 스크롤 허용
+      direction = Math.abs(dx)>Math.abs(dy) ? 'horizontal' : 'vertical';
     }
-    e.preventDefault();
+
+    if(direction==='vertical'){
+      // 아래로만 드래그 허용 (위로는 막음)
+      if(dy<0) return;
+      e.preventDefault();
+      box.style.transform=`translateY(${dy}px)`;
+      box.style.opacity=String(Math.max(0.4, 1-dy/300));
+    } else {
+      // 좌우 스와이프 — 세로 스크롤 차단
+      e.preventDefault();
+    }
   }, {passive:false});
 
   box.addEventListener('touchend', e=>{
-    if(!started||locked){ started=false; return; }
+    if(!started){ return; }
     started=false;
-    if(Math.abs(dx)<THRESHOLD) return;
-    const dir = dx<0 ? 1 : -1; // 왼쪽=-1(다음), 오른쪽=1(이전)
-    moveDayModal(dir);
+    box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
+
+    if(direction==='vertical'){
+      if(dy>V_THRESHOLD){
+        // 아래로 충분히 드래그 → 닫기
+        box.style.transform='translateY(100%)';
+        box.style.opacity='0';
+        setTimeout(()=>{
+          closeModalById('comment-modal');
+          box.style.transform='';
+          box.style.opacity='';
+          box.style.transition='';
+        }, 250);
+      } else {
+        // 원위치 복귀
+        box.style.transform='translateY(0)';
+        box.style.opacity='1';
+        setTimeout(()=>{ box.style.transition=''; }, 250);
+      }
+    } else if(direction==='horizontal'){
+      box.style.transform='';
+      box.style.opacity='';
+      box.style.transition='';
+      if(Math.abs(dx)>H_THRESHOLD){
+        const dir = dx<0 ? 1 : -1;
+        moveDayModal(dir);
+      }
+    } else {
+      box.style.transform='';
+      box.style.opacity='';
+      box.style.transition='';
+    }
+    direction=null;
   }, {passive:true});
 
-  box.addEventListener('touchcancel', ()=>{ started=false; }, {passive:true});
+  box.addEventListener('touchcancel', ()=>{
+    started=false; direction=null;
+    box.style.transform='';
+    box.style.opacity='';
+    box.style.transition='';
+  }, {passive:true});
 }
 
 function moveDayModal(dir){
