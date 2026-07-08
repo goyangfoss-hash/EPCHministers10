@@ -5369,7 +5369,9 @@ function processExcelRows2(rows, fileName, sheetName){
             if(!name||name.length<2) return;
             if(!result[name]) result[name]={};
             const dayStr=String(day);
-            const typeLabel=isBackup?`[백업]${shiftType}`:`[새벽]${shiftType}`;
+            const rawLabel=isBackup?`[백업]${shiftType}`:`[새벽]${shiftType}`;
+            // ★ 네이밍 정규화 적용
+            const typeLabel=normalizeShiftType(rawLabel, year, month, day);
             // 기존 값 있으면 /로 합치기
             if(result[name][dayStr]){
               if(!result[name][dayStr].includes(typeLabel))
@@ -5403,6 +5405,39 @@ function processExcelRows2(rows, fileName, sheetName){
   $('preview-table').innerHTML=`<thead>${th}</thead><tbody>${tb}</tbody>`;
   $('parse-summary').innerHTML=`<b>사역자:</b> ${names.join(', ')}<br><b>유형:</b> ${[...types].map(t=>{const c=tc(t);return `<span style="background:${c.bg};color:${c.text};padding:1px 6px;border-radius:4px;font-size:11px;margin:0 2px">${t}</span>`;}).join('')}`;
 }
+// ★ 사역 네이밍 정규화 — 업로드 시 항상 적용
+function normalizeShiftType(type, year, month, day){
+  if(!type) return type;
+  // 복합사역 처리
+  if(type.includes('/')){
+    return type.split('/').map(t=>normalizeShiftType(t.trim(),year,month,day)).join('/');
+  }
+  // 요일 계산 (day가 있을 때만)
+  const dow = (year&&month&&day) ? new Date(year,month-1,day).getDay() : -1;
+  const isSunday = dow===0;
+
+  switch(type){
+    // 주일 새벽 (일요일만)
+    case '[새벽]설교':
+      return isSunday ? '[주일새벽]설교' : '[새벽]설교';
+    case '[백업]설교':
+      return isSunday ? '[주일새벽]백업' : '[주일새벽]백업'; // 백업은 항상 주일새벽
+    // 주일 예배
+    case '[4부]설교':    return '[주일4부]설교';
+    case '[저녁]설교':   return '[주일저녁]설교';
+    case '[저녁]기도':   return '[주일저녁]봉독지원';
+    // 수요
+    case '[오전]사회':   return '[수요오전]사회';
+    case '[오전]자막':   return '[수요오전]자막';
+    case '[저녁]사회':   return '[수요저녁]사회';
+    case '[저녁]자막':   return '[수요저녁]자막';
+    case '[저녁]영상':   return '[수요저녁]영상';
+    // 금요
+    case '[금요]기도':   return '[금요]기도지원';
+    default: return type;
+  }
+}
+
 function processExcelRows(rows,fileName,sheetName){
   if(!rows||rows.length<2){showExcelErr('데이터가 없습니다.');return;}
   let year=curY,month=curM+1;
@@ -5412,7 +5447,10 @@ function processExcelRows(rows,fileName,sheetName){
   const dateCols=[];header.forEach((h,i)=>{if(i===nameCol||h==null)return;const m=String(h).match(/^(\d{1,2})/);if(m){const d=parseInt(m[1]);if(d>=1&&d<=31)dateCols.push({i,d});}});
   if(!dateCols.length){showExcelErr('날짜 열을 찾을 수 없습니다.');return;}
   const result={},types=new Set();
-  rows.slice(1).forEach(row=>{if(!row||row.every(v=>v==null))return;const name=String(row[nameCol]||'').trim();if(!name)return;result[name]={};dateCols.forEach(({i,d})=>{const v=row[i];if(v==null||v==='')return;const t=String(v).trim();if(t){result[name][String(d)]=t;types.add(t);}});});
+  rows.slice(1).forEach(row=>{if(!row||row.every(v=>v==null))return;const name=String(row[nameCol]||'').trim();if(!name)return;result[name]={};dateCols.forEach(({i,d})=>{const v=row[i];if(v==null||v==='')return;const t=String(v).trim();if(t){
+          // ★ 네이밍 정규화 적용
+          const normalized=normalizeShiftType(t, year, month, d);
+          result[name][String(d)]=normalized;types.add(normalized);}});});
   const names=Object.keys(result);if(!names.length){showExcelErr('사역자 데이터를 찾을 수 없습니다.');return;}
   parsedExcel={year,month,data:result,fileName:fileName};assignColors([...types]);
   $('upload-zone').style.display='none';$('excel-preview').style.display='block';
