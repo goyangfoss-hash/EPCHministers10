@@ -2016,8 +2016,14 @@ function initDayModalSwipe(){
       e.preventDefault();
       box.style.transform=`translateY(${Math.max(0,dy)}px)`;
       box.style.opacity=String(Math.max(0.3, 1-dy/250));
+    } else if(gesture==='scroll'){
+      // ★ 최하단 도달 시 위로 스크롤하면 이벤트 차단 (캘린더로 새나감 방지)
+      const panel=getCurPanel();
+      if(panel){
+        const atBottom = panel.scrollTop+panel.clientHeight >= panel.scrollHeight-2;
+        if(atBottom && dy<0) e.preventDefault();
+      }
     }
-    // gesture==='scroll' → preventDefault 안 함 → 브라우저가 자연스럽게 스크롤
   };
 
   box._te = e=>{
