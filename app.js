@@ -208,85 +208,9 @@ document.addEventListener('visibilitychange', async () => {
 // ══════════════════════════════════════════════════
 //  당겨서 새로고침 (Pull to Refresh)
 // ══════════════════════════════════════════════════
-function initPullToRefresh(){
-  let startY=0, pulling=false, indicator=null;
-  let atTop=false; // ★ 터치 시작 시 최상단 여부
-  const threshold=140; // ★ 더 많이 당겨야 작동 (110→140)
+// Pull to Refresh 제거 — Realtime 구독으로 자동 갱신됨
+// (schedules 테이블 변경 시 postgres_changes 이벤트로 즉각 반영)
 
-  const createIndicator=()=>{
-    if($('ptr-indicator')) return $('ptr-indicator');
-    const el=document.createElement('div');
-    el.id='ptr-indicator';
-    el.style.cssText='position:fixed;top:56px;left:50%;transform:translateX(-50%);background:#185FA5;color:#fff;padding:8px 20px;border-radius:0 0 20px 20px;font-size:12px;font-weight:600;z-index:35;display:none;align-items:center;gap:8px;box-shadow:0 2px 10px rgba(0,0,0,.2)';
-    el.innerHTML='<div class="ptr-spinner"></div><span id="ptr-text">당겨서 새로고침</span>';
-    document.body.appendChild(el);
-    return el;
-  };
-
-  const isModalOpen=()=>{
-    if($('chat-modal')?.style.display==='flex') return true;
-    if($('user-dm-modal')?.style.display==='flex') return true;
-    if($('comment-modal')?.style.display==='flex') return true;
-    if($('alarm-panel')?.style.display==='block') return true;
-    return false;
-  };
-
-  // 스크롤 가능한 조상의 scrollTop 확인
-  const getTargetScrollTop=(target)=>{
-    let el=target;
-    while(el && el!==document.body){
-      const oy=getComputedStyle(el).overflowY;
-      if((oy==='auto'||oy==='scroll') && el.scrollHeight>el.clientHeight+2){
-        return el.scrollTop;
-      }
-      el=el.parentElement;
-    }
-    // main-screen scrollTop
-    return $('main-screen')?.scrollTop||0;
-  };
-
-  document.addEventListener('touchstart', e=>{
-    pulling=false; atTop=false;
-    if(isModalOpen()) return;
-    // ★ modal-panel 내부 터치면 PTR 비활성
-    if(e.target.closest('#comment-modal')) return;
-    const st=getTargetScrollTop(e.touches[0].target);
-    atTop = (st===0);
-    if(atTop){
-      startY=e.touches[0].clientY;
-    }
-  }, {passive:true});
-
-  document.addEventListener('touchmove', e=>{
-    if(isModalOpen()||e.target.closest('#comment-modal')){ pulling=false; atTop=false; if(indicator) indicator.style.display='none'; return; }
-    if(!atTop) return;
-    const st=getTargetScrollTop(e.touches[0].target);
-    // ★ 이동 중 스크롤이 생기면 PTR 취소
-    if(st>0){ atTop=false; pulling=false; if(indicator) indicator.style.display='none'; return; }
-    const dist=e.touches[0].clientY-startY;
-    if(dist<=0){ pulling=false; if(indicator) indicator.style.display='none'; return; }
-    // ★ 60px 이상 당겼을 때만 인디케이터 표시 (기존 30px→60px)
-    if(dist>60){
-      pulling=true;
-      indicator=createIndicator();
-      indicator.style.display='flex';
-      $('ptr-text').textContent=dist>threshold?'놓아서 새로고침':'당겨서 새로고침';
-    }
-  }, {passive:true});
-
-  document.addEventListener('touchend', async e=>{
-    atTop=false;
-    if(!pulling){ return; }
-    pulling=false;
-    const dist=e.changedTouches[0].clientY-startY;
-    if(dist>threshold && indicator){
-      $('ptr-text').textContent='새로고침 중...';
-      await refreshSchedules();
-      if(cu) updateNoticeBadge();
-    }
-    if(indicator) indicator.style.display='none';
-  }, {passive:true});
-}
 // ══════════════════════════════════════════════════
 //  캘린더 스와이프로 월 이동 (자연스러운 실시간 슬라이드)
 // ══════════════════════════════════════════════════
@@ -578,7 +502,6 @@ async function enterApp() {
     navigator.serviceWorker.register('firebase-messaging-sw.js').catch(()=>{});
   }
   initFCM();
-  initPullToRefresh();
   initCalendarSwipe();
   // ★ 알림 클릭으로 열렸을 때 URL ?tab= 파라미터로 탭 이동
   handleNotifLaunchTab();
@@ -2022,134 +1945,146 @@ function openDayModal(day){
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
   // ★ 모달 열릴 때 캘린더 터치 잠금
-  const tabCal=$('tab-cal');
-  if(tabCal){
-    tabCal._savedScrollTop = tabCal.scrollTop;
-    tabCal.style.pointerEvents='none';
-    tabCal.style.touchAction='none';
-    tabCal.style.userSelect='none';
-    // 스크롤 위치 고정
-    tabCal.style.overflow='hidden';
-    tabCal.style.height=tabCal.offsetHeight+'px';
-  }
   initDayModalSwipe();
 }
 
-// ★ 날짜 모달 스와이프 — 좌우: 이전/다음 날, 아래: 닫기
+// ★ 날짜 모달 터치 핸들러 — 완전 재설계
+// 원칙: 가로→날짜이동, 세로+최상단+아래→dismiss, 세로 그 외→브라우저 기본 스크롤
 function initDayModalSwipe(){
   const box = document.querySelector('#comment-modal .modal-box');
   if(!box) return;
-  if(box._touchStart) box.removeEventListener('touchstart', box._touchStart);
-  if(box._touchMove)  box.removeEventListener('touchmove',  box._touchMove);
-  if(box._touchEnd)   box.removeEventListener('touchend',   box._touchEnd);
-  if(box._touchCancel)box.removeEventListener('touchcancel',box._touchCancel);
 
-  let sx=0, sy=0, dx=0, dy=0, direction=null, bodyScrollTop=0;
-  const H_THRESHOLD=55, V_THRESHOLD=90;
+  // 기존 리스너 제거
+  if(box._ts) box.removeEventListener('touchstart', box._ts);
+  if(box._tm) box.removeEventListener('touchmove',  box._tm);
+  if(box._te) box.removeEventListener('touchend',   box._te);
+  if(box._tc) box.removeEventListener('touchcancel',box._tc);
 
-  function preloadAdjacentPanels(){
-    if(!modalDate) return;
-    const {year,month,day}=modalDate;
-    const dim=new Date(year,month,0).getDate();
-    let pd=day-1,pm=month,py=year;
-    if(pd<1){pm--;if(pm<1){pm=12;py--;}pd=new Date(py,pm,0).getDate();}
-    let nd=day+1,nm=month,ny=year;
-    if(nd>dim){nm++;if(nm>12){nm=1;ny++;}nd=1;}
-    const prev=$('modal-panel-prev'), next=$('modal-panel-next');
-    if(prev) prev.innerHTML=getDayModalHTML(py,pm,pd);
-    if(next) next.innerHTML=getDayModalHTML(ny,nm,nd);
+  let sx=0, sy=0, dx=0, dy=0;
+  let gesture=null; // null | 'swipe' | 'dismiss' | 'scroll'
+  const SWIPE_THRESHOLD = 55;
+  const DISMISS_THRESHOLD = 80;
+  const DIRECTION_LOCK = 8; // 방향 확정에 필요한 최소 픽셀
+
+  function getTrack(){ return document.getElementById('modal-track'); }
+  function getCurPanel(){ return document.getElementById('modal-panel-cur'); }
+
+  function resetTrack(){
+    const t=getTrack(); if(!t) return;
+    t.style.transition='none';
+    t.style.transform='translateX(-33.333%)';
   }
 
-  box._touchStart = e=>{
-    e.stopPropagation(); // ★ 캘린더로 버블링 차단
-    if(e.touches.length>1) return;
-    sx=e.touches[0].clientX; sy=e.touches[0].clientY;
-    dx=0; dy=0; direction=null;
-    // ★ 터치 시작 시 패널 스크롤 위치 정확히 읽기
-    const curPanel=$('modal-panel-cur');
-    bodyScrollTop = curPanel ? curPanel.scrollTop : 0;
+  box._ts = e=>{
+    if(e.touches.length>1){ gesture='scroll'; return; }
+    sx=e.touches[0].clientX;
+    sy=e.touches[0].clientY;
+    dx=0; dy=0; gesture=null;
+    // 인접 패널 미리 렌더
     preloadAdjacentPanels();
-    const track=$('modal-track');
-    if(track) track.style.transition='none';
+    const t=getTrack(); if(t) t.style.transition='none';
+    box.style.transition='none';
   };
 
-  box._touchMove = e=>{
+  box._tm = e=>{
+    if(e.touches.length>1){ gesture='scroll'; return; }
     dx=e.touches[0].clientX-sx;
     dy=e.touches[0].clientY-sy;
-    if(!direction){
-      if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
-      direction=Math.abs(dx)>Math.abs(dy)?'horizontal':'vertical';
+
+    // 방향 미확정
+    if(!gesture){
+      if(Math.abs(dx)<DIRECTION_LOCK && Math.abs(dy)<DIRECTION_LOCK) return;
+      if(Math.abs(dx)>Math.abs(dy)){
+        gesture='swipe'; // 가로 → 날짜 스와이프
+      } else {
+        const panel=getCurPanel();
+        const scrollTop=panel?panel.scrollTop:0;
+        if(dy>0 && scrollTop<=2){
+          gesture='dismiss'; // 세로 아래 + 최상단 → dismiss
+        } else {
+          gesture='scroll'; // 나머지 → 브라우저 기본 스크롤
+        }
+      }
     }
-    if(direction==='vertical'){
-      // ★ 패널이 스크롤 중이거나 위로 드래그면 dismiss 안 함
-      const curPanel=$('modal-panel-cur');
-      const curScroll = curPanel ? curPanel.scrollTop : 0;
-      if(curScroll>10||dy<0) return;
+
+    if(gesture==='swipe'){
       e.preventDefault();
-      box.style.transform=`translateY(${dy}px)`;
-      box.style.opacity=String(Math.max(0.4,1-dy/300));
-    } else {
+      const t=getTrack();
+      if(t) t.style.transform=`translateX(calc(-33.333% + ${dx}px))`;
+    } else if(gesture==='dismiss'){
+      if(dy<=0){ gesture='scroll'; return; }
       e.preventDefault();
-      const track=$('modal-track');
-      if(track) track.style.transform=`translateX(calc(-33.333% + ${dx}px))`;
+      box.style.transform=`translateY(${Math.max(0,dy)}px)`;
+      box.style.opacity=String(Math.max(0.3, 1-dy/250));
     }
+    // gesture==='scroll' → preventDefault 안 함 → 브라우저가 자연스럽게 스크롤
   };
 
-  box._touchEnd = e=>{
-    if(direction==='vertical'&&bodyScrollTop<=5){
-      box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
-      if(dy>V_THRESHOLD){
+  box._te = e=>{
+    box.style.transition='';
+
+    if(gesture==='swipe'){
+      const t=getTrack();
+      if(t && Math.abs(dx)>SWIPE_THRESHOLD){
+        const dir=dx<0?1:-1;
+        t.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
+        t.style.transform=`translateX(${dir>0?'-66.666%':'0%'})`;
+        setTimeout(()=>commitDayMove(dir), 250);
+      } else {
+        const t=getTrack();
+        if(t){
+          t.style.transition='transform .2s cubic-bezier(.25,.46,.45,.94)';
+          t.style.transform='translateX(-33.333%)';
+          setTimeout(()=>{ if(t) t.style.transition=''; }, 220);
+        }
+      }
+    } else if(gesture==='dismiss'){
+      if(dy>DISMISS_THRESHOLD){
+        box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
         box.style.transform='translateY(100%)';
         box.style.opacity='0';
         setTimeout(()=>{
           closeModalById('comment-modal');
-          box.style.transform=''; box.style.opacity=''; box.style.transition='';
-          const track=$('modal-track');
-          if(track){track.style.transition='none';track.style.transform='translateX(-33.333%)';}
-        },250);
+          box.style.transform='';
+          box.style.opacity='';
+          box.style.transition='';
+          resetTrack();
+        }, 250);
       } else {
-        box.style.transform='translateY(0)'; box.style.opacity='1';
-        setTimeout(()=>{box.style.transition='';},250);
+        box.style.transition='transform .2s cubic-bezier(.25,.46,.45,.94), opacity .2s';
+        box.style.transform='translateY(0)';
+        box.style.opacity='1';
+        setTimeout(()=>{ box.style.transition=''; }, 220);
       }
-    } else if(direction==='horizontal'){
-      const track=$('modal-track');
-      if(!track){direction=null;return;}
-      if(Math.abs(dx)>H_THRESHOLD){
-        const dir=dx<0?1:-1;
-        const targetX=dir>0?'-66.666%':'0%';
-        track.style.transition='transform .28s cubic-bezier(.25,.46,.45,.94)';
-        track.style.transform=`translateX(${targetX})`;
-        setTimeout(()=>commitDayMove(dir),280);
-      } else {
-        track.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
-        track.style.transform='translateX(-33.333%)';
-        setTimeout(()=>{track.style.transition='';},260);
-      }
-    } else {
-      const track=$('modal-track');
-      if(track){
-        track.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
-        track.style.transform='translateX(-33.333%)';
-        setTimeout(()=>{track.style.transition='';},260);
-      }
-      box.style.transform=''; box.style.opacity=''; box.style.transition='';
     }
-    direction=null;
+    gesture=null;
   };
 
-  box._touchCancel = ()=>{
-    direction=null;
+  box._tc = ()=>{
+    gesture=null;
     box.style.transform=''; box.style.opacity=''; box.style.transition='';
-    const track=$('modal-track');
-    if(track){track.style.transition='none';track.style.transform='translateX(-33.333%)';}
+    resetTrack();
   };
 
-  box.addEventListener('touchstart', box._touchStart, {passive:true});
-  box.addEventListener('touchmove',  box._touchMove,  {passive:false});
-  box.addEventListener('touchend',   box._touchEnd,   {passive:true});
-  box.addEventListener('touchcancel',box._touchCancel,{passive:true});
+  box.addEventListener('touchstart',  box._ts, {passive:true});
+  box.addEventListener('touchmove',   box._tm, {passive:false});
+  box.addEventListener('touchend',    box._te, {passive:true});
+  box.addEventListener('touchcancel', box._tc, {passive:true});
 }
 
+function preloadAdjacentPanels(){
+  if(!modalDate) return;
+  const {year,month,day}=modalDate;
+  const dim=new Date(year,month,0).getDate();
+  let pd=day-1,pm=month,py=year;
+  if(pd<1){pm--;if(pm<1){pm=12;py--;}pd=new Date(py,pm,0).getDate();}
+  let nd=day+1,nm=month,ny=year;
+  if(nd>dim){nm++;if(nm>12){nm=1;ny++;}nd=1;}
+  const prev=document.getElementById('modal-panel-prev');
+  const next=document.getElementById('modal-panel-next');
+  if(prev) prev.innerHTML=getDayModalHTML(py,pm,pd);
+  if(next) next.innerHTML=getDayModalHTML(ny,nm,nd);
+}
 function commitDayMove(dir){
   if(!modalDate) return;
   const {year,month,day}=modalDate;
@@ -2253,19 +2188,7 @@ function closeModalById(id){
   $(id).style.display='none';
   if(id==='comment-modal'){
     modalDate=null;
-    // ★ 모달 닫힐 때 캘린더 복원
-    const tabCal=$('tab-cal');
-    if(tabCal){
-      tabCal.style.pointerEvents='';
-      tabCal.style.touchAction='';
-      tabCal.style.userSelect='';
-      tabCal.style.overflow='';
-      tabCal.style.height='';
-      if(tabCal._savedScrollTop!=null){
-        tabCal.scrollTop=tabCal._savedScrollTop;
-        tabCal._savedScrollTop=null;
-      }
-    }
+
   }
 }
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
