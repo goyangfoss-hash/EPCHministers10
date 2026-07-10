@@ -4612,7 +4612,48 @@ function fmtTime(s){
 // ══════════════════════════════════════════════════
 //  관리자
 // ══════════════════════════════════════════════════
-function renderAdmin(){renderPending();renderMembers();buildSchedPreview();renderAdminFeed();renderUploadSettings();renderSystemDiag();updatePendingBadge();}
+function renderAdmin(){renderPending();renderMembers();buildSchedPreview();renderAdminFeed();renderUploadSettings();renderSystemDiag();updatePendingBadge();renderDraftsPanel();}
+
+// ★ 관리자 전용 — 게시 대기 중인 초안(schedules_draft) 목록 패널
+// index.html 수정 없이, sched-form 영역 바로 위에 패널을 스스로 삽입한다.
+async function renderDraftsPanel(){
+  const anchor = $('sched-form');
+  if(!anchor || !anchor.parentNode) return; // 관리자 화면이 아직 안 그려졌으면 무시
+
+  let panel = $('drafts-panel');
+  if(!panel){
+    panel = document.createElement('div');
+    panel.id='drafts-panel';
+    panel.style.cssText='margin-bottom:14px';
+    anchor.parentNode.insertBefore(panel, anchor);
+  }
+
+  panel.innerHTML = '<p class="empty-state" style="font-size:12px;color:#aaa">초안 확인 중...</p>';
+  const drafts = await fetchPendingDrafts();
+
+  if(!drafts.length){
+    panel.innerHTML='';
+    return;
+  }
+
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  let html = `<div style="background:#fff8e6;border:1.5px solid #ffd76a;border-radius:12px;padding:12px 14px;margin-bottom:4px">
+    <div style="font-size:13px;font-weight:700;color:#a56a00;margin-bottom:8px">🔒 게시 대기 중인 초안 (관리자만 보임)</div>`;
+  drafts.forEach(d=>{
+    const names=Object.keys(d.data||{});
+    const totalDays=names.reduce((s,n)=>s+Object.keys(d.data[n]||{}).length,0);
+    const dataAttr = encodeURIComponent(JSON.stringify(d.data||{}));
+    html += `<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:6px;border:1px solid #f0e0b0">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#333">${d.year}년 ${MN[d.month]} (${d.type==='special'?'특별사역':'정기사역'})</div>
+        <div style="font-size:11px;color:#999;margin-top:2px">사역자 ${names.length}명 · 총 ${totalDays}건</div>
+      </div>
+      <button onclick="previewDraftSchedule(${d.year},${d.month},'${d.type}',JSON.parse(decodeURIComponent('${dataAttr}')))" style="padding:8px 14px;background:#185FA5;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">미리보기</button>
+    </div>`;
+  });
+  html += '</div>';
+  panel.innerHTML = html;
+}
 
 function renderUploadSettings(){
   const el=$('upload-settings-ui'); if(!el) return;
@@ -5582,52 +5623,131 @@ async function doApplySchedule(year, month, isMerge){
     });
   });
 
-  allSchedules[year][month]=finalData;
-  assignColors(collectAllTypes());filterType='';curY=year;curM=month-1;
+  // ★ [초안/게시 방식] 여기서는 실제 서비스에 바로 반영하지 않고 schedules_draft에만 저장한다.
+  // 이용자에게 보이는 실제 데이터(allSchedules, schedules 테이블)는 관리자가 "게시"를 눌러야 바뀐다.
+  assignColors(collectAllTypes());
 
   if(!OFFLINE){
-    const{error}=await sb.from('schedules').upsert(
+    const{error}=await sb.from('schedules_draft').upsert(
       {year,month,data:finalData,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},
       {onConflict:'year,month,type'}
     );
-    if(error){showExcelErr('저장 오류: '+error.message);return;}
+    if(error){showExcelErr('초안 저장 오류: '+error.message);return;}
+    // ★ 변경된 사역자 알림은 여기서 보내지 않는다 — 관리자가 "게시"를 누를 때(publishDraftSchedule)만 발송된다.
+    console.log(`[초안 저장] ${year}년 ${month}월(${currentUploadType}) — 변경 예정 ${changedWorkers.length}건, 게시 전까지 이용자에게는 보이지 않음`);
+  }
 
-    // ★ 변경된 사역자들에게 FCM 알림 발송
-    if(changedWorkers.length){
-      // 사역자별로 그룹핑
-      const byUser={};
-      changedWorkers.forEach(({userId,name,day,type,isNew})=>{
-        if(!byUser[userId]) byUser[userId]={userId,name,shifts:[]};
-        byUser[userId].shifts.push({day,type,isNew});
-      });
+  clearExcel();
+  renderAdmin(); // 초안 목록(관리자 전용)에 방금 저장한 초안이 보이도록 갱신
+  switchTab('admin',$('btn-admin'));
 
-      for(const {userId,name,shifts} of Object.values(byUser)){
-        const shiftDesc = shifts.slice(0,3).map(({day,type,isNew})=>{
-          const dow=DN2[new Date(year,month-1,day).getDay()];
-          return `${month}월 ${day}일(${dow}) ${type}`;
-        }).join(', ');
-        const title = shifts[0].isNew ? '📅 사역 등록 알림' : '📝 사역 변경 알림';
-        const body = shifts[0].isNew
-          ? `${shiftDesc} 사역이 등록되었습니다.`
-          : `${shiftDesc} 사역이 변경되었습니다.`;
+  // ★ 안전장치 2: 되돌리기 토스트 대신, 초안 저장 안내 토스트
+  showUndoToast(`⏳ 초안으로 저장됨 — 관리자 화면에서 확인 후 "게시"를 눌러야 실제로 반영됩니다.`);
+}
 
-        const shiftDay=String(shifts[0]?.day||'');
-        sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
+// ══════════════════════════════════════════════════
+//  ★ 초안(draft) 미리보기 & 게시(publish)
+// ══════════════════════════════════════════════════
+
+// 관리자 화면에서 대기 중인 초안 목록을 가져온다
+async function fetchPendingDrafts(){
+  if(OFFLINE||!sb) return [];
+  const {data,error} = await sb.from('schedules_draft').select('year,month,type,data,updated_at').order('year').order('month');
+  if(error){ console.warn('[초안 목록 조회 오류]', error.message); return []; }
+  return data||[];
+}
+
+// 초안 하나를 미리보기 모달로 보여준다 (실제 달력과 같은 표 형식, "미리보기" 라벨 표시)
+function previewDraftSchedule(year, month, type, data){
+  const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const names = Object.keys(data||{});
+  const days=[...new Set(names.flatMap(n=>Object.keys(data[n]||{}).map(Number)))].sort((a,b)=>a-b);
+  let th='<tr><th>이름</th>';days.forEach(d=>th+=`<th>${d}</th>`);th+='</tr>';
+  const tb=names.map(name=>{
+    const dd=data[name]||{};
+    let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap">${name}</td>`;
+    days.forEach(d=>{ const v=dd[String(d)]||''; r+=`<td title="${v}">${v?v.replace(/[\[\]]/g,'').slice(0,10):''}</td>`; });
+    return r+'</tr>';
+  }).join('');
+
+  document.getElementById('draft-preview-modal')?.remove();
+  const modal=document.createElement('div');
+  modal.id='draft-preview-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:16px;padding:18px;width:100%;max-width:700px;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="font-size:14px;font-weight:700;color:#e07800;margin-bottom:4px">🔒 관리자 전용 미리보기 — ${year}년 ${MN[month]} (${type==='special'?'특별사역':'정기사역'})</div>
+      <div style="font-size:11px;color:#888;margin-bottom:12px">이 화면은 이용자에게 보이지 않습니다. 게시 전까지는 초안 상태입니다.</div>
+      <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">${th?`<thead>${th}</thead>`:''}<tbody>${tb}</tbody></table></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button onclick="publishDraftSchedule(${year},${month},'${type}')" style="flex:1;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">✅ 게시하기 (이용자에게 반영 + 알림 발송)</button>
+        <button onclick="document.getElementById('draft-preview-modal').remove()" style="padding:12px 16px;background:#fff;color:#888;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer">닫기</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+// 초안을 실제 schedules 테이블에 반영하고, 변경된 사역자에게만 알림을 보낸다
+async function publishDraftSchedule(year, month, type){
+  if(OFFLINE||!sb) return;
+  const DN2=['일','월','화','수','목','금','토'];
+  document.getElementById('draft-preview-modal')?.remove();
+
+  const [{data:draftRow, error:draftErr}, {data:liveRow, error:liveErr}] = await Promise.all([
+    sb.from('schedules_draft').select('data').eq('year',year).eq('month',month).eq('type',type).maybeSingle(),
+    sb.from('schedules').select('data').eq('year',year).eq('month',month).eq('type',type).maybeSingle()
+  ]);
+  if(draftErr){ alert('초안 조회 오류: '+draftErr.message); return; }
+  if(!draftRow){ alert('게시할 초안이 없습니다.'); return; }
+
+  const finalData = draftRow.data||{};
+  const prevData = liveRow?.data||{};
+
+  // 변경된 사역자 감지 (기존 doApplySchedule과 동일한 로직)
+  const changedWorkers=[];
+  Object.entries(finalData).forEach(([name, days])=>{
+    Object.entries(days||{}).forEach(([day, val])=>{
+      const prevVal = prevData[name]?.[day];
+      if(prevVal !== val){
+        const u = allMembers.find(m=>m.name===name);
+        if(u) changedWorkers.push({userId:u.id, name, day:parseInt(day), type:val, isNew:!prevVal});
       }
-      console.log(`[알림] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
+    });
+  });
+
+  const {error:upErr} = await sb.from('schedules').upsert(
+    {year,month,data:finalData,type,updated_by:cu.id,updated_at:new Date().toISOString()},
+    {onConflict:'year,month,type'}
+  );
+  if(upErr){ alert('게시(반영) 오류: '+upErr.message); return; }
+
+  // 게시 완료 후 해당 초안은 정리
+  await sb.from('schedules_draft').delete().eq('year',year).eq('month',month).eq('type',type);
+
+  // 변경된 사역자들에게 FCM 알림 발송 (기존 앱과 동일한 문구)
+  if(changedWorkers.length){
+    const byUser={};
+    changedWorkers.forEach(({userId,name,day,type:t,isNew})=>{
+      if(!byUser[userId]) byUser[userId]={userId,name,shifts:[]};
+      byUser[userId].shifts.push({day,type:t,isNew});
+    });
+    for(const {userId,shifts} of Object.values(byUser)){
+      const shiftDesc = shifts.slice(0,3).map(({day,type:t})=>{
+        const dow=DN2[new Date(year,month-1,day).getDay()];
+        return `${month}월 ${day}일(${dow}) ${t}`;
+      }).join(', ');
+      const title = shifts[0].isNew ? '📅 사역 등록 알림' : '📝 사역 변경 알림';
+      const body = shifts[0].isNew ? `${shiftDesc} 사역이 등록되었습니다.` : `${shiftDesc} 사역이 변경되었습니다.`;
+      const shiftDay=String(shifts[0]?.day||'');
+      sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
     }
-
-    await refreshSchedules();
+    console.log(`[게시] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
   }
 
-  clearExcel();switchTab('cal',$('btn-cal'));renderCalendar();buildSchedPreview();
-
-  // ★ 안전장치 2: 되돌리기 토스트
-  if(settings.enableUndo!==false && undoData){
-    showUndoToast(isMerge?`'${fileName}' 병합 완료`:`${year}년 ${MN[month]} 사역표 저장 완료`);
-  } else {
-    toast('excel-toast');
-  }
+  await refreshSchedules();
+  renderAdmin();
+  switchTab('cal',$('btn-cal'));renderCalendar();buildSchedPreview();
+  toast('excel-toast');
 }
 
 function showUndoToast(msg){
