@@ -5657,28 +5657,69 @@ async function fetchPendingDrafts(){
   return data||[];
 }
 
-// 초안 하나를 미리보기 모달로 보여준다 (실제 달력과 같은 표 형식, "미리보기" 라벨 표시)
+// ★ 초안 데이터를 "실제 캘린더와 같은 모양"으로 렌더링한 HTML을 만든다.
+// renderCalendar()의 '전체 사역 모드' 셀 로직을 그대로 재현하되, 실제 allSchedules/DOM은 건드리지 않는다.
+function _renderDraftCalGridHTML(year, month, data){
+  const DN=['일','월','화','수','목','금','토'];
+  const fd=new Date(year,month-1,1).getDay(), dim=new Date(year,month,0).getDate();
+  const now=new Date();
+  const allMap={};
+  Object.keys(data||{}).forEach(name=>{
+    Object.entries(data[name]||{}).forEach(([ds,type])=>{
+      const dn=parseInt(ds); if(isNaN(dn)||dn<1||dn>31) return;
+      if(!allMap[dn]) allMap[dn]=[];
+      allMap[dn].push({name,type,c:tc(type)});
+    });
+  });
+  const _SBT=['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
+  Object.keys(allMap).forEach(dn=>{
+    allMap[dn].sort((a,b)=>{
+      const ai=_SBT.indexOf(a.type.split('/')[0].trim());
+      const bi=_SBT.indexOf(b.type.split('/')[0].trim());
+      if(ai>=0&&bi<0)return -1; if(ai<0&&bi>=0)return 1;
+      if(ai>=0&&bi>=0)return ai-bi; return 0;
+    });
+  });
+
+  let grid=DN.map(d=>`<div class="cal-head">${d}</div>`).join('');
+  for(let i=0;i<fd;i++) grid+=`<div class="cal-cell empty"></div>`;
+  for(let d=1; d<=dim; d++){
+    const dow=new Date(year,month-1,d).getDay();
+    const isToday=now.getFullYear()===year&&now.getMonth()===month-1&&now.getDate()===d;
+    const workers=allMap[d]||[];
+    const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'');
+    const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
+    const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c?.dot||'#999'}" title="${w.name}:${w.type}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'';
+    grid+=`<div class="${cls}" style="${todayBorder}"><div class="day-num-wrap"><span class="day-num">${d}</span></div>${dots}</div>`;
+  }
+
+  // 하단 상세 리스트 (관리자가 실제 내용을 정확히 검증할 수 있도록)
+  const detailDays=Object.keys(allMap).map(Number).sort((a,b)=>a-b);
+  const detailHtml=detailDays.length?detailDays.map(d=>{
+    const dow=DN[new Date(year,month-1,d).getDay()];
+    const rows=allMap[d].map(w=>`<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:6px;background:${w.c?.bg||'#f3f3f0'};color:${w.c?.text||'#333'};font-size:11px">${w.name} ${w.type}</span>`).join('');
+    return `<div style="padding:6px 0;border-bottom:1px solid #f0f0ec"><div style="font-size:12px;font-weight:700;color:#555;margin-bottom:3px">${d}일(${dow})</div><div>${rows}</div></div>`;
+  }).join(''):'<p class="empty-state" style="font-size:12px">해당 월에 배정된 사역이 없습니다.</p>';
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px">${grid}</div>
+    <div style="max-height:260px;overflow:auto;border-top:1px solid #ececea;padding-top:8px">${detailHtml}</div>`;
+}
+
+// 초안 하나를 미리보기 모달로 보여준다 — 실제 앱 캘린더와 동일한 모양으로 렌더링
 function previewDraftSchedule(year, month, type, data){
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const names = Object.keys(data||{});
-  const days=[...new Set(names.flatMap(n=>Object.keys(data[n]||{}).map(Number)))].sort((a,b)=>a-b);
-  let th='<tr><th>이름</th>';days.forEach(d=>th+=`<th>${d}</th>`);th+='</tr>';
-  const tb=names.map(name=>{
-    const dd=data[name]||{};
-    let r=`<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap">${name}</td>`;
-    days.forEach(d=>{ const v=dd[String(d)]||''; r+=`<td title="${v}">${v?v.replace(/[\[\]]/g,'').slice(0,10):''}</td>`; });
-    return r+'</tr>';
-  }).join('');
+  const bodyHtml=_renderDraftCalGridHTML(year, month, data);
 
   document.getElementById('draft-preview-modal')?.remove();
   const modal=document.createElement('div');
   modal.id='draft-preview-modal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   modal.innerHTML=`
-    <div style="background:#fff;border-radius:16px;padding:18px;width:100%;max-width:700px;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
-      <div style="font-size:14px;font-weight:700;color:#e07800;margin-bottom:4px">🔒 관리자 전용 미리보기 — ${year}년 ${MN[month]} (${type==='special'?'특별사역':'정기사역'})</div>
+    <div style="background:#fff;border-radius:16px;padding:18px;width:100%;max-width:520px;max-height:88vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="font-size:14px;font-weight:700;color:#e07800;margin-bottom:4px">🔒 관리자 전용 미리보기 — ${year}년 ${MN[month]} 캘린더 반영 모습 (${type==='special'?'특별사역':'정기사역'})</div>
       <div style="font-size:11px;color:#888;margin-bottom:12px">이 화면은 이용자에게 보이지 않습니다. 게시 전까지는 초안 상태입니다.</div>
-      <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">${th?`<thead>${th}</thead>`:''}<tbody>${tb}</tbody></table></div>
+      ${bodyHtml}
       <div style="display:flex;gap:8px;margin-top:14px">
         <button onclick="publishDraftSchedule(${year},${month},'${type}')" style="flex:1;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">✅ 게시하기 (이용자에게 반영 + 알림 발송)</button>
         <button onclick="document.getElementById('draft-preview-modal').remove()" style="padding:12px 16px;background:#fff;color:#888;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer">닫기</button>
