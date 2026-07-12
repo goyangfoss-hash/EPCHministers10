@@ -2588,7 +2588,7 @@ function renderMyShift(){
           <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">사역 현황 · 통계</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:#185FA5;font-weight:500">올해 ${_yearCount}회</span>
+          <span style="font-size:11px;color:#185FA5;font-weight:500">사역 현황</span>
           <span id="chev-stat" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
         </div>
       </div>
