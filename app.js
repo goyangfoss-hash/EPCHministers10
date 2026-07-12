@@ -2441,70 +2441,59 @@ function renderMyShift(){
     listHtml='<p class="empty-state">예정된 사역이 없습니다.</p>';
   }
 
-  // ★ 히스토리 완료 기록 섹션 (FEATURE_HISTORY 활성화 계정만)
+  // ★ 히스토리 — allSchedules 기반 사역 카운트
   let historyHtml = '';
   if(FEATURE_HISTORY()){
-    const completedTotal = Object.keys(shiftCompletions).length;
-    const thisYear = new Date().getFullYear();
-    const thisMonth = new Date().getMonth()+1;
-    const yearCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(thisYear+'-')).length;
-    const monthCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(`${thisYear}-${thisMonth}-`)).length;
-    // 올해 전체 사역 중 오늘 이전(완료 가능) 사역 수
-    const today2 = new Date(); today2.setHours(0,0,0,0);
-    let pastTotal = 0;
+    const _today = new Date(); _today.setHours(0,0,0,0);
+    const _thisYear = _today.getFullYear();
+    const _thisMonth = _today.getMonth()+1;
+    let _totalCount=0, _yearCount=0, _monthTotalCount=0, _monthDoneCount=0;
     Object.entries(allSchedules).forEach(([y,ym])=>{
-      if(parseInt(y)!==thisYear) return;
+      const yi=parseInt(y);
       Object.entries(ym).forEach(([m,data])=>{
+        const mi=parseInt(m);
         const myData=data[cu.name]||{};
         Object.entries(myData).forEach(([ds,rawType])=>{
-          const dt=new Date(parseInt(y),parseInt(m)-1,parseInt(ds));
-          if(dt<=today2){
-            // 복수 사역 분리하여 각각 카운트
-            const types=rawType.split('/').map(t=>t.trim()).filter(Boolean);
-            pastTotal+=types.length;
+          if(!rawType) return;
+          const di=parseInt(ds);
+          const dt=new Date(yi,mi-1,di);
+          const types=rawType.split('/').map(t=>t.trim()).filter(Boolean);
+          const cnt=types.length;
+          _totalCount+=cnt;
+          if(yi===_thisYear) _yearCount+=cnt;
+          if(yi===_thisYear&&mi===_thisMonth){
+            _monthTotalCount+=cnt;
+            if(dt<_today) _monthDoneCount+=cnt;
           }
         });
       });
     });
-
-    const recentItems = Object.entries(shiftCompletions)
-      .sort((a,b)=>new Date(b[1])-new Date(a[1]))
-      .slice(0,5)
-      .map(([key,completedAt])=>{
-        const parts = key.split('-');
-        const type = parts.slice(3).join('-');
-        const date = `${parts[1]}월 ${parts[2]}일`;
-        const c = tc(type);
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0f0ea">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="background:${c?.bg||'#f0f0ea'};color:${c?.text||'#888'};border:1px solid ${c?.border||'#ddd'};font-size:11px;padding:2px 7px;border-radius:6px">${type}</span>
-            <span style="font-size:12px;color:var(--color-text-secondary)">${date}</span>
-          </div>
-          <span style="font-size:16px">✅</span>
-        </div>`;
-      }).join('');
-
+    const _gaugeW=_monthTotalCount>0?Math.round(_monthDoneCount/_monthTotalCount*100):0;
     historyHtml = `
       <div class="list-section-title" style="margin-top:14px;margin-bottom:8px">📊 나의 사역 현황</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
         <div style="background:#EAF3DE;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#3B6D11">${yearCount}</div>
-          <div style="font-size:10px;color:#639922;margin-top:2px">올해 완료</div>
+          <div style="font-size:20px;font-weight:700;color:#3B6D11">${_yearCount}</div>
+          <div style="font-size:10px;color:#639922;margin-top:2px">올해 사역</div>
         </div>
         <div style="background:#E6F1FB;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#185FA5">${monthCount}</div>
-          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번 달 완료</div>
+          <div style="font-size:20px;font-weight:700;color:#185FA5">${_monthTotalCount}</div>
+          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번달 사역</div>
         </div>
         <div style="background:#FAEEDA;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#854F0B">${completedTotal}</div>
-          <div style="font-size:10px;color:#BA7517;margin-top:2px">누적 완료</div>
+          <div style="font-size:20px;font-weight:700;color:#854F0B">${_totalCount}</div>
+          <div style="font-size:10px;color:#BA7517;margin-top:2px">전체 사역</div>
         </div>
       </div>
-      ${recentItems ? `
-      <div class="list-section-title" style="margin-bottom:6px">최근 완료 기록</div>
-      <div style="background:#fff;border-radius:12px;border:0.5px solid #f0f0ea;padding:4px 14px">
-        ${recentItems}
-      </div>` : ''}`;
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:10px;padding:10px 12px;margin-bottom:4px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <span style="font-size:11px;color:var(--color-text-secondary)">이번달 완료</span>
+          <span style="font-size:13px;font-weight:600;color:#185FA5">${_monthDoneCount} / ${_monthTotalCount}</span>
+        </div>
+        <div style="height:5px;background:var(--color-border-tertiary);border-radius:3px">
+          <div style="height:5px;border-radius:3px;background:#185FA5;width:${_gaugeW}%;transition:width .4s ease"></div>
+        </div>
+      </div>`;
   }
 
   // 완료 기록 HTML
