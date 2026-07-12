@@ -43,7 +43,7 @@ let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
 let myShiftYear = new Date().getFullYear(), myShiftMonth = new Date().getMonth() + 1;
 let srchYear = 0, srchMonth = 0, srchName = '';
 let myTeam = JSON.parse(localStorage.getItem('ws_my_team') || '[]'); // 내 팀 이름 배열
-let shiftCompletions = {}; // { "2026-5-10-type": {completed_at} }
+// shiftCompletions 제거 — allSchedules 기반 카운트로 교체
 const FEATURE_HISTORY = () => true; // ★ 전체 배포
 let srchDept = 'team'; // 검색탭 선택 파트
 
@@ -449,8 +449,6 @@ async function enterApp() {
   if(lbl) lbl.textContent = '히스토리';
   await loadMyTeamFromDB();
   window._seenShifts = await loadSeenShiftsFromDB();
-  await loadShiftCompletions();
-  await backfillPastShifts();
   // ★ 앱 전체 가로 폭이 화면 밖으로 나가지 않도록 전역 보정
   if(!document.getElementById('app-overflow-fix')){
     const s=document.createElement('style');
@@ -925,9 +923,7 @@ function renderAlarmPanel(){
       const isToday=dt.getTime()===today.getTime();
       const label=isToday?'오늘':'내일';
       // 복합사역(/ 구분) 포함해서 모두 완료됐으면 알림에서 제거
-      const types2 = type.includes('/') ? type.split('/').map(t=>t.trim()) : [type];
-      const allDone = types2.every(t=>!!shiftCompletions[makeCompKey(y,m,d,t)]);
-      if(allDone) return ''; // ★ 완료된 사역은 알림패널에서 삭제
+
       return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="markShiftSeen('${y}-${m}-${d}');viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
         <div style="width:32px;height:32px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📅</div>
         <div style="flex:1;min-width:0">
@@ -2278,10 +2274,7 @@ function renderMyShift(){
           cumCount[cat].types[type]=(cumCount[cat].types[type]||0)+1;
           cumTotal++;
           if(dt>=today){
-            const compKey2=makeCompKey(parseInt(y),parseInt(m),d,type);
-            if(!shiftCompletions[compKey2]){
-              myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
-            }
+            myFuture.push({y:parseInt(y),m:parseInt(m),d,type,dt});
           }
         });
       });
@@ -2290,10 +2283,7 @@ function renderMyShift(){
 
   myFuture.sort((a,b)=>a.dt-b.dt);
 
-  // ★ 완료된 사역은 예정된 사역 목록에서 제거 (분리된 개별 사역 기준)
-  const myFutureFiltered = myFuture.filter(({y,m,d,type})=>
-    !shiftCompletions[makeCompKey(y,m,d,type)]
-  );
+  const myFutureFiltered = myFuture; // 전체 사역 표시
 
   if(!cumTotal){
     // ★ 사역표 없는 사람 → myTeam 첫 번째 팀원 사역 표시
@@ -2410,20 +2400,14 @@ function renderMyShift(){
       const diff=Math.ceil((dt-today)/(1000*60*60*24));
       const ddayBadge=isToday?'<span style="background:#185FA5;color:#fff;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">오늘</span>':
         diff===1?'<span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:6px;margin-left:6px">내일</span>':'';
-      const compKey = makeCompKey(y,m,d,type);
-      const isDone = FEATURE_HISTORY() && !!shiftCompletions[compKey];
-      const isFuture = dt > today; // 아직 안 온 날
-      const doneTime = isDone ? new Date(shiftCompletions[compKey]).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) : '';
-      const completeBtnHtml = FEATURE_HISTORY() ? (
-        isDone ?
-        `<button disabled onclick="event.stopPropagation()" style="padding:5px 11px;border-radius:20px;border:none;background:#3B6D11;color:#fff;font-size:11px;font-weight:500;cursor:default;white-space:nowrap;flex-shrink:0;">✅ ${doneTime}</button>` :
-        isFuture ?
-        `<button disabled onclick="event.stopPropagation()" style="padding:5px 11px;border-radius:20px;border:0.5px solid #C0DD97;background:#EAF3DE;color:#3B6D11;font-size:11px;font-weight:500;cursor:not-allowed;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>완료</button>` :
-        `<button onclick="event.stopPropagation();markShiftComplete(${y},${m},${d},'${type}')" style="padding:5px 11px;border-radius:20px;border:0.5px solid #C0DD97;background:#EAF3DE;color:#3B6D11;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;">✓ 완료</button>`
-      ) : '';
+      const isFuture = dt > today;
+      // ★ 완료 = 어제까지 (자정 기준), 예정 = 오늘 이후
+      const completeBtnHtml = isFuture
+        ? `<span style="font-size:11px;color:var(--color-text-secondary);white-space:nowrap;flex-shrink:0">예정</span>`
+        : `<span style="font-size:11px;font-weight:500;color:#3B6D11;white-space:nowrap;flex-shrink:0">완료 ✓</span>`;
       // SVG 종 모양 (알림 꺼진 경우만)
       const alarmIcon = alarm.alarm ? '' : '<span style="opacity:0.4;flex-shrink:0;display:flex;align-items:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>';
-      return monthHeader+`<div style="background:var(--color-background-primary);border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'var(--color-border-secondary)'};padding:12px 14px;margin-bottom:6px;opacity:${isDone?'0.6':isFuture?'0.45':'1'};transition:opacity 0.3s;box-shadow:0 1px 4px rgba(0,0,0,0.06)" onclick="openDayModal_myshift(${y},${m},${d})">
+      return monthHeader+`<div style="background:var(--color-background-primary);border-radius:12px;border:1.5px solid ${isToday?'#185FA5':'var(--color-border-secondary)'};padding:12px 14px;margin-bottom:6px;opacity:${isFuture?'0.55':'1'};transition:opacity 0.3s;box-shadow:0 1px 4px rgba(0,0,0,0.06)" onclick="openDayModal_myshift(${y},${m},${d})">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:8px;height:8px;border-radius:50%;background:${c?.dot||'#185FA5'};flex-shrink:0"></div>
           <div style="flex:1;min-width:0;">
@@ -2441,208 +2425,68 @@ function renderMyShift(){
     listHtml='<p class="empty-state">예정된 사역이 없습니다.</p>';
   }
 
-  // ★ 히스토리 완료 기록 섹션 (FEATURE_HISTORY 활성화 계정만)
-  let historyHtml = '';
-  if(FEATURE_HISTORY()){
-    const completedTotal = Object.keys(shiftCompletions).length;
-    const thisYear = new Date().getFullYear();
-    const thisMonth = new Date().getMonth()+1;
-    const yearCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(thisYear+'-')).length;
-    const monthCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(`${thisYear}-${thisMonth}-`)).length;
-    // 올해 전체 사역 중 오늘 이전(완료 가능) 사역 수
-    const today2 = new Date(); today2.setHours(0,0,0,0);
-    let pastTotal = 0;
-    Object.entries(allSchedules).forEach(([y,ym])=>{
-      if(parseInt(y)!==thisYear) return;
-      Object.entries(ym).forEach(([m,data])=>{
-        const myData=data[cu.name]||{};
-        Object.entries(myData).forEach(([ds,rawType])=>{
-          const dt=new Date(parseInt(y),parseInt(m)-1,parseInt(ds));
-          if(dt<=today2){
-            // 복수 사역 분리하여 각각 카운트
-            const types=rawType.split('/').map(t=>t.trim()).filter(Boolean);
-            pastTotal+=types.length;
-          }
-        });
+  // ★ allSchedules 기반 사역 카운트 (shiftCompletions 불필요)
+  const _today = new Date(); _today.setHours(0,0,0,0);
+  const _thisYear = _today.getFullYear();
+  const _thisMonth = _today.getMonth()+1;
+
+  // 전체 / 올해 / 이번달 사역 수 계산
+  let _totalCount=0, _yearCount=0, _monthCount=0;
+  let _monthDoneCount=0, _monthTotalCount=0;
+
+  Object.entries(allSchedules).forEach(([y,ym])=>{
+    const yi=parseInt(y);
+    Object.entries(ym).forEach(([m,data])=>{
+      const mi=parseInt(m);
+      const myData=data[cu.name]||{};
+      Object.entries(myData).forEach(([ds,rawType])=>{
+        if(!rawType) return;
+        const di=parseInt(ds);
+        const dt=new Date(yi,mi-1,di);
+        const types=rawType.split('/').map(t=>t.trim()).filter(Boolean);
+        const cnt=types.length;
+        _totalCount+=cnt;
+        if(yi===_thisYear) _yearCount+=cnt;
+        if(yi===_thisYear&&mi===_thisMonth){
+          _monthTotalCount+=cnt;
+          if(dt<_today) _monthDoneCount+=cnt; // 어제까지 = 완료
+        }
       });
     });
+  });
 
-    const recentItems = Object.entries(shiftCompletions)
-      .sort((a,b)=>new Date(b[1])-new Date(a[1]))
-      .slice(0,5)
-      .map(([key,completedAt])=>{
-        const parts = key.split('-');
-        const type = parts.slice(3).join('-');
-        const date = `${parts[1]}월 ${parts[2]}일`;
-        const c = tc(type);
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0f0ea">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="background:${c?.bg||'#f0f0ea'};color:${c?.text||'#888'};border:1px solid ${c?.border||'#ddd'};font-size:11px;padding:2px 7px;border-radius:6px">${type}</span>
-            <span style="font-size:12px;color:var(--color-text-secondary)">${date}</span>
-          </div>
-          <span style="font-size:16px">✅</span>
-        </div>`;
-      }).join('');
+  const _gaugeW = _monthTotalCount>0 ? Math.round(_monthDoneCount/_monthTotalCount*100) : 0;
 
-    historyHtml = `
-      <div class="list-section-title" style="margin-top:14px;margin-bottom:8px">📊 나의 사역 현황</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+  const historyHtml = `
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);letter-spacing:.04em;margin-bottom:8px">📊 나의 사역 현황</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
         <div style="background:#EAF3DE;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#3B6D11">${yearCount}</div>
-          <div style="font-size:10px;color:#639922;margin-top:2px">올해 완료</div>
+          <div style="font-size:20px;font-weight:700;color:#3B6D11">${_yearCount}</div>
+          <div style="font-size:10px;color:#639922;margin-top:2px">올해 사역</div>
         </div>
         <div style="background:#E6F1FB;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#185FA5">${monthCount}</div>
-          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번 달 완료</div>
+          <div style="font-size:20px;font-weight:700;color:#185FA5">${_monthTotalCount}</div>
+          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번달 사역</div>
         </div>
         <div style="background:#FAEEDA;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#854F0B">${completedTotal}</div>
-          <div style="font-size:10px;color:#BA7517;margin-top:2px">누적 완료</div>
+          <div style="font-size:20px;font-weight:700;color:#854F0B">${_totalCount}</div>
+          <div style="font-size:10px;color:#BA7517;margin-top:2px">전체 사역</div>
         </div>
       </div>
-      ${recentItems ? `
-      <div class="list-section-title" style="margin-bottom:6px">최근 완료 기록</div>
-      <div style="background:#fff;border-radius:12px;border:0.5px solid #f0f0ea;padding:4px 14px">
-        ${recentItems}
-      </div>` : ''}`;
-  }
-
-  // 완료 기록 HTML
-  const completedTotal = Object.keys(shiftCompletions).length;
-  const thisYear2 = new Date().getFullYear();
-  const thisMonth2 = new Date().getMonth()+1;
-  const yearCount2 = Object.keys(shiftCompletions).filter(k=>k.startsWith(thisYear2+'-')).length;
-  const monthCount2 = Object.keys(shiftCompletions).filter(k=>k.startsWith(`${thisYear2}-${thisMonth2}-`)).length;
-
-  const recentCompletions = Object.entries(shiftCompletions)
-    .sort((a,b)=>new Date(b[1])-new Date(a[1]))
-    .map(([key,completedAt])=>{
-      const parts=key.split('-');
-      const type=parts.slice(3).join('-');
-      const date=`${parts[1]}월 ${parts[2]}일`;
-      const c=tc(type);
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:0.5px solid var(--color-border-tertiary)">
-        <span style="font-size:12px;color:var(--color-text-secondary)">${date}</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="background:${c?.bg||'#f0f0ea'};color:${c?.text||'#888'};border:1px solid ${c?.border||'#ddd'};font-size:10px;padding:2px 7px;border-radius:6px">${type}</span>
-          <span style="color:#3B6D11;font-size:16px">✅</span>
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:10px;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <span style="font-size:11px;color:var(--color-text-secondary)">이번달 완료</span>
+          <span style="font-size:13px;font-weight:600;color:#185FA5">${_monthDoneCount} / ${_monthTotalCount}</span>
         </div>
-      </div>`;
-    }).join('');
-
-  // ★ 완료 기반 카테고리 집계 (shiftCompletions 기준)
-  const doneBycat = {};
-  Object.keys(shiftCompletions).forEach(key=>{
-    const parts = key.split('-');
-    const type2 = parts.slice(3).join('-');
-    if(!type2) return;
-    const y2=parseInt(parts[0]),m2=parseInt(parts[1]),d2=parseInt(parts[2]);
-    const cat2 = getCategory(type2,y2,m2,d2);
-    const catKey = MY_CAT_ORDER.includes(cat2)?cat2:'특새';
-    if(!doneBycat[catKey]) doneBycat[catKey]={total:0,types:{}};
-    doneBycat[catKey].total++;
-    doneBycat[catKey].types[type2]=(doneBycat[catKey].types[type2]||0)+1;
-  });
-  const doneCats=[
-    ...MY_CAT_ORDER.filter(c=>doneBycat[c]?.total>0),
-    ...Object.keys(doneBycat).filter(c=>!MY_CAT_ORDER.includes(c)&&doneBycat[c]?.total>0)
-  ];
-
-  // 접이식 카테고리 행 HTML
-  const catRows = doneCats.map((cat,cidx)=>{
-    const meta2=MY_CAT_META[cat]||{icon:'📋',label:cat,color:'#888'};
-    const {total:catTotal,types:catTypes}=doneBycat[cat];
-    const catId='dcat-'+cidx;
-    const typeRows=Object.entries(catTypes).sort((a,b)=>b[1]-a[1]).map(([t,cnt])=>{
-      const c2=tc(t);
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px 8px 16px;border-top:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:3px;height:16px;border-radius:2px;background:${c2.dot};flex-shrink:0"></div>
-          <span style="font-size:12px;color:var(--color-text-primary)">${t}</span>
+        <div style="height:5px;background:var(--color-border-tertiary);border-radius:3px">
+          <div style="height:5px;border-radius:3px;background:#185FA5;width:${_gaugeW}%;transition:width .4s ease"></div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;background:${c2.bg};color:${c2.text};padding:2px 8px;border-radius:10px;font-weight:500">${cnt}회</span>
-        </div>
-      </div>`;
-    }).join('');
-    const catColors={
-      '주일':{bg:'#FFF8E6',dot:'#854F0B',text:'#633806'},
-      '수요':{bg:'#EAF3DE',dot:'#3B6D11',text:'#27500A'},
-      '금요':{bg:'#FAEEDA',dot:'#EA580C',text:'#9A3412'},
-      '새벽':{bg:'#EEEDFE',dot:'#534AB7',text:'#3C3489'},
-      '특새':{bg:'#E6F1FB',dot:'#185FA5',text:'#0C447C'},
-    };
-    const cc=catColors[cat]||{bg:'#f5f5f3',dot:'#888',text:'#555'};
-    return `<div style="margin:0 14px 8px;border-radius:10px;overflow:hidden;border:0.5px solid var(--color-border-tertiary)">
-      <div onclick="toggleCatDetail('${catId}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;background:${cc.bg}">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:15px">${meta2.icon}</span>
-          <span style="font-size:13px;font-weight:500;color:${cc.text}">${meta2.label||cat}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:13px;font-weight:500;color:${cc.dot}">${catTotal}회</span>
-          <span id="chev-${catId}" style="font-size:11px;color:${cc.dot};transition:transform .2s;display:inline-block">▼</span>
-        </div>
-      </div>
-      <div id="${catId}" style="max-height:0;overflow:hidden;transition:max-height .25s ease">
-        ${typeRows}
-      </div>
-    </div>`;
-  }).join('');
-
-  el.innerHTML=`
-    ${ddayHtml}
-    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:16px;overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
-      <div onclick="toggleMySection('stat')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer">
-        <div style="display:flex;align-items:center;gap:7px">
-          <span style="font-size:17px">📊</span>
-          <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">사역 현황 · 통계</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:#185FA5;font-weight:500">올해 ${yearCount2}회 완료</span>
-          <span id="chev-stat" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
-        </div>
-      </div>
-      <div id="sec-stat" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
-        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 14px">
-          <div style="background:#EAF3DE;border-radius:10px;padding:12px 8px;text-align:center">
-            <div style="font-size:22px;font-weight:500;color:#3B6D11">${yearCount2}</div>
-            <div style="font-size:10px;color:#639922;margin-top:3px;font-weight:500">올해 완료</div>
-          </div>
-          <div style="background:#E6F1FB;border-radius:10px;padding:12px 8px;text-align:center">
-            <div style="font-size:22px;font-weight:500;color:#185FA5">${monthCount2}</div>
-            <div style="font-size:10px;color:#378ADD;margin-top:3px;font-weight:500">이번 달</div>
-          </div>
-          <div style="background:#FAEEDA;border-radius:10px;padding:12px 8px;text-align:center">
-            <div style="font-size:22px;font-weight:500;color:#854F0B">${completedTotal}</div>
-            <div style="font-size:10px;color:#BA7517;margin-top:3px;font-weight:500">누적 완료</div>
-          </div>
-        </div>
-        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
-        ${catRows}
       </div>
     </div>
+  `;
 
-    ${completedTotal>0?`
-    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:16px;overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
-      <div onclick="toggleMySection('rec')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer">
-        <div style="display:flex;align-items:center;gap:7px">
-          <span style="font-size:17px">✅</span>
-          <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">완료 기록</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:var(--color-text-secondary)">${completedTotal}건</span>
-          <span id="chev-rec" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
-        </div>
-      </div>
-      <div id="sec-rec" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
-        <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
-        ${recentCompletions}
-      </div>
-    </div>`:''}
-
-    <div style="background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:16px;overflow:hidden;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+  el.innerHTML = historyHtml + `
       <div onclick="toggleMySection('shift')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:17px">📅</span>
@@ -2821,164 +2665,7 @@ function viewDayInCal(y,m0,d){curY=y;curM=m0;switchTab('cal',$('btn-cal'));rende
 //  검색 탭
 // ══════════════════════════════════════════════════
 // ── shift_completions DB 헬퍼 ──────────────────────────
-function makeCompKey(y,m,d,type){ return `${y}-${m}-${d}-${type.replace(/\s/g,'')}`; }
-
-async function loadShiftCompletions(){
-  if(!FEATURE_HISTORY() || OFFLINE || !cu?.id) return;
-  try {
-    const {data} = await sb.from('shift_completions')
-      .select('comp_key,completed_at')
-      .eq('user_id', cu.id);
-    shiftCompletions = {};
-    (data||[]).forEach(r=>{ shiftCompletions[r.comp_key]=r.completed_at; });
-  } catch(e){ console.warn('loadShiftCompletions error:', e); }
-}
-
-// ★ 과거 사역 일괄 완료 처리 (패치 이전 사역 backfill)
-async function backfillPastShifts(){
-  if(!FEATURE_HISTORY() || OFFLINE || !cu?.id) return;
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const toInsert = [];
-
-  Object.entries(allSchedules).forEach(([y,ym])=>{
-    Object.entries(ym).forEach(([m,data])=>{
-      const myData = data[cu.name] || {};
-      Object.entries(myData).forEach(([ds, rawType])=>{
-        if(!rawType) return;
-        const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(ds));
-        if(dt < today){ // 오늘 제외, 어제까지만 backfill
-          // '/' 구분된 복합 사역도 각각 처리
-          const types = rawType.includes('/') ? rawType.split('/') : [rawType];
-          types.forEach(type=>{
-            type = type.trim();
-            if(!type) return;
-            const key = makeCompKey(parseInt(y),parseInt(m),parseInt(ds),type);
-            if(!shiftCompletions[key]){
-              const completedAt = dt.toISOString();
-              shiftCompletions[key] = completedAt;
-              toInsert.push({
-                user_id: cu.id,
-                comp_key: key,
-                y: parseInt(y), m: parseInt(m), d: parseInt(ds),
-                type,
-                completed_at: completedAt
-              });
-            }
-          });
-        }
-      });
-    });
-  });
-
-  if(toInsert.length > 0){
-    await sb.from('shift_completions').upsert(toInsert, {onConflict:'user_id,comp_key'});
-    console.log(`backfill: ${toInsert.length}개 과거 사역 완료 처리`);
-  }
-  // 항상 리렌더링 (카운트 반영)
-  if(FEATURE_HISTORY() && $('tab-myshift')?.style.display !== 'none'){
-    renderMyShift();
-  }
-}
-
-async function markShiftComplete(y,m,d,type){
-  if(!FEATURE_HISTORY()) return;
-  const key = makeCompKey(y,m,d,type);
-  if(shiftCompletions[key]) return; // 이미 완료
-  const now = new Date().toISOString();
-  shiftCompletions[key] = now;
-  if(!OFFLINE && cu?.id){
-    await sb.from('shift_completions')
-      .upsert({user_id:cu.id, comp_key:key, y, m, d, type, completed_at:now})
-      .eq('user_id', cu.id).eq('comp_key', key);
-  }
-  // ★ 알림센터에서도 읽음 처리
-  const seenKey = `${y}-${m}-${d}`;
-  await markShiftSeen(seenKey);
-  renderMyShift();
-  showCompletionToast(type);
-}
-
-function showCompletionToast(type){
-  const total = Object.keys(shiftCompletions).length;
-  let msg = `${type} 사역 완료! 수고하셨습니다 🙏`;
-  if(total % 10 === 0) msg = `🎉 ${total}번째 사역 완료! 귀한 섬김 감사해요`;
-  else if(total % 5 === 0) msg = `✨ 올해 ${total}번째 사역이에요!`;
-  showToastMsg(msg);
-}
-// ─────────────────────────────────────────────────────
-
-// ── my_team DB 저장 ──
-async function saveMyTeam(){
-  localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
-  if(!OFFLINE && cu?.id){
-    const {error} = await sb.from('app_users')
-      .update({my_team: myTeam})
-      .eq('id', cu.id);
-    if(error) console.warn('saveMyTeam error:', error.message);
-  }
-}
-
-async function loadMyTeamFromDB(){
-  if(OFFLINE || !cu?.id){
-    myTeam = JSON.parse(localStorage.getItem('ws_my_team')||'[]');
-    return;
-  }
-  try {
-    const {data} = await sb.from('app_users').select('my_team').eq('id', cu.id).single();
-    let loaded = data?.my_team;
-    if(typeof loaded === 'string') loaded = JSON.parse(loaded);
-    if(Array.isArray(loaded) && loaded.length > 0){
-      myTeam = loaded;
-      localStorage.setItem('ws_my_team', JSON.stringify(myTeam));
-    } else {
-      myTeam = JSON.parse(localStorage.getItem('ws_my_team')||'[]');
-      if(myTeam.length) await saveMyTeam();
-    }
-  } catch(e){
-    myTeam = JSON.parse(localStorage.getItem('ws_my_team')||'[]');
-  }
-}
-
-// ── seen_shifts DB 저장 ──
-async function saveSeenShifts(seen){
-  const arr = [...seen];
-  localStorage.setItem('ws_seen_shifts', JSON.stringify(arr));
-  if(!OFFLINE && cu?.id){
-    // JSONB 컬럼에는 배열 직접 전달 (JSON.stringify 하면 이중 직렬화됨)
-    const {error} = await sb.from('app_users')
-      .update({seen_shifts: arr})
-      .eq('id', cu.id);
-    if(error) console.warn('saveSeenShifts error:', error.message);
-  }
-}
-
-async function loadSeenShiftsFromDB(){
-  if(OFFLINE || !cu?.id){
-    return new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
-  }
-  try {
-    const {data} = await sb.from('app_users').select('seen_shifts').eq('id', cu.id).single();
-    let loaded = data?.seen_shifts;
-    // DB에 이중 직렬화된 경우 대비해 배열이 될 때까지 파싱
-    while(typeof loaded === 'string') loaded = JSON.parse(loaded);
-    if(Array.isArray(loaded) && loaded.length > 0){
-      localStorage.setItem('ws_seen_shifts', JSON.stringify(loaded));
-      return new Set(loaded);
-    }
-  } catch(e){ console.warn('loadSeenShiftsFromDB error:', e); }
-  return new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
-}
-
-const DEPT_META = {
-  'team':       { icon:'⭐', label:'내 팀',     color:'#3B6D11', bg:'#EAF3DE', border:'#C0DD97' },
-  '담임목사님':   { icon:'⛪', label:'담임목사님',  color:'#185FA5', bg:'#E6F1FB', border:'#BFDBFE' },
-  '교구':       { icon:'🏘️', label:'교구',      color:'#633806', bg:'#FAEEDA', border:'#FCD9A0' },
-  '청년국':     { icon:'🔥', label:'청년국',    color:'#7C3AED', bg:'#EEEDFE', border:'#C4B5FD' },
-  '교육국':     { icon:'📚', label:'교육국',    color:'#0E7490', bg:'#E0F7FA', border:'#99E6F5' },
-  '행정/선교':  { icon:'⚙️', label:'행정/선교', color:'#374151', bg:'#F3F4F6', border:'#D1D5DB' },
-};
-const DEPT_ORDER = ['team','담임목사님','교구','청년국','교육국','행정/선교'];
+// makeCompKey, loadShiftCompletions, backfillPastShifts, markShiftComplete, showCompletionToast 제거
 
 function renderSearchFilters(){
   // 파트별 인원 수 계산
