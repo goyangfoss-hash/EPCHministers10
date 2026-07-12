@@ -2588,25 +2588,14 @@ function renderMyShift(){
           <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">사역 현황 · 통계</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:#185FA5;font-weight:500">올해 ${yearCount2}회 완료</span>
+          <span style="font-size:11px;color:#185FA5;font-weight:500">올해 ${_yearCount}회</span>
           <span id="chev-stat" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
         </div>
       </div>
-      <div id="sec-stat" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
+      <div id="sec-stat" style="max-height:500px;overflow:hidden;transition:max-height .3s ease">
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 14px">
-          <div style="background:#EAF3DE;border-radius:10px;padding:12px 8px;text-align:center">
-            <div style="font-size:22px;font-weight:500;color:#3B6D11">${yearCount2}</div>
-            <div style="font-size:10px;color:#639922;margin-top:3px;font-weight:500">올해 완료</div>
-          </div>
-          <div style="background:#E6F1FB;border-radius:10px;padding:12px 8px;text-align:center">
-            <div style="font-size:22px;font-weight:500;color:#185FA5">${monthCount2}</div>
-            <div style="font-size:10px;color:#378ADD;margin-top:3px;font-weight:500">이번 달</div>
-          </div>
-          <div style="background:#FAEEDA;border-radius:10px;padding:12px 8px;text-align:center">
-            <div style="font-size:22px;font-weight:500;color:#854F0B">${completedTotal}</div>
-            <div style="font-size:10px;color:#BA7517;margin-top:3px;font-weight:500">누적 완료</div>
-          </div>
+        <div style="padding:12px 14px">
+          ${historyHtml}
         </div>
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
         ${catRows}
