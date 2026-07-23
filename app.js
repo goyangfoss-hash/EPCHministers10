@@ -208,9 +208,85 @@ document.addEventListener('visibilitychange', async () => {
 // ══════════════════════════════════════════════════
 //  당겨서 새로고침 (Pull to Refresh)
 // ══════════════════════════════════════════════════
-// Pull to Refresh 제거 — Realtime 구독으로 자동 갱신됨
-// (schedules 테이블 변경 시 postgres_changes 이벤트로 즉각 반영)
+function initPullToRefresh(){
+  let startY=0, pulling=false, indicator=null;
+  let atTop=false; // ★ 터치 시작 시 최상단 여부
+  const threshold=140; // ★ 더 많이 당겨야 작동 (110→140)
 
+  const createIndicator=()=>{
+    if($('ptr-indicator')) return $('ptr-indicator');
+    const el=document.createElement('div');
+    el.id='ptr-indicator';
+    el.style.cssText='position:fixed;top:56px;left:50%;transform:translateX(-50%);background:#185FA5;color:#fff;padding:8px 20px;border-radius:0 0 20px 20px;font-size:12px;font-weight:600;z-index:35;display:none;align-items:center;gap:8px;box-shadow:0 2px 10px rgba(0,0,0,.2)';
+    el.innerHTML='<div class="ptr-spinner"></div><span id="ptr-text">당겨서 새로고침</span>';
+    document.body.appendChild(el);
+    return el;
+  };
+
+  const isModalOpen=()=>{
+    if($('chat-modal')?.style.display==='flex') return true;
+    if($('user-dm-modal')?.style.display==='flex') return true;
+    if($('comment-modal')?.style.display==='flex') return true;
+    if($('alarm-panel')?.style.display==='block') return true;
+    return false;
+  };
+
+  // 스크롤 가능한 조상의 scrollTop 확인
+  const getTargetScrollTop=(target)=>{
+    let el=target;
+    while(el && el!==document.body){
+      const oy=getComputedStyle(el).overflowY;
+      if((oy==='auto'||oy==='scroll') && el.scrollHeight>el.clientHeight+2){
+        return el.scrollTop;
+      }
+      el=el.parentElement;
+    }
+    // main-screen scrollTop
+    return $('main-screen')?.scrollTop||0;
+  };
+
+  document.addEventListener('touchstart', e=>{
+    pulling=false; atTop=false;
+    if(isModalOpen()) return;
+    // ★ modal-panel 내부 터치면 PTR 비활성
+    if(e.target.closest('#comment-modal')) return;
+    const st=getTargetScrollTop(e.touches[0].target);
+    atTop = (st===0);
+    if(atTop){
+      startY=e.touches[0].clientY;
+    }
+  }, {passive:true});
+
+  document.addEventListener('touchmove', e=>{
+    if(isModalOpen()||e.target.closest('#comment-modal')){ pulling=false; atTop=false; if(indicator) indicator.style.display='none'; return; }
+    if(!atTop) return;
+    const st=getTargetScrollTop(e.touches[0].target);
+    // ★ 이동 중 스크롤이 생기면 PTR 취소
+    if(st>0){ atTop=false; pulling=false; if(indicator) indicator.style.display='none'; return; }
+    const dist=e.touches[0].clientY-startY;
+    if(dist<=0){ pulling=false; if(indicator) indicator.style.display='none'; return; }
+    // ★ 60px 이상 당겼을 때만 인디케이터 표시 (기존 30px→60px)
+    if(dist>60){
+      pulling=true;
+      indicator=createIndicator();
+      indicator.style.display='flex';
+      $('ptr-text').textContent=dist>threshold?'놓아서 새로고침':'당겨서 새로고침';
+    }
+  }, {passive:true});
+
+  document.addEventListener('touchend', async e=>{
+    atTop=false;
+    if(!pulling){ return; }
+    pulling=false;
+    const dist=e.changedTouches[0].clientY-startY;
+    if(dist>threshold && indicator){
+      $('ptr-text').textContent='새로고침 중...';
+      await refreshSchedules();
+      if(cu) updateNoticeBadge();
+    }
+    if(indicator) indicator.style.display='none';
+  }, {passive:true});
+}
 // ══════════════════════════════════════════════════
 //  캘린더 스와이프로 월 이동 (자연스러운 실시간 슬라이드)
 // ══════════════════════════════════════════════════
@@ -502,6 +578,7 @@ async function enterApp() {
     navigator.serviceWorker.register('firebase-messaging-sw.js').catch(()=>{});
   }
   initFCM();
+  initPullToRefresh();
   initCalendarSwipe();
   // ★ 알림 클릭으로 열렸을 때 URL ?tab= 파라미터로 탭 이동
   handleNotifLaunchTab();
@@ -1945,152 +2022,134 @@ function openDayModal(day){
   $('modal-title').textContent=`${MN[curM]} ${day}일 (${DN[new Date(curY,curM,day).getDay()]})`;
   $('comment-modal').style.display='flex'; renderDayModal();
   // ★ 모달 열릴 때 캘린더 터치 잠금
+  const tabCal=$('tab-cal');
+  if(tabCal){
+    tabCal._savedScrollTop = tabCal.scrollTop;
+    tabCal.style.pointerEvents='none';
+    tabCal.style.touchAction='none';
+    tabCal.style.userSelect='none';
+    // 스크롤 위치 고정
+    tabCal.style.overflow='hidden';
+    tabCal.style.height=tabCal.offsetHeight+'px';
+  }
   initDayModalSwipe();
 }
 
-// ★ 날짜 모달 터치 핸들러 — 완전 재설계
-// 원칙: 가로→날짜이동, 세로+최상단+아래→dismiss, 세로 그 외→브라우저 기본 스크롤
+// ★ 날짜 모달 스와이프 — 좌우: 이전/다음 날, 아래: 닫기
 function initDayModalSwipe(){
   const box = document.querySelector('#comment-modal .modal-box');
   if(!box) return;
+  if(box._touchStart) box.removeEventListener('touchstart', box._touchStart);
+  if(box._touchMove)  box.removeEventListener('touchmove',  box._touchMove);
+  if(box._touchEnd)   box.removeEventListener('touchend',   box._touchEnd);
+  if(box._touchCancel)box.removeEventListener('touchcancel',box._touchCancel);
 
-  // 기존 리스너 제거
-  if(box._ts) box.removeEventListener('touchstart', box._ts);
-  if(box._tm) box.removeEventListener('touchmove',  box._tm);
-  if(box._te) box.removeEventListener('touchend',   box._te);
-  if(box._tc) box.removeEventListener('touchcancel',box._tc);
+  let sx=0, sy=0, dx=0, dy=0, direction=null, bodyScrollTop=0;
+  const H_THRESHOLD=55, V_THRESHOLD=90;
 
-  let sx=0, sy=0, dx=0, dy=0;
-  let gesture=null; // null | 'swipe' | 'dismiss' | 'scroll'
-  const SWIPE_THRESHOLD = 55;
-  const DISMISS_THRESHOLD = 80;
-  const DIRECTION_LOCK = 8; // 방향 확정에 필요한 최소 픽셀
-
-  function getTrack(){ return document.getElementById('modal-track'); }
-  function getCurPanel(){ return document.getElementById('modal-panel-cur'); }
-
-  function resetTrack(){
-    const t=getTrack(); if(!t) return;
-    t.style.transition='none';
-    t.style.transform='translateX(-33.333%)';
+  function preloadAdjacentPanels(){
+    if(!modalDate) return;
+    const {year,month,day}=modalDate;
+    const dim=new Date(year,month,0).getDate();
+    let pd=day-1,pm=month,py=year;
+    if(pd<1){pm--;if(pm<1){pm=12;py--;}pd=new Date(py,pm,0).getDate();}
+    let nd=day+1,nm=month,ny=year;
+    if(nd>dim){nm++;if(nm>12){nm=1;ny++;}nd=1;}
+    const prev=$('modal-panel-prev'), next=$('modal-panel-next');
+    if(prev) prev.innerHTML=getDayModalHTML(py,pm,pd);
+    if(next) next.innerHTML=getDayModalHTML(ny,nm,nd);
   }
 
-  box._ts = e=>{
-    if(e.touches.length>1){ gesture='scroll'; return; }
-    sx=e.touches[0].clientX;
-    sy=e.touches[0].clientY;
-    dx=0; dy=0; gesture=null;
-    // 인접 패널 미리 렌더
+  box._touchStart = e=>{
+    e.stopPropagation(); // ★ 캘린더로 버블링 차단
+    if(e.touches.length>1) return;
+    sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+    dx=0; dy=0; direction=null;
+    // ★ 터치 시작 시 패널 스크롤 위치 정확히 읽기
+    const curPanel=$('modal-panel-cur');
+    bodyScrollTop = curPanel ? curPanel.scrollTop : 0;
     preloadAdjacentPanels();
-    const t=getTrack(); if(t) t.style.transition='none';
-    box.style.transition='none';
+    const track=$('modal-track');
+    if(track) track.style.transition='none';
   };
 
-  box._tm = e=>{
-    if(e.touches.length>1){ gesture='scroll'; return; }
+  box._touchMove = e=>{
     dx=e.touches[0].clientX-sx;
     dy=e.touches[0].clientY-sy;
-
-    // 방향 미확정
-    if(!gesture){
-      if(Math.abs(dx)<DIRECTION_LOCK && Math.abs(dy)<DIRECTION_LOCK) return;
-      if(Math.abs(dx)>Math.abs(dy)){
-        gesture='swipe'; // 가로 → 날짜 스와이프
-      } else {
-        const panel=getCurPanel();
-        const scrollTop=panel?panel.scrollTop:0;
-        if(dy>0 && scrollTop<=2){
-          gesture='dismiss'; // 세로 아래 + 최상단 → dismiss
-        } else {
-          gesture='scroll'; // 나머지 → 브라우저 기본 스크롤
-        }
-      }
+    if(!direction){
+      if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
+      direction=Math.abs(dx)>Math.abs(dy)?'horizontal':'vertical';
     }
-
-    if(gesture==='swipe'){
+    if(direction==='vertical'){
+      // ★ 패널이 스크롤 중이거나 위로 드래그면 dismiss 안 함
+      const curPanel=$('modal-panel-cur');
+      const curScroll = curPanel ? curPanel.scrollTop : 0;
+      if(curScroll>10||dy<0) return;
       e.preventDefault();
-      const t=getTrack();
-      if(t) t.style.transform=`translateX(calc(-33.333% + ${dx}px))`;
-    } else if(gesture==='dismiss'){
-      if(dy<=0){ gesture='scroll'; return; }
+      box.style.transform=`translateY(${dy}px)`;
+      box.style.opacity=String(Math.max(0.4,1-dy/300));
+    } else {
       e.preventDefault();
-      box.style.transform=`translateY(${Math.max(0,dy)}px)`;
-      box.style.opacity=String(Math.max(0.3, 1-dy/250));
-    } else if(gesture==='scroll'){
-      // ★ 최하단 도달 시 위로 스크롤하면 이벤트 차단 (캘린더로 새나감 방지)
-      const panel=getCurPanel();
-      if(panel){
-        const atBottom = panel.scrollTop+panel.clientHeight >= panel.scrollHeight-2;
-        if(atBottom && dy<0) e.preventDefault();
-      }
+      const track=$('modal-track');
+      if(track) track.style.transform=`translateX(calc(-33.333% + ${dx}px))`;
     }
   };
 
-  box._te = e=>{
-    box.style.transition='';
-
-    if(gesture==='swipe'){
-      const t=getTrack();
-      if(t && Math.abs(dx)>SWIPE_THRESHOLD){
-        const dir=dx<0?1:-1;
-        t.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
-        t.style.transform=`translateX(${dir>0?'-66.666%':'0%'})`;
-        setTimeout(()=>commitDayMove(dir), 250);
-      } else {
-        const t=getTrack();
-        if(t){
-          t.style.transition='transform .2s cubic-bezier(.25,.46,.45,.94)';
-          t.style.transform='translateX(-33.333%)';
-          setTimeout(()=>{ if(t) t.style.transition=''; }, 220);
-        }
-      }
-    } else if(gesture==='dismiss'){
-      if(dy>DISMISS_THRESHOLD){
-        box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
+  box._touchEnd = e=>{
+    if(direction==='vertical'&&bodyScrollTop<=5){
+      box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
+      if(dy>V_THRESHOLD){
         box.style.transform='translateY(100%)';
         box.style.opacity='0';
         setTimeout(()=>{
           closeModalById('comment-modal');
-          box.style.transform='';
-          box.style.opacity='';
-          box.style.transition='';
-          resetTrack();
-        }, 250);
+          box.style.transform=''; box.style.opacity=''; box.style.transition='';
+          const track=$('modal-track');
+          if(track){track.style.transition='none';track.style.transform='translateX(-33.333%)';}
+        },250);
       } else {
-        box.style.transition='transform .2s cubic-bezier(.25,.46,.45,.94), opacity .2s';
-        box.style.transform='translateY(0)';
-        box.style.opacity='1';
-        setTimeout(()=>{ box.style.transition=''; }, 220);
+        box.style.transform='translateY(0)'; box.style.opacity='1';
+        setTimeout(()=>{box.style.transition='';},250);
       }
+    } else if(direction==='horizontal'){
+      const track=$('modal-track');
+      if(!track){direction=null;return;}
+      if(Math.abs(dx)>H_THRESHOLD){
+        const dir=dx<0?1:-1;
+        const targetX=dir>0?'-66.666%':'0%';
+        track.style.transition='transform .28s cubic-bezier(.25,.46,.45,.94)';
+        track.style.transform=`translateX(${targetX})`;
+        setTimeout(()=>commitDayMove(dir),280);
+      } else {
+        track.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
+        track.style.transform='translateX(-33.333%)';
+        setTimeout(()=>{track.style.transition='';},260);
+      }
+    } else {
+      const track=$('modal-track');
+      if(track){
+        track.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
+        track.style.transform='translateX(-33.333%)';
+        setTimeout(()=>{track.style.transition='';},260);
+      }
+      box.style.transform=''; box.style.opacity=''; box.style.transition='';
     }
-    gesture=null;
+    direction=null;
   };
 
-  box._tc = ()=>{
-    gesture=null;
+  box._touchCancel = ()=>{
+    direction=null;
     box.style.transform=''; box.style.opacity=''; box.style.transition='';
-    resetTrack();
+    const track=$('modal-track');
+    if(track){track.style.transition='none';track.style.transform='translateX(-33.333%)';}
   };
 
-  box.addEventListener('touchstart',  box._ts, {passive:true});
-  box.addEventListener('touchmove',   box._tm, {passive:false});
-  box.addEventListener('touchend',    box._te, {passive:true});
-  box.addEventListener('touchcancel', box._tc, {passive:true});
+  box.addEventListener('touchstart', box._touchStart, {passive:true});
+  box.addEventListener('touchmove',  box._touchMove,  {passive:false});
+  box.addEventListener('touchend',   box._touchEnd,   {passive:true});
+  box.addEventListener('touchcancel',box._touchCancel,{passive:true});
 }
 
-function preloadAdjacentPanels(){
-  if(!modalDate) return;
-  const {year,month,day}=modalDate;
-  const dim=new Date(year,month,0).getDate();
-  let pd=day-1,pm=month,py=year;
-  if(pd<1){pm--;if(pm<1){pm=12;py--;}pd=new Date(py,pm,0).getDate();}
-  let nd=day+1,nm=month,ny=year;
-  if(nd>dim){nm++;if(nm>12){nm=1;ny++;}nd=1;}
-  const prev=document.getElementById('modal-panel-prev');
-  const next=document.getElementById('modal-panel-next');
-  if(prev) prev.innerHTML=getDayModalHTML(py,pm,pd);
-  if(next) next.innerHTML=getDayModalHTML(ny,nm,nd);
-}
 function commitDayMove(dir){
   if(!modalDate) return;
   const {year,month,day}=modalDate;
@@ -2194,7 +2253,19 @@ function closeModalById(id){
   $(id).style.display='none';
   if(id==='comment-modal'){
     modalDate=null;
-
+    // ★ 모달 닫힐 때 캘린더 복원
+    const tabCal=$('tab-cal');
+    if(tabCal){
+      tabCal.style.pointerEvents='';
+      tabCal.style.touchAction='';
+      tabCal.style.userSelect='';
+      tabCal.style.overflow='';
+      tabCal.style.height='';
+      if(tabCal._savedScrollTop!=null){
+        tabCal.scrollTop=tabCal._savedScrollTop;
+        tabCal._savedScrollTop=null;
+      }
+    }
   }
 }
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
@@ -2441,59 +2512,70 @@ function renderMyShift(){
     listHtml='<p class="empty-state">예정된 사역이 없습니다.</p>';
   }
 
-  // ★ 히스토리 — allSchedules 기반 사역 카운트
+  // ★ 히스토리 완료 기록 섹션 (FEATURE_HISTORY 활성화 계정만)
   let historyHtml = '';
   if(FEATURE_HISTORY()){
-    const _today = new Date(); _today.setHours(0,0,0,0);
-    const _thisYear = _today.getFullYear();
-    const _thisMonth = _today.getMonth()+1;
-    let _totalCount=0, _yearCount=0, _monthTotalCount=0, _monthDoneCount=0;
+    const completedTotal = Object.keys(shiftCompletions).length;
+    const thisYear = new Date().getFullYear();
+    const thisMonth = new Date().getMonth()+1;
+    const yearCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(thisYear+'-')).length;
+    const monthCount = Object.keys(shiftCompletions).filter(k=>k.startsWith(`${thisYear}-${thisMonth}-`)).length;
+    // 올해 전체 사역 중 오늘 이전(완료 가능) 사역 수
+    const today2 = new Date(); today2.setHours(0,0,0,0);
+    let pastTotal = 0;
     Object.entries(allSchedules).forEach(([y,ym])=>{
-      const yi=parseInt(y);
+      if(parseInt(y)!==thisYear) return;
       Object.entries(ym).forEach(([m,data])=>{
-        const mi=parseInt(m);
         const myData=data[cu.name]||{};
         Object.entries(myData).forEach(([ds,rawType])=>{
-          if(!rawType) return;
-          const di=parseInt(ds);
-          const dt=new Date(yi,mi-1,di);
-          const types=rawType.split('/').map(t=>t.trim()).filter(Boolean);
-          const cnt=types.length;
-          _totalCount+=cnt;
-          if(yi===_thisYear) _yearCount+=cnt;
-          if(yi===_thisYear&&mi===_thisMonth){
-            _monthTotalCount+=cnt;
-            if(dt<_today) _monthDoneCount+=cnt;
+          const dt=new Date(parseInt(y),parseInt(m)-1,parseInt(ds));
+          if(dt<=today2){
+            // 복수 사역 분리하여 각각 카운트
+            const types=rawType.split('/').map(t=>t.trim()).filter(Boolean);
+            pastTotal+=types.length;
           }
         });
       });
     });
-    const _gaugeW=_monthTotalCount>0?Math.round(_monthDoneCount/_monthTotalCount*100):0;
+
+    const recentItems = Object.entries(shiftCompletions)
+      .sort((a,b)=>new Date(b[1])-new Date(a[1]))
+      .slice(0,5)
+      .map(([key,completedAt])=>{
+        const parts = key.split('-');
+        const type = parts.slice(3).join('-');
+        const date = `${parts[1]}월 ${parts[2]}일`;
+        const c = tc(type);
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid #f0f0ea">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:${c?.bg||'#f0f0ea'};color:${c?.text||'#888'};border:1px solid ${c?.border||'#ddd'};font-size:11px;padding:2px 7px;border-radius:6px">${type}</span>
+            <span style="font-size:12px;color:var(--color-text-secondary)">${date}</span>
+          </div>
+          <span style="font-size:16px">✅</span>
+        </div>`;
+      }).join('');
+
     historyHtml = `
       <div class="list-section-title" style="margin-top:14px;margin-bottom:8px">📊 나의 사역 현황</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
         <div style="background:#EAF3DE;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#3B6D11">${_yearCount}</div>
-          <div style="font-size:10px;color:#639922;margin-top:2px">올해 사역</div>
+          <div style="font-size:20px;font-weight:700;color:#3B6D11">${yearCount}</div>
+          <div style="font-size:10px;color:#639922;margin-top:2px">올해 완료</div>
         </div>
         <div style="background:#E6F1FB;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#185FA5">${_monthTotalCount}</div>
-          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번달 사역</div>
+          <div style="font-size:20px;font-weight:700;color:#185FA5">${monthCount}</div>
+          <div style="font-size:10px;color:#378ADD;margin-top:2px">이번 달 완료</div>
         </div>
         <div style="background:#FAEEDA;border-radius:10px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:#854F0B">${_totalCount}</div>
-          <div style="font-size:10px;color:#BA7517;margin-top:2px">전체 사역</div>
+          <div style="font-size:20px;font-weight:700;color:#854F0B">${completedTotal}</div>
+          <div style="font-size:10px;color:#BA7517;margin-top:2px">누적 완료</div>
         </div>
       </div>
-      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:10px;padding:10px 12px;margin-bottom:4px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-          <span style="font-size:11px;color:var(--color-text-secondary)">이번달 완료</span>
-          <span style="font-size:13px;font-weight:600;color:#185FA5">${_monthDoneCount} / ${_monthTotalCount}</span>
-        </div>
-        <div style="height:5px;background:var(--color-border-tertiary);border-radius:3px">
-          <div style="height:5px;border-radius:3px;background:#185FA5;width:${_gaugeW}%;transition:width .4s ease"></div>
-        </div>
-      </div>`;
+      ${recentItems ? `
+      <div class="list-section-title" style="margin-bottom:6px">최근 완료 기록</div>
+      <div style="background:#fff;border-radius:12px;border:0.5px solid #f0f0ea;padding:4px 14px">
+        ${recentItems}
+      </div>` : ''}`;
   }
 
   // 완료 기록 HTML
@@ -2588,14 +2670,25 @@ function renderMyShift(){
           <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">사역 현황 · 통계</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:#185FA5;font-weight:500">사역 현황</span>
+          <span style="font-size:11px;color:#185FA5;font-weight:500">올해 ${yearCount2}회 완료</span>
           <span id="chev-stat" style="font-size:14px;color:var(--color-text-secondary);transition:transform .2s">▼</span>
         </div>
       </div>
-      <div id="sec-stat" style="max-height:500px;overflow:hidden;transition:max-height .3s ease">
+      <div id="sec-stat" style="max-height:0;overflow:hidden;transition:max-height .3s ease">
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
-        <div style="padding:12px 14px">
-          ${historyHtml}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px 14px">
+          <div style="background:#EAF3DE;border-radius:10px;padding:12px 8px;text-align:center">
+            <div style="font-size:22px;font-weight:500;color:#3B6D11">${yearCount2}</div>
+            <div style="font-size:10px;color:#639922;margin-top:3px;font-weight:500">올해 완료</div>
+          </div>
+          <div style="background:#E6F1FB;border-radius:10px;padding:12px 8px;text-align:center">
+            <div style="font-size:22px;font-weight:500;color:#185FA5">${monthCount2}</div>
+            <div style="font-size:10px;color:#378ADD;margin-top:3px;font-weight:500">이번 달</div>
+          </div>
+          <div style="background:#FAEEDA;border-radius:10px;padding:12px 8px;text-align:center">
+            <div style="font-size:22px;font-weight:500;color:#854F0B">${completedTotal}</div>
+            <div style="font-size:10px;color:#BA7517;margin-top:3px;font-weight:500">누적 완료</div>
+          </div>
         </div>
         <div style="height:0.5px;background:var(--color-border-tertiary)"></div>
         ${catRows}
@@ -5530,26 +5623,50 @@ async function doApplySchedule(year, month, isMerge){
     });
   });
 
-  // ★ [초안/게시 방식] 여기서는 실제 서비스에 바로 반영하지 않고 schedules_draft에만 저장한다.
-  // 이용자에게 보이는 실제 데이터(allSchedules, schedules 테이블)는 관리자가 "게시"를 눌러야 바뀐다.
-  assignColors(collectAllTypes());
+  // ★ 관리자가 앱에서 직접 업로드하는 경우: 바로 실제 서비스에 반영한다 (기존 동작).
+  // 초안(schedules_draft)→게시 단계는 무인 자동화(구글시트 자동 업로드)에서만 사용하고,
+  // 관리자가 직접 화면에서 업로드/수정할 때는 그 자리에서 바로 확인 가능하므로 즉시 반영한다.
+  allSchedules[year][month]=finalData;
+  assignColors(collectAllTypes());filterType='';curY=year;curM=month-1;
 
   if(!OFFLINE){
-    const{error}=await sb.from('schedules_draft').upsert(
+    const{error}=await sb.from('schedules').upsert(
       {year,month,data:finalData,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},
       {onConflict:'year,month,type'}
     );
-    if(error){showExcelErr('초안 저장 오류: '+error.message);return;}
-    // ★ 변경된 사역자 알림은 여기서 보내지 않는다 — 관리자가 "게시"를 누를 때(publishDraftSchedule)만 발송된다.
-    console.log(`[초안 저장] ${year}년 ${month}월(${currentUploadType}) — 변경 예정 ${changedWorkers.length}건, 게시 전까지 이용자에게는 보이지 않음`);
+    if(error){showExcelErr('저장 오류: '+error.message);return;}
+
+    // ★ 변경된 사역자들에게 FCM 알림 발송
+    if(changedWorkers.length){
+      const byUser={};
+      changedWorkers.forEach(({userId,name,day,type,isNew})=>{
+        if(!byUser[userId]) byUser[userId]={userId,name,shifts:[]};
+        byUser[userId].shifts.push({day,type,isNew});
+      });
+      for(const {userId,name,shifts} of Object.values(byUser)){
+        const shiftDesc = shifts.slice(0,3).map(({day,type,isNew})=>{
+          const dow=DN2[new Date(year,month-1,day).getDay()];
+          return `${month}월 ${day}일(${dow}) ${type}`;
+        }).join(', ');
+        const title = shifts[0].isNew ? '📅 사역 등록 알림' : '📝 사역 변경 알림';
+        const body = shifts[0].isNew
+          ? `${shiftDesc} 사역이 등록되었습니다.`
+          : `${shiftDesc} 사역이 변경되었습니다.`;
+        const shiftDay=String(shifts[0]?.day||'');
+        sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
+      }
+      console.log(`[알림] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
+    }
+    await refreshSchedules();
   }
 
-  clearExcel();
-  renderAdmin(); // 초안 목록(관리자 전용)에 방금 저장한 초안이 보이도록 갱신
-  switchTab('admin',$('btn-admin'));
+  clearExcel();switchTab('cal',$('btn-cal'));renderCalendar();buildSchedPreview();
 
-  // ★ 안전장치 2: 되돌리기 토스트 대신, 초안 저장 안내 토스트
-  showUndoToast(`⏳ 초안으로 저장됨 — 관리자 화면에서 확인 후 "게시"를 눌러야 실제로 반영됩니다.`);
+  if(settings.enableUndo!==false && undoData){
+    showUndoToast(isMerge?`'${fileName}' 병합 완료`:`${year}년 ${MN[month]} 사역표 저장 완료`);
+  } else {
+    toast('excel-toast');
+  }
 }
 
 // ══════════════════════════════════════════════════
@@ -5609,7 +5726,7 @@ function _renderDraftCalGridHTML(year, month, data){
   }).join(''):'<p class="empty-state" style="font-size:12px">해당 월에 배정된 사역이 없습니다.</p>';
 
   return `
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px">${grid}</div>
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-bottom:14px;width:100%;box-sizing:border-box">${grid}</div>
     <div style="max-height:260px;overflow:auto;border-top:1px solid #ececea;padding-top:8px">${detailHtml}</div>`;
 }
 
@@ -5621,12 +5738,12 @@ function previewDraftSchedule(year, month, type, data){
   document.getElementById('draft-preview-modal')?.remove();
   const modal=document.createElement('div');
   modal.id='draft-preview-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
   modal.innerHTML=`
-    <div style="background:#fff;border-radius:16px;padding:18px;width:100%;max-width:520px;max-height:88vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <div style="background:#fff;border-radius:16px;padding:18px;width:100%;max-width:480px;max-height:82vh;overflow:auto;overflow-x:hidden;box-sizing:border-box;box-shadow:0 8px 32px rgba(0,0,0,.18)">
       <div style="font-size:14px;font-weight:700;color:#e07800;margin-bottom:4px">🔒 관리자 전용 미리보기 — ${year}년 ${MN[month]} 캘린더 반영 모습 (${type==='special'?'특별사역':'정기사역'})</div>
       <div style="font-size:11px;color:#888;margin-bottom:12px">이 화면은 이용자에게 보이지 않습니다. 게시 전까지는 초안 상태입니다.</div>
-      ${bodyHtml}
+      <div style="width:100%;box-sizing:border-box">${bodyHtml}</div>
       <div style="display:flex;gap:8px;margin-top:14px">
         <button onclick="publishDraftSchedule(${year},${month},'${type}')" style="flex:1;padding:12px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">✅ 게시하기 (이용자에게 반영 + 알림 발송)</button>
         <button onclick="document.getElementById('draft-preview-modal').remove()" style="padding:12px 16px;background:#fff;color:#888;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer">닫기</button>
