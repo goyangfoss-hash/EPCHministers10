@@ -1851,7 +1851,7 @@ function renderCalendar(){
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
       const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
 
-      const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
+      const dots=(calTeamView?teamWorkers:workers).length?`<div class="shift-dots">${(calTeamView?teamWorkers:workers).slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType?(()=>{
         const mts=myType.split('/').map(t=>t.trim());
         const filtered=filterCategory==='all'?mts:mts.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
@@ -1934,7 +1934,7 @@ function _renderSideMonth(dir){
       if(hasMy){bgStyle=`background:${myC.bg}`;borderStyle=`border-color:${myC.border}`;}
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
       const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
-      const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'' ;
+      const dots=(calTeamView?myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).length?`<div class="shift-dots">${(calTeamView&&myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${(calTeamView&&myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).length>5?`<span class="more-dot">+${(calTeamView&&myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).length-5}</span>`:''}</div>`:'' ;
       const typeTip=myType?(()=>{
         const mts=myType.split('/').map(t=>t.trim());
         const filtered=filterCategory==='all'?mts:mts.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
