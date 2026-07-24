@@ -1771,15 +1771,7 @@ function renderCalendar(){
   Object.keys(d).forEach((name)=>{Object.entries(d[name]||{}).forEach(([ds,type])=>{const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;if(!allMap[dn])allMap[dn]=[];allMap[dn].push({name,type,c:tc(type)});});});
 
   // ★ 새벽 사역 항상 앞에 오도록 정렬
-  const _SBT=['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
-  Object.keys(allMap).forEach(dn=>{
-    allMap[dn].sort((a,b)=>{
-      const ai=_SBT.indexOf(a.type.split('/')[0].trim());
-      const bi=_SBT.indexOf(b.type.split('/')[0].trim());
-      if(ai>=0&&bi<0)return -1; if(ai<0&&bi>=0)return 1;
-      if(ai>=0&&bi>=0)return ai-bi; return 0;
-    });
-  });
+  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};Object.keys(allMap).forEach(dn=>{const dow=new Date(curY,curM,parseInt(dn)).getDay();const orderList=SHIFT_ORDER[dow]||[];const shiftRank=(t)=>{const tt=(t||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===tt);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return tt.includes(oc)||oc.includes(tt);});return pi===-1?999:pi;};allMap[dn].forEach(w=>{const tags=w.type.split('/').map(s=>s.trim());let best=tags[0],bestRank=shiftRank(tags[0]);for(const t of tags){const r=shiftRank(t);if(r<bestRank){bestRank=r;best=t;}}w._rank=bestRank;w.c=tc(best);});allMap[dn].sort((a,b)=>a._rank-b._rank);});
   // ★ 카테고리 필터 적용
   const {fm, fmMy}=getFilteredMap(allMap, myRaw, myDays);
 
