@@ -2036,7 +2036,7 @@ function initDayModalSwipe(){
   if(box._touchEnd)   box.removeEventListener('touchend',   box._touchEnd);
   if(box._touchCancel)box.removeEventListener('touchcancel',box._touchCancel);
 
-  let sx=0, sy=0, dx=0, dy=0, direction=null, bodyScrollTop=0;
+  let sx=0, sy=0, dx=0, dy=0, direction=null, bodyScrollTop=0, ignoreGesture=false;
   const H_THRESHOLD=55, V_THRESHOLD=90;
 
   function preloadAdjacentPanels(){
@@ -2052,7 +2052,7 @@ function initDayModalSwipe(){
     if(next) next.innerHTML=getDayModalHTML(ny,nm,nd);
   }
 
-  box._touchStart = e=>{
+  box._touchStart = e=>{if(e.target.closest('.modal-close')){ignoreGesture=true;return;}ignoreGesture=false;
     e.stopPropagation(); // ★ 캘린더로 버블링 차단
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
@@ -2065,7 +2065,7 @@ function initDayModalSwipe(){
     if(track) track.style.transition='none';
   };
 
-  box._touchMove = e=>{
+  box._touchMove = e=>{if(ignoreGesture)return;
     dx=e.touches[0].clientX-sx;
     dy=e.touches[0].clientY-sy;
     if(!direction){
@@ -2087,7 +2087,7 @@ function initDayModalSwipe(){
     }
   };
 
-  box._touchEnd = e=>{
+  box._touchEnd = e=>{if(ignoreGesture){ignoreGesture=false;return;}
     if(direction==='vertical'&&bodyScrollTop<=5){
       box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
       if(dy>V_THRESHOLD){
@@ -2129,7 +2129,7 @@ function initDayModalSwipe(){
     direction=null;
   };
 
-  box._touchCancel = ()=>{
+  box._touchCancel = ()=>{ignoreGesture=false;
     direction=null;
     box.style.transform=''; box.style.opacity=''; box.style.transition='';
     const track=$('modal-track');
