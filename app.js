@@ -232,17 +232,73 @@ function getChurchEvents(y, m, d){
     return {name:ev.name, isStart: target===startT, isEnd: target===endT, isLabel: target===midT};
   });
 }
-// 캘린더 셀 안에 넣을 행사 바 HTML — 2개 이상 겹치면 얇은 바를 세로로 쌓아서 표시(가운데 정렬)
-// ★ 여러 날에 걸친 행사는 실제 시작일/종료일이 아닌 한 모서리를 각지게 만들어
-//   같은 주(週) 안에서 요일별 바가 하나로 이어진 것처럼 보이도록 함
-function renderEventBarsHtml(y,m,d){
-  const evs=getChurchEvents(y,m,d);
-  if(!evs.length) return '';
-  const dow=new Date(y,m-1,d).getDay();
-  return evs.map(e=>{
-    const leftRound=e.isStart||dow===0, rightRound=e.isEnd||dow===6;
-    const r=`${leftRound?3:0}px ${rightRound?3:0}px ${rightRound?3:0}px ${leftRound?3:0}px`;
-    return `<div class="event-bar" style="border-radius:${r}">${e.isLabel?`<span class="event-bar-text">${e.name}</span>`:''}</div>`;
+// ★ 진짜로 요일 칸을 가로질러 하나로 이어진 '타임스팬' 막대 세그먼트 계산
+// cal-grid는 1행=요일 헤더, 2행부터 주(週)별 날짜이므로 grid-row=2+주차, grid-column은 요일(1~7)
+// 한 행사가 이 달 안에서 주(週) 경계를 넘으면 주 단위로 여러 세그먼트로 쪼갬(각 세그먼트는 그 주 안에서는 항상 이어짐)
+function getMonthEventSegments(year, month){
+  const segs=[];
+  if(year!==2026) return segs;
+  const DAY=86400000;
+  const fd=new Date(year, month-1, 1).getDay();
+  const dim=new Date(year, month, 0).getDate();
+  const monthStart=new Date(year,month-1,1).getTime();
+  const monthEnd=new Date(year,month-1,dim).getTime();
+  CHURCH_EVENTS_2026.forEach(ev=>{
+    const evStart=new Date(2026,ev.start[0]-1,ev.start[1]).getTime();
+    const evEnd = ev.end ? new Date(2026,ev.end[0]-1,ev.end[1]).getTime() : evStart;
+    const ovStart=Math.max(evStart, monthStart);
+    const ovEnd=Math.min(evEnd, monthEnd);
+    if(ovStart>ovEnd) return; // 이 달과 겹치지 않음
+    const totalDays=Math.round((evEnd-evStart)/DAY)+1;
+    const midT=evStart+Math.floor((totalDays-1)/2)*DAY; // 이름표를 붙일 '가운데 날'(전체 기간 기준)
+    let cur=ovStart;
+    while(cur<=ovEnd){
+      const dom=Math.round((cur-monthStart)/DAY)+1;
+      const idx=fd+dom-1, row=Math.floor(idx/7);
+      let segEndCur=cur, segEndDom=dom;
+      while(true){
+        const nextCur=segEndCur+DAY;
+        if(nextCur>ovEnd) break;
+        const nextDom=Math.round((nextCur-monthStart)/DAY)+1;
+        if(Math.floor((fd+nextDom-1)/7)!==row) break;
+        segEndCur=nextCur; segEndDom=nextDom;
+      }
+      const startCol=idx%7, endCol=(fd+segEndDom-1)%7;
+      segs.push({
+        name:ev.name,
+        row: row+2, // +1(헤더 행) +1(1-index)
+        colStart: startCol+1, colEnd: endCol+2, // CSS grid-column (1-index, end는 배타적)
+        leftRound: cur===evStart || startCol===0,
+        rightRound: segEndCur===evEnd || endCol===6,
+        isLabel: midT>=cur && midT<=segEndCur,
+        clickDay: dom
+      });
+      cur=segEndCur+DAY;
+    }
+  });
+  return segs;
+}
+// 같은 주(週) 안에서 겹치는 세그먼트끼리 서로 다른 lane(층)을 배정 — 2개 이상 겹치면 위아래로 쌓임
+function assignEventLanes(segs){
+  const byRow={};
+  segs.forEach(s=>{(byRow[s.row]=byRow[s.row]||[]).push(s);});
+  Object.values(byRow).forEach(rowSegs=>{
+    rowSegs.sort((a,b)=>a.colStart-b.colStart);
+    const laneEnd=[];
+    rowSegs.forEach(s=>{
+      let lane=0;
+      while(laneEnd[lane]!==undefined && laneEnd[lane]>s.colStart) lane++;
+      s.lane=lane; laneEnd[lane]=s.colEnd;
+    });
+  });
+  return segs;
+}
+// 이 달(year,month)의 행사 스팬 막대 전체 HTML — cal-grid의 자식으로 그대로 추가(grid-row/column으로 직접 위치)
+function renderMonthEventBarsHtml(year, month){
+  const segs=assignEventLanes(getMonthEventSegments(year, month));
+  return segs.map(s=>{
+    const r=`${s.leftRound?3:0}px ${s.rightRound?3:0}px ${s.rightRound?3:0}px ${s.leftRound?3:0}px`;
+    return `<div class="event-bar" style="grid-row:${s.row};grid-column:${s.colStart} / ${s.colEnd};align-self:end;margin-bottom:${s.lane*14}px;border-radius:${r}" onclick="openDayModal(${s.clickDay})">${s.isLabel?`<span class="event-bar-text">${s.name}</span>`:''}</div>`;
   }).join('');
 }
 
@@ -1925,10 +1981,9 @@ function renderCalendar(){
         const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;outline:2px solid ${bg};outline-offset:1px;position:relative`:`background:${bg};border-color:${bg};position:relative`;
         const holidayNameMy=getHoliday(curY,curM+1,d);
         const holidayBadgeMy=holidayNameMy?`<div class="holiday-label" style="font-size:8px;color:#fff;font-weight:700;background:rgba(230,57,70,.85);border-radius:4px;padding:0 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayNameMy}</div>`:'';
-        const eventBarsMy=renderEventBarsHtml(curY,curM+1,d);
         html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
           <div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div>
-          ${holidayBadgeMy}${typeLabel}${cmtBadge}${alarmOffBadge}${eventBarsMy}
+          ${holidayBadgeMy}${typeLabel}${cmtBadge}${alarmOffBadge}
         </div>`;
       } else {
         // 내 사역 없는 날 — 흐린 셀 (오늘이면 파란 테두리)
@@ -1936,10 +1991,9 @@ function renderCalendar(){
         const holidayNameMy2=getHoliday(curY,curM+1,d);
         const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidayNameMy2?`color:#e63946;font-weight:800`:``;
         const holidayBadgeMy2=holidayNameMy2?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayNameMy2}</div>`:'';
-        const eventBarsMy2=renderEventBarsHtml(curY,curM+1,d);
         html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
           <div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>
-          ${holidayBadgeMy2}${eventBarsMy2}
+          ${holidayBadgeMy2}
         </div>`;
       }
     } else {
@@ -1975,10 +2029,11 @@ function renderCalendar(){
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidayName?`color:#e63946;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
       const holidayBadge=holidayName?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayName}</div>`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
-      const eventBars=renderEventBarsHtml(curY,curM+1,d);
-      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${holidayBadge}${typeTip}${dots}${cmt}${alarmOffBadge}${eventBars}</div>`;
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${holidayBadge}${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
   }
+  // ★ 교회 전체 행사 — 요일 칸을 가로지르는 진짜 스팬 막대(cal-grid의 형제 grid item으로 직접 위치)
+  html+=renderMonthEventBarsHtml(curY,curM+1);
 
   $('cal-grid').innerHTML=html; renderLegend(); renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap);
   updateCalRowHeight();

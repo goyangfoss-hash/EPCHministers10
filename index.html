@@ -170,9 +170,9 @@
     .more-dot{font-size:7px;color:#aaa;line-height:1}
     .cmt-indicator{position:absolute;bottom:2px;right:2px;background:#e74c3c;color:#fff;font-size:8px;min-width:13px;height:13px;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0 2px;font-weight:700}
     .alarm-dot-cal{position:absolute;top:2px;left:2px;font-size:8px;line-height:1}
-    /* ★ 교회 전체 행사 바 — 사역 배정과 무관한 별도 표시 (하단, 가운데 정렬) */
-    .event-bar{width:100%;box-sizing:border-box;height:12px;margin-top:auto;background:rgba(127,119,221,.28);display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:3px;flex-shrink:0}
-    .event-bar+.event-bar{margin-top:2px}
+    /* ★ 교회 전체 행사 바 — 사역 배정과 무관한 별도 표시. cal-grid의 형제 grid item으로
+       grid-row/grid-column을 직접 지정해 요일 칸을 가로지르는 진짜 스팬 막대로 그려짐 */
+    .event-bar{box-sizing:border-box;height:12px;background:rgba(127,119,221,.28);display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:3px;cursor:pointer;position:relative;z-index:1}
     .event-bar-text{font-size:8px;color:#26215C;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px;text-align:center}
 
     /* 리스트 */
