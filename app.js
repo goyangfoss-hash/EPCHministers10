@@ -2172,7 +2172,11 @@ function _renderSideMonth(dir){
         const todayStyle=gridPos+(isToday?`border:2.5px solid #185FA5`:``);
         const holidaySide=getHoliday(sY,sM+1,d);
         const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidaySide?`color:#e63946;font-weight:800`:``;
-        html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div></div>`;
+        // ★ 미리보기 패널에선 공휴일 이름표(holiday-label)가 빠져 있어서, 날짜만 빨갛게
+        //  보일 뿐 "개천절"/"한글날" 같은 이름은 스와이프 중엔 안 보이고 있었다 — 본 캘린더와
+        //  동일하게 이름표도 함께 그린다.
+        const holidayBadgeSide=holidaySide?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidaySide}</div>`:'';
+        html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${holidayBadgeSide}</div>`;
       }
     } else {
       const dimmed=filterCategory!=='all'&&!workers.length;
@@ -2190,7 +2194,8 @@ function _renderSideMonth(dir){
       })():'';
       const holidaySide2=getHoliday(sY,sM+1,d);
       const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidaySide2?`color:#e63946;font-weight:800`:'';
-      html+=`<div class="${cls}" style="${cellStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}</div>`;
+      const holidayBadgeSide2=holidaySide2?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidaySide2}</div>`:'';
+      html+=`<div class="${cls}" style="${cellStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${holidayBadgeSide2}${typeTip}${dots}</div>`;
     }
   }
   // ★ 스와이프 시 미리보기로 보이는 이전/다음 달 패널에도 교회 행사 막대와 주 구분선을 표시
