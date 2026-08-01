@@ -208,7 +208,7 @@ const CHURCH_EVENTS_2026 = [
   {start:[11,19],end:null,      name:'사는길 축복의 날 마감'},
   {start:[11,20],end:null,      name:'연합구역예배'},
   {start:[11,23],end:[11,27],   name:'신년목회계획'},
-  {start:[11,30],end:[12,4],    name:'교육국 워크샾'},
+  {start:[11,30],end:[12,3],    name:'교육국 워크샾'},
   {start:[12,1], end:null,      name:'은평열린대학 종강'},
   {start:[12,6], end:null,      name:'은평신앙훈련 수료식'},
   {start:[12,20],end:null,      name:'성탄축하행사'},
