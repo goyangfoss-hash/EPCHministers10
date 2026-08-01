@@ -221,13 +221,24 @@ function getChurchEvents(y, m, d){
     const startT=new Date(2026, ev.start[0]-1, ev.start[1]).getTime();
     const endT = ev.end ? new Date(2026, ev.end[0]-1, ev.end[1]).getTime() : startT;
     return target>=startT && target<=endT;
-  }).map(ev=>({name:ev.name, isStart: target===new Date(2026, ev.start[0]-1, ev.start[1]).getTime()}));
+  }).map(ev=>{
+    const startT=new Date(2026, ev.start[0]-1, ev.start[1]).getTime();
+    const endT = ev.end ? new Date(2026, ev.end[0]-1, ev.end[1]).getTime() : startT;
+    return {name:ev.name, isStart: target===startT, isEnd: target===endT};
+  });
 }
 // 캘린더 셀 안에 넣을 행사 바 HTML — 2개 이상 겹치면 얇은 바를 세로로 쌓아서 표시(가운데 정렬)
+// ★ 여러 날에 걸친 행사는 실제 시작일/종료일이 아닌 한 모서리를 각지게 만들어
+//   같은 주(週) 안에서 요일별 바가 하나로 이어진 것처럼 보이도록 함
 function renderEventBarsHtml(y,m,d){
   const evs=getChurchEvents(y,m,d);
   if(!evs.length) return '';
-  return evs.map(e=>`<div class="event-bar">${e.isStart?`<span class="event-bar-text">${e.name}</span>`:''}</div>`).join('');
+  const dow=new Date(y,m-1,d).getDay();
+  return evs.map(e=>{
+    const leftRound=e.isStart||dow===0, rightRound=e.isEnd||dow===6;
+    const r=`${leftRound?3:0}px ${rightRound?3:0}px ${rightRound?3:0}px ${leftRound?3:0}px`;
+    return `<div class="event-bar" style="border-radius:${r}">${e.isStart?`<span class="event-bar-text">${e.name}</span>`:''}</div>`;
+  }).join('');
 }
 
 // ══════════════════════════════════════════════════
