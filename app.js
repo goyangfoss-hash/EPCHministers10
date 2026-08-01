@@ -2101,9 +2101,13 @@ function _renderSideMonth(dir){
     });
   });
   const {fm,fmMy}=getFilteredMap(allMap,myRaw,myDays);
-  let html=DN.map(d=>`<div class="cal-head">${d}</div>`).join('');
-  for(let i=0;i<fd;i++) html+=`<div class="cal-cell empty"></div>`;
+  // ★ 메인 캘린더와 동일하게, 요일 칸도 명시적 grid-row/column을 지정해야 한다.
+  //  (교회 행사 스팬 막대/주 구분선을 같은 grid의 형제로 추가하면, 위치가 지정되지 않은
+  //  요일 칸은 auto-flow로 밀려서 이전에 발생했던 "날짜가 사라지는" 버그가 재현된다)
+  let html=DN.map((d,i)=>`<div class="cal-head" style="grid-row:1;grid-column:${i+1}">${d}</div>`).join('');
+  for(let i=0;i<fd;i++) html+=`<div class="cal-cell empty" style="grid-row:2;grid-column:${i+1}"></div>`;
   for(let d=1;d<=dim;d++){
+    const _idx=fd+d-1, gridPos=`grid-row:${Math.floor(_idx/7)+2};grid-column:${(_idx%7)+1};`;
     const isMy=myDays.has(d);
     const isToday=now.getFullYear()===sY&&now.getMonth()===sM&&now.getDate()===d;
     const dow=new Date(sY,sM,d).getDay();
@@ -2116,10 +2120,10 @@ function _renderSideMonth(dir){
       const cls='cal-cell'+(dow===0?' sun':'')+(dow===6?' sat':'')+(!myHasDay&&!isToday?' dimmed':'');
       if(myHasDay){
         const bg=myC?myC.dot:'#185FA5';
-        const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;position:relative`:`background:${bg};border-color:${bg};position:relative`;
+        const todayStyle=gridPos+(isToday?`background:${bg};border:2.5px solid #185FA5;position:relative`:`background:${bg};border-color:${bg};position:relative`);
         html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div><div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div></div>`;
       } else {
-        const todayStyle=isToday?`border:2.5px solid #185FA5`:``;
+        const todayStyle=gridPos+(isToday?`border:2.5px solid #185FA5`:``);
         const holidaySide=getHoliday(sY,sM+1,d);
         const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidaySide?`color:#e63946;font-weight:800`:``;
         html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div></div>`;
@@ -2131,7 +2135,7 @@ function _renderSideMonth(dir){
       let bgStyle='',borderStyle='';
       if(hasMy){bgStyle=`background:${myC.bg}`;borderStyle=`border-color:${myC.border}`;}
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
-      const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
+      const cellStyle=gridPos+[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
       const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'' ;
       const typeTip=myType?(()=>{
         const mts=myType.split('/').map(t=>t.trim());
@@ -2143,6 +2147,10 @@ function _renderSideMonth(dir){
       html+=`<div class="${cls}" style="${cellStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}</div>`;
     }
   }
+  // ★ 스와이프 시 미리보기로 보이는 이전/다음 달 패널에도 교회 행사 막대와 주 구분선을 표시
+  //  (메인 캘린더에만 있고 여기 없어서, 스와이프 중에는 행사가 안 보이던 문제 수정)
+  html+=renderWeekDividersHtml(fd,dim);
+  html+=renderMonthEventBarsHtml(sY,sM+1);
   targetEl.innerHTML=html;
 }
 
