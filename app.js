@@ -1958,7 +1958,8 @@ function renderCalendar(){
   let html=DN.map((d,i)=>`<div class="cal-head" style="grid-row:1;grid-column:${i+1}">${d}</div>`).join('');
   for(let i=0;i<fd;i++)html+=`<div class="cal-cell empty" style="grid-row:2;grid-column:${i+1}"></div>`;
   for(let d=1;d<=dim;d++){
-    const _idx=fd+d-1, gridPos=`grid-row:${Math.floor(_idx/7)+2};grid-column:${(_idx%7)+1};`;
+    const _idx=fd+d-1, _weekRow=Math.floor(_idx/7);
+    const gridPos=`grid-row:${_weekRow+2};grid-column:${(_idx%7)+1};${_weekRow>0?'border-top:1px solid rgba(0,0,0,.08);':''}`;
     const isMy=myDays.has(d);
     const isToday=now.getFullYear()===curY&&now.getMonth()===curM&&now.getDate()===d;
     const dow=new Date(curY,curM,d).getDay();
