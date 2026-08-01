@@ -253,7 +253,8 @@ function updateCalRowHeight(){
     const shiftH=shiftList?shiftList.offsetHeight:0;
     const navH=nav.offsetHeight;
     const available=window.innerHeight-outerTop-shiftH-navH-16;
-    const rowH=Math.max(56, Math.floor((available-(rows-1)*3)/rows));
+    // ★ 겹치는 사역/행사 표시가 3개 정도 들어갈 정도면 충분하므로 상한(78px)을 둠
+    const rowH=Math.min(78, Math.max(56, Math.floor((available-(rows-1)*3)/rows)));
     document.documentElement.style.setProperty('--cal-row-h', rowH+'px');
   });
 }
