@@ -340,9 +340,16 @@ function updateCalRowHeight(){
     const outerTop=outer.getBoundingClientRect().top;
     const shiftH=shiftList?shiftList.offsetHeight:0;
     const navH=nav.offsetHeight;
-    const available=window.innerHeight-outerTop-shiftH-navH-16;
+    // ★ 요일 헤더 행은 이제 --cal-row-h를 쓰지 않고 자기 내용 크기(auto)만 차지한다.
+    //  가용 공간에서 헤더의 실제 높이 + 헤더~첫 주 사이 gap까지 제대로 빼줘야
+    //  달마다 계산 결과가 흔들리지 않는다(전엔 이걸 안 빼서 날짜 행이 항상 필요
+    //  이상으로 커지고, 달마다 그 정도가 달라 간격이 들쭉날쭉해 보였다).
+    const headEl=document.querySelector('#cal-grid .cal-head');
+    const headH=headEl?headEl.offsetHeight:20;
+    const available=window.innerHeight-outerTop-shiftH-navH-16-headH;
     // ★ 겹치는 사역/행사 표시가 3개 정도 들어갈 정도면 충분하므로 상한(78px)을 둠
-    const rowH=Math.min(78, Math.max(56, Math.floor((available-(rows-1)*9)/rows)));
+    //  (rows개의 주 행 사이 + 헤더~첫 주 사이까지 포함해 총 rows번의 9px 간격이 있다)
+    const rowH=Math.min(78, Math.max(56, Math.floor((available-rows*9)/rows)));
     document.documentElement.style.setProperty('--cal-row-h', rowH+'px');
   });
 }
@@ -504,25 +511,19 @@ function initCalendarSwipe(){
     t.addEventListener('transitionend', async function once(){
       t.removeEventListener('transitionend', once);
       t.style.transition='none';
-      // ★ cb()(changeMonth)는 그 달 데이터가 이미 캐시돼 있으면 바로 끝나지만,
-      //  아직 안 불러온 달로 넘어가는 경우엔 서버에서 데이터를 받아온 뒤에야
-      //  renderCalendar()가 실행된다 — 즉 렌더링이 끝나는 시점이 매번 다르다.
-      //  예전엔 이 시점을 rAF 2번(고정된 시간)만큼만 기다렸는데, 데이터를 새로
-      //  받아와야 하는 달이거나 행사가 많아 렌더링이 오래 걸리는 달에서는
-      //  그 고정 시간보다 실제 작업이 더 걸려서, 트랙이 먼저 열리고 나서
-      //  뒤늦게 내용이 바뀌는 "엉뚱한 달이 잠깐 보였다 사라지는" 플래시가 났다.
-      //  → 정해진 시간을 기다리는 대신, cb()가 "진짜로 끝날 때까지"(비동기 포함) 기다린다.
-      t.style.opacity='0';
-      await cb(); // changeMonth가 렌더링을 실제로 마칠 때까지 대기(캐시 여부와 무관하게 항상 정확)
-      // renderCalendar 완료 후에만 트랙을 중앙으로 복귀(애니 없이)
+      // ★ 타이밍을 추측해서 숨겼다 보여주는 방식(rAF 몇 번 등) 대신, 순서 자체로
+      //  플래시를 원천 차단한다. 지금 화면엔 방금 슬라이드해서 보이는 패널(예: 다음달
+      //  프리뷰)이 "그대로" 떠 있는 상태 — 이 패널은 아직 아무도 건드리지 않는다.
+      //  cb()(changeMonth)는 화면 밖에 있는 "중앙" 패널만 채운다(캐시된 달이면 즉시,
+      //  서버에서 새로 받아와야 하는 달이면 그만큼 기다렸다가) — 그동안 화면엔 계속
+      //  올바른 프리뷰가 그대로 보이므로 블랭크도, 플래시도 없다.
+      await cb(); // 중앙 패널이 실제로 채워질 때까지 대기(캐시 여부와 무관하게 항상 정확)
+      // 중앙이 올바르게 채워진 뒤에만 트랙을 중앙으로 스냅 → 화면엔 항상 맞는 달만 보인다
       t.style.transform='translateX(-33.333%)';
-      // 위치 복귀가 실제로 레이아웃/페인트에 반영된 뒤에만 다시 보이게 함
-      requestAnimationFrame(()=>{
-        requestAnimationFrame(()=>{
-          t.style.opacity='1';
-          animating=false;
-        });
-      });
+      // 이제 좌우 패널은 확실히 화면 밖이므로, 그제서야 갱신해도 절대 눈에 띄지 않는다
+      _renderSideMonth(-1);
+      _renderSideMonth(1);
+      animating=false;
     });
   }
 
@@ -1849,7 +1850,12 @@ function renderLegend(){
   }
 
   // ★ '전체' 버튼 제거, 카테고리 탭만 토글로 표시
-  const visibleCats = CATEGORIES.filter(c=>c.id!=='all'&&activeCats.has(c.id));
+  //  주일/수요/금요/새벽은 정기예배라 사역표가 아직 안 올라온 달(예: 업로드 전인
+  //  10~12월)에도 항상 표시한다 — 그래야 스와이프로 달을 넘길 때마다 탭 줄이 있다
+  //  없다 하며 화면 구조(틀)가 흔들리지 않는다. 특새 등 비정기 카테고리는 그 달에
+  //  실제로 있을 때만 표시(기존 동작 유지).
+  const _ALWAYS_CATS = ['주일','수요','금요','새벽'];
+  const visibleCats = CATEGORIES.filter(c=>c.id!=='all'&&(_ALWAYS_CATS.includes(c.id)||activeCats.has(c.id)));
 
   el.innerHTML=`<div class="cat-tab-wrap">
     ${visibleCats.map(c=>{
@@ -1930,13 +1936,16 @@ function changeMonth(d, fromSwipe){
   if(curM<0){curM=11;curY--;}
   filterType='';filterCategory='all';
   // ★ 이 달 데이터가 캐시에 없으면 서버에서 받아온 뒤에야 실제로 그려지므로,
-  //  "언제 진짜로 화면이 갱신됐는지"를 호출한 쪽(스와이프)이 정확히 알 수 있도록
-  //  Promise로 완료 시점을 알려준다(고정된 시간을 기다리는 방식은 렌더링이
-  //  오래 걸리거나 네트워크가 느릴 때 화면이 먼저 열리는 사고로 이어졌다).
+  //  "언제 진짜로 중앙 패널이 갱신됐는지"를 호출한 쪽(스와이프/버튼)이 정확히 알 수
+  //  있도록 Promise로 완료 시점을 알려준다.
+  //  - fromSwipe=true: 터치 스와이프는 commitSlide가 트랙 이동을 이미 처리 중이므로,
+  //    여기선 중앙(cal-grid)만 먼저 채우고 끝 — 나머지는 commitSlide가 이어서 처리.
+  //  - fromSwipe=false(버튼): 아직 아무 이동도 시작 안 했으므로 _btnSlideOut이
+  //    직접 트랙 이동 + 중앙 갱신 + 좌우 갱신을 순서대로 책임진다.
   return new Promise(resolve=>{
     const doRender=()=>{
-      if(!fromSwipe) _btnSlideOut(d, ()=>{ renderCalendar(); resolve(); });
-      else { renderCalendar(); resolve(); }
+      if(!fromSwipe){ _btnSlideOut(d, ()=>renderCalendar(true)).then(resolve); }
+      else { renderCalendar(true); resolve(); }
     };
     if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){
       sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{
@@ -1947,30 +1956,30 @@ function changeMonth(d, fromSwipe){
   });
 }
 // 버튼 클릭 시 슬라이드 애니메이션 (스와이프와 동일한 트랙 사용)
-// ★ 여기 도달했을 때는(changeMonth의 doRender에서 호출) 데이터 fetch가 이미 끝난 뒤이므로
-//  cb()는 항상 동기적으로 끝난다 — 하지만 스와이프와 동일하게, 트랙이 아직 이동한 위치에
-//  있는 채로 cb()가 화면에 보이는 패널의 내용을 바꿔버리는 순간이 있어 잠깐 노출될 수 있다.
-//  스와이프와 똑같이 교체 중엔 잠깐 숨겼다가 위치 복귀 후에만 다시 보여준다.
-function _btnSlideOut(dir, cb){
-  const t=document.getElementById('cal-swipe-track'); if(!t){cb();return;}
+// ★ 타이밍을 추측해서 숨겼다 보여주는 대신, 순서 자체로 플래시를 원천 차단한다:
+//  1) 트랙이 아직 이동한 위치에 있을 때(중앙 cal-grid는 화면 밖) 중앙만 먼저 정확히 채우고
+//  2) 그 다음에야 트랙을 중앙으로 스냅 — 이제 화면엔 방금 올바르게 채운 중앙이 보인다
+//  3) 이 시점엔 좌우 패널이 확실히 화면 밖이므로, 그제서야 좌우를 갱신해도 절대 안 보인다
+async function _btnSlideOut(dir, cb){
+  const t=document.getElementById('cal-swipe-track'); if(!t){await cb(); _renderSideMonth(-1); _renderSideMonth(1); return;}
   const targetPct=dir>0?-66.666:0;
   t.style.transition='transform .26s cubic-bezier(.4,0,.2,1)';
   t.style.transform=`translateX(${targetPct}%)`;
-  t.addEventListener('transitionend', function once(){
+  t.addEventListener('transitionend', async function once(){
     t.removeEventListener('transitionend',once);
     t.style.transition='none';
-    t.style.opacity='0';
-    cb();
-    t.style.transform='translateX(-33.333%)';
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        t.style.opacity='1';
-      });
-    });
+    await cb(); // 중앙 패널만 먼저 갱신(아직 화면 밖)
+    t.style.transform='translateX(-33.333%)'; // 이제 중앙(이미 올바른 내용)이 화면에 보임
+    _renderSideMonth(-1); _renderSideMonth(1); // 좌우는 이제 화면 밖 — 안전하게 갱신
   });
 }
 
-function renderCalendar(){
+function renderCalendar(skipSides){
+  // ★ skipSides=true면 중앙(cal-grid) 패널만 갱신하고 좌우 미리보기 패널은 건드리지 않는다.
+  //  스와이프/버튼 전환 중, "아직 화면 밖인 중앙 패널"만 먼저 정확히 채운 뒤 트랙을
+  //  중앙으로 스냅시키고, 그 다음(양옆이 확실히 화면 밖이 된 뒤)에만 좌우를 갱신하기 위함.
+  //  이렇게 하면 "화면에 보이고 있는 패널의 내용이 뒤늦게 바뀌는" 플래시가 타이밍과
+  //  무관하게 원천적으로 발생할 수 없다(정해진 시간을 기다리는 방식이 아니라 순서로 보장).
   syncCalBtnStyles(); // ★ 버튼 스타일 항상 동기화
   const DN=['일','월','화','수','목','금','토'],MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const fd=new Date(curY,curM,1).getDay(),dim=new Date(curY,curM+1,0).getDate(),now=new Date(),d=curData();
@@ -2093,9 +2102,12 @@ function renderCalendar(){
 
   $('cal-grid').innerHTML=html; renderLegend(); renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap);
   updateCalRowHeight();
-  // 이전/다음 달 사이드 패널 렌더
-  _renderSideMonth(-1);
-  _renderSideMonth(1);
+  // 이전/다음 달 사이드 패널 렌더 (스와이프/버튼 전환 중엔 호출 측에서 직접, 트랙을
+  //  중앙으로 스냅시킨 뒤에 별도로 호출한다 — 위 skipSides 설명 참고)
+  if(!skipSides){
+    _renderSideMonth(-1);
+    _renderSideMonth(1);
+  }
 }
 
 // 이전(dir=-1) 또는 다음(dir=1) 달 캘린더를 사이드 패널에 렌더
