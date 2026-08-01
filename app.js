@@ -205,7 +205,7 @@ const CHURCH_EVENTS_2026 = [
   {start:[11,19],end:null,      name:'사는길 축복의 날 마감'},
   {start:[11,20],end:null,      name:'연합구역예배'},
   {start:[11,23],end:[11,27],   name:'신년목회계획'},
-  {start:[11,30],end:[12,3],    name:'교육국 워크샾'},
+  {start:[11,30],end:[12,4],    name:'교육국 워크샾'},
   {start:[12,1], end:null,      name:'은평열린대학 종강'},
   {start:[12,6], end:null,      name:'은평신앙훈련 수료식'},
   {start:[12,20],end:null,      name:'성탄축하행사'},
@@ -216,6 +216,7 @@ const CHURCH_EVENTS_2026 = [
 // y,m,d(해당 날짜)에 걸쳐 있는 교회 행사 목록 반환. 각 항목에 isStart(그 행사의 시작일 여부) 포함.
 function getChurchEvents(y, m, d){
   if(y!==2026) return [];
+  const DAY=86400000;
   const target=new Date(y, m-1, d).getTime();
   return CHURCH_EVENTS_2026.filter(ev=>{
     const startT=new Date(2026, ev.start[0]-1, ev.start[1]).getTime();
@@ -224,7 +225,11 @@ function getChurchEvents(y, m, d){
   }).map(ev=>{
     const startT=new Date(2026, ev.start[0]-1, ev.start[1]).getTime();
     const endT = ev.end ? new Date(2026, ev.end[0]-1, ev.end[1]).getTime() : startT;
-    return {name:ev.name, isStart: target===startT, isEnd: target===endT};
+    // ★ 이름표는 시작일이 아니라 전체 기간의 '가운데 날'에 표시 — 여러 날에 걸친 바 전체가
+    //   하나로 이어진 하나의 일정처럼 보이도록 함 (요일별로 끊어진 느낌 방지)
+    const totalDays=Math.round((endT-startT)/DAY)+1;
+    const midT=startT+Math.floor((totalDays-1)/2)*DAY;
+    return {name:ev.name, isStart: target===startT, isEnd: target===endT, isLabel: target===midT};
   });
 }
 // 캘린더 셀 안에 넣을 행사 바 HTML — 2개 이상 겹치면 얇은 바를 세로로 쌓아서 표시(가운데 정렬)
@@ -237,7 +242,7 @@ function renderEventBarsHtml(y,m,d){
   return evs.map(e=>{
     const leftRound=e.isStart||dow===0, rightRound=e.isEnd||dow===6;
     const r=`${leftRound?3:0}px ${rightRound?3:0}px ${rightRound?3:0}px ${leftRound?3:0}px`;
-    return `<div class="event-bar" style="border-radius:${r}">${e.isStart?`<span class="event-bar-text">${e.name}</span>`:''}</div>`;
+    return `<div class="event-bar" style="border-radius:${r}">${e.isLabel?`<span class="event-bar-text">${e.name}</span>`:''}</div>`;
   }).join('');
 }
 
