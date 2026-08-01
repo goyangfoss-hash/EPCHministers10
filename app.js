@@ -504,10 +504,22 @@ function initCalendarSwipe(){
     t.addEventListener('transitionend', function once(){
       t.removeEventListener('transitionend', once);
       t.style.transition='none';
-      cb(); // changeMonth → renderCalendar이 cal-grid 교체
+      // ★ cb()는 3개 패널(prev/cur/next)의 내용을 전부 다시 그린다. 이 시점엔
+      //  방금 슬라이드해서 화면에 "보이고 있는" 패널의 내용도 함께 교체되는데,
+      //  트랙을 중앙으로 되돌리기 전까지는 그 교체 장면이 그대로 노출되어
+      //  엉뚱한 달(예: 다음달로 넘어갔는데 그 다음다음달)이 잠깐 보였다 사라지는
+      //  플래시가 생긴다 → 내용 교체 + 위치 복귀가 끝날 때까지 트랙을 잠깐 숨긴다.
+      t.style.opacity='0';
+      cb(); // changeMonth → renderCalendar이 cal-grid-prev/cal-grid/cal-grid-next 전부 교체
       // renderCalendar 후 트랙을 즉시 중앙으로 복귀(애니 없이)
       t.style.transform='translateX(-33.333%)';
-      animating=false;
+      // 교체된 내용과 위치가 실제로 레이아웃/페인트에 반영된 뒤에만 다시 보이게 함
+      requestAnimationFrame(()=>{
+        requestAnimationFrame(()=>{
+          t.style.opacity='1';
+          animating=false;
+        });
+      });
     });
   }
 
