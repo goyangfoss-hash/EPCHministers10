@@ -296,6 +296,17 @@ function assignEventLanes(segs){
   });
   return segs;
 }
+// 주(week) 사이 구분선 — 각 셀에 테두리를 긋는 대신, row-gap 안쪽에 7칸을 가로지르는 직선 하나를 그어
+// 참조 이미지처럼 끊기지 않고 이어진 라인으로 보이게 한다. (cal-grid의 자식으로 grid-row/column 직접 지정)
+function renderWeekDividersHtml(fd, dim){
+  const totalWeeks=Math.ceil((fd+dim)/7);
+  let html='';
+  for(let w=1;w<totalWeeks;w++){
+    // w번째 주 행(grid-row = w+2) 바로 위, row-gap 한가운데에 직선을 배치
+    html+=`<div style="grid-row:${w+2};grid-column:1 / 8;align-self:start;transform:translateY(-5px);height:1px;background:rgba(0,0,0,.08);pointer-events:none"></div>`;
+  }
+  return html;
+}
 // 이 달(year,month)의 행사 스팬 막대 전체 HTML — cal-grid의 자식으로 그대로 추가(grid-row/column으로 직접 위치)
 function renderMonthEventBarsHtml(year, month){
   const segs=assignEventLanes(getMonthEventSegments(year, month));
@@ -1959,7 +1970,7 @@ function renderCalendar(){
   for(let i=0;i<fd;i++)html+=`<div class="cal-cell empty" style="grid-row:2;grid-column:${i+1}"></div>`;
   for(let d=1;d<=dim;d++){
     const _idx=fd+d-1, _weekRow=Math.floor(_idx/7);
-    const gridPos=`grid-row:${_weekRow+2};grid-column:${(_idx%7)+1};${_weekRow>0?'border-top:1px solid rgba(0,0,0,.08);':''}`;
+    const gridPos=`grid-row:${_weekRow+2};grid-column:${(_idx%7)+1};`;
     const isMy=myDays.has(d);
     const isToday=now.getFullYear()===curY&&now.getMonth()===curM&&now.getDate()===d;
     const dow=new Date(curY,curM,d).getDay();
@@ -1999,7 +2010,7 @@ function renderCalendar(){
         </div>`;
       } else {
         // 내 사역 없는 날 — 흐린 셀 (오늘이면 파란 테두리)
-        const todayStyle=gridPos+(isToday?`border:2.5px solid #185FA5;border-radius:8px`:``);
+        const todayStyle=gridPos+(isToday?`border:2.5px solid #185FA5`:``);
         const holidayNameMy2=getHoliday(curY,curM+1,d);
         const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidayNameMy2?`color:#e63946;font-weight:800`:``;
         const holidayBadgeMy2=holidayNameMy2?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayNameMy2}</div>`:'';
@@ -2044,6 +2055,8 @@ function renderCalendar(){
       html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${holidayBadge}${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
     }
   }
+  // ★ 주(week) 구분선 — 격자 셀 테두리 대신, 행 사이 간격에 이어진 하나의 직선으로 표시
+  html+=renderWeekDividersHtml(fd,dim);
   // ★ 교회 전체 행사 — 요일 칸을 가로지르는 진짜 스팬 막대(cal-grid의 형제 grid item으로 직접 위치)
   html+=renderMonthEventBarsHtml(curY,curM+1);
 
@@ -2106,7 +2119,7 @@ function _renderSideMonth(dir){
         const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;position:relative`:`background:${bg};border-color:${bg};position:relative`;
         html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div><div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div></div>`;
       } else {
-        const todayStyle=isToday?`border:2.5px solid #185FA5;border-radius:8px`:``;
+        const todayStyle=isToday?`border:2.5px solid #185FA5`:``;
         const holidaySide=getHoliday(sY,sM+1,d);
         const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidaySide?`color:#e63946;font-weight:800`:``;
         html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div></div>`;
