@@ -501,19 +501,22 @@ function initCalendarSwipe(){
     const targetPct = dir>0 ? -66.666 : 0;
     t.style.transition='transform .28s cubic-bezier(.4,0,.2,1)';
     t.style.transform=`translateX(${targetPct}%)`;
-    t.addEventListener('transitionend', function once(){
+    t.addEventListener('transitionend', async function once(){
       t.removeEventListener('transitionend', once);
       t.style.transition='none';
-      // ★ cb()는 3개 패널(prev/cur/next)의 내용을 전부 다시 그린다. 이 시점엔
-      //  방금 슬라이드해서 화면에 "보이고 있는" 패널의 내용도 함께 교체되는데,
-      //  트랙을 중앙으로 되돌리기 전까지는 그 교체 장면이 그대로 노출되어
-      //  엉뚱한 달(예: 다음달로 넘어갔는데 그 다음다음달)이 잠깐 보였다 사라지는
-      //  플래시가 생긴다 → 내용 교체 + 위치 복귀가 끝날 때까지 트랙을 잠깐 숨긴다.
+      // ★ cb()(changeMonth)는 그 달 데이터가 이미 캐시돼 있으면 바로 끝나지만,
+      //  아직 안 불러온 달로 넘어가는 경우엔 서버에서 데이터를 받아온 뒤에야
+      //  renderCalendar()가 실행된다 — 즉 렌더링이 끝나는 시점이 매번 다르다.
+      //  예전엔 이 시점을 rAF 2번(고정된 시간)만큼만 기다렸는데, 데이터를 새로
+      //  받아와야 하는 달이거나 행사가 많아 렌더링이 오래 걸리는 달에서는
+      //  그 고정 시간보다 실제 작업이 더 걸려서, 트랙이 먼저 열리고 나서
+      //  뒤늦게 내용이 바뀌는 "엉뚱한 달이 잠깐 보였다 사라지는" 플래시가 났다.
+      //  → 정해진 시간을 기다리는 대신, cb()가 "진짜로 끝날 때까지"(비동기 포함) 기다린다.
       t.style.opacity='0';
-      cb(); // changeMonth → renderCalendar이 cal-grid-prev/cal-grid/cal-grid-next 전부 교체
-      // renderCalendar 후 트랙을 즉시 중앙으로 복귀(애니 없이)
+      await cb(); // changeMonth가 렌더링을 실제로 마칠 때까지 대기(캐시 여부와 무관하게 항상 정확)
+      // renderCalendar 완료 후에만 트랙을 중앙으로 복귀(애니 없이)
       t.style.transform='translateX(-33.333%)';
-      // 교체된 내용과 위치가 실제로 레이아웃/페인트에 반영된 뒤에만 다시 보이게 함
+      // 위치 복귀가 실제로 레이아웃/페인트에 반영된 뒤에만 다시 보이게 함
       requestAnimationFrame(()=>{
         requestAnimationFrame(()=>{
           t.style.opacity='1';
@@ -1926,18 +1929,28 @@ function changeMonth(d, fromSwipe){
   if(curM>11){curM=0;curY++;}
   if(curM<0){curM=11;curY--;}
   filterType='';filterCategory='all';
-  const doRender=()=>{
-    if(!fromSwipe) _btnSlideOut(d, ()=>renderCalendar());
-    else renderCalendar();
-  };
-  if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){
-    sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{
-      if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}
-      doRender();
-    });
-  } else doRender();
+  // ★ 이 달 데이터가 캐시에 없으면 서버에서 받아온 뒤에야 실제로 그려지므로,
+  //  "언제 진짜로 화면이 갱신됐는지"를 호출한 쪽(스와이프)이 정확히 알 수 있도록
+  //  Promise로 완료 시점을 알려준다(고정된 시간을 기다리는 방식은 렌더링이
+  //  오래 걸리거나 네트워크가 느릴 때 화면이 먼저 열리는 사고로 이어졌다).
+  return new Promise(resolve=>{
+    const doRender=()=>{
+      if(!fromSwipe) _btnSlideOut(d, ()=>{ renderCalendar(); resolve(); });
+      else { renderCalendar(); resolve(); }
+    };
+    if(!OFFLINE&&!allSchedules[curY]?.[curM+1]){
+      sb.from('schedules').select('year,month,data').eq('year',curY).eq('month',curM+1).maybeSingle().then(({data})=>{
+        if(data){if(!allSchedules[curY])allSchedules[curY]={};allSchedules[curY][curM+1]=data.data||{};assignColors(collectAllTypes());}
+        doRender();
+      });
+    } else doRender();
+  });
 }
 // 버튼 클릭 시 슬라이드 애니메이션 (스와이프와 동일한 트랙 사용)
+// ★ 여기 도달했을 때는(changeMonth의 doRender에서 호출) 데이터 fetch가 이미 끝난 뒤이므로
+//  cb()는 항상 동기적으로 끝난다 — 하지만 스와이프와 동일하게, 트랙이 아직 이동한 위치에
+//  있는 채로 cb()가 화면에 보이는 패널의 내용을 바꿔버리는 순간이 있어 잠깐 노출될 수 있다.
+//  스와이프와 똑같이 교체 중엔 잠깐 숨겼다가 위치 복귀 후에만 다시 보여준다.
 function _btnSlideOut(dir, cb){
   const t=document.getElementById('cal-swipe-track'); if(!t){cb();return;}
   const targetPct=dir>0?-66.666:0;
@@ -1946,8 +1959,14 @@ function _btnSlideOut(dir, cb){
   t.addEventListener('transitionend', function once(){
     t.removeEventListener('transitionend',once);
     t.style.transition='none';
+    t.style.opacity='0';
     cb();
     t.style.transform='translateX(-33.333%)';
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        t.style.opacity='1';
+      });
+    });
   });
 }
 
