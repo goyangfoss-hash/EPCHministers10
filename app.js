@@ -159,6 +159,78 @@ const tc = t => typeColorMap[t] || getTypeColor(t);
 function collectAllTypes(){ const s=new Set(); Object.values(allSchedules).forEach(ym=>Object.values(ym).forEach(nm=>Object.values(nm).forEach(dm=>Object.values(dm).forEach(t=>t&&s.add(t))))); return[...s]; }
 
 // ══════════════════════════════════════════════════
+//  ★ 대한민국 공휴일 (대체공휴일 포함) — 캘린더 표시용
+//  ※ 설날/추석/부처님오신날은 음력 기준이라 매년 날짜가 바뀝니다. 연도가 바뀌면 이 목록을 갱신해야 합니다.
+// ══════════════════════════════════════════════════
+const KR_HOLIDAYS = {
+  2026: {
+    "1-1":"신정", "2-16":"설날연휴", "2-17":"설날", "2-18":"설날연휴",
+    "3-1":"삼일절", "3-2":"대체공휴일",
+    "5-5":"어린이날", "5-24":"부처님오신날", "5-25":"대체공휴일",
+    "6-3":"지방선거일", "6-6":"현충일",
+    "8-15":"광복절", "8-17":"대체공휴일",
+    "9-24":"추석연휴", "9-25":"추석", "9-26":"추석연휴",
+    "10-3":"개천절", "10-5":"대체공휴일", "10-9":"한글날",
+    "12-25":"성탄절"
+  }
+};
+function getHoliday(y, m, d){ return (KR_HOLIDAYS[y] && KR_HOLIDAYS[y][`${m}-${d}`]) || null; }
+
+// ══════════════════════════════════════════════════
+//  ★ 교회 전체 행사 일정 (2026) — 사역스케줄과 완전히 별도의 데이터
+//  ※ allSchedules/schedules_draft(사역자 배정)와 절대 혼선되지 않도록
+//     독립적인 배열로 관리합니다. 사역자 이름/배정과는 무관합니다.
+// ══════════════════════════════════════════════════
+const CHURCH_EVENTS_2026 = [
+  {start:[9,6],  end:null,      name:'오후프로그램 개강'},
+  {start:[9,7],  end:[9,11],    name:'하반기특별새벽기도회'},
+  {start:[9,8],  end:null,      name:'은평신앙훈련 개강'},
+  {start:[9,18], end:[9,19],    name:'이웃사랑 바자회'},
+  {start:[9,27], end:null,      name:'학습세례교육1'},
+  {start:[10,4], end:null,      name:'학습세례교육2'},
+  {start:[10,11],end:null,      name:'학습세례교육3'},
+  {start:[10,18],end:null,      name:'복음행전'},
+  {start:[10,24],end:null,      name:'교사대학'},
+  {start:[10,25],end:null,      name:'학습세례교육4'},
+  {start:[10,31],end:null,      name:'교사대학'},
+  {start:[10,31],end:null,      name:'세례(학습,입교) 문답식'},
+  {start:[11,1], end:null,      name:'세례식'},
+  {start:[11,7], end:null,      name:'가정학교 개강'},
+  {start:[11,14],end:null,      name:'가정학교'},
+  {start:[11,21],end:null,      name:'가정학교'},
+  {start:[11,28],end:null,      name:'가정학교'},
+  {start:[11,8], end:null,      name:'수험생과 함께하는 예배'},
+  {start:[11,15],end:null,      name:'추수감사주일'},
+  {start:[11,19],end:null,      name:'대학수학능력시험(수능당일 기도회)'},
+  {start:[11,19],end:null,      name:'사는길 축복의 날 마감'},
+  {start:[11,20],end:null,      name:'연합구역예배'},
+  {start:[11,23],end:[11,27],   name:'신년목회계획'},
+  {start:[11,30],end:[12,3],    name:'교육국 워크샾'},
+  {start:[12,1], end:null,      name:'은평열린대학 종강'},
+  {start:[12,6], end:null,      name:'은평신앙훈련 수료식'},
+  {start:[12,20],end:null,      name:'성탄축하행사'},
+  {start:[12,25],end:null,      name:'성탄감사예배'},
+  {start:[12,27],end:null,      name:'교회학교 졸업예배'},
+  {start:[12,31],end:null,      name:'송구영신예배'},
+];
+// y,m,d(해당 날짜)에 걸쳐 있는 교회 행사 목록 반환. 각 항목에 isStart(그 행사의 시작일 여부) 포함.
+function getChurchEvents(y, m, d){
+  if(y!==2026) return [];
+  const target=new Date(y, m-1, d).getTime();
+  return CHURCH_EVENTS_2026.filter(ev=>{
+    const startT=new Date(2026, ev.start[0]-1, ev.start[1]).getTime();
+    const endT = ev.end ? new Date(2026, ev.end[0]-1, ev.end[1]).getTime() : startT;
+    return target>=startT && target<=endT;
+  }).map(ev=>({name:ev.name, isStart: target===new Date(2026, ev.start[0]-1, ev.start[1]).getTime()}));
+}
+// 캘린더 셀 안에 넣을 행사 바 HTML — 2개 이상 겹치면 얇은 바를 세로로 쌓아서 표시(가운데 정렬)
+function renderEventBarsHtml(y,m,d){
+  const evs=getChurchEvents(y,m,d);
+  if(!evs.length) return '';
+  return evs.map(e=>`<div class="event-bar">${e.isStart?`<span class="event-bar-text">${e.name}</span>`:''}</div>`).join('');
+}
+
+// ══════════════════════════════════════════════════
 //  초기화
 // ══════════════════════════════════════════════════
 // 네비게이션 실제 높이 CSS 변수로 설정
@@ -169,6 +241,23 @@ function setVhVar(){
 // DOMContentLoaded 후에 측정
 window.addEventListener('load', setVhVar);
 window.addEventListener('resize', setVhVar);
+
+// ★ 월별 전체 사역 '펼치기'와 하단 네비 사이의 빈 여백을 요일 셀 높이로 균등 분배
+function updateCalRowHeight(){
+  requestAnimationFrame(()=>{
+    const outer=$('cal-swipe-outer'), shiftList=$('shift-list'), nav=document.querySelector('.bottom-nav');
+    if(!outer||!nav) return;
+    const fd=new Date(curY,curM,1).getDay(), dim=new Date(curY,curM+1,0).getDate();
+    const rows=Math.ceil((fd+dim)/7);
+    const outerTop=outer.getBoundingClientRect().top;
+    const shiftH=shiftList?shiftList.offsetHeight:0;
+    const navH=nav.offsetHeight;
+    const available=window.innerHeight-outerTop-shiftH-navH-16;
+    const rowH=Math.max(56, Math.floor((available-(rows-1)*3)/rows));
+    document.documentElement.style.setProperty('--cal-row-h', rowH+'px');
+  });
+}
+window.addEventListener('resize', updateCalRowHeight);
 
 window.addEventListener('DOMContentLoaded', async () => {
   loadAlarms();
@@ -1771,7 +1860,15 @@ function renderCalendar(){
   Object.keys(d).forEach((name)=>{Object.entries(d[name]||{}).forEach(([ds,type])=>{const dn=parseInt(ds);if(isNaN(dn)||dn<1||dn>31)return;if(!allMap[dn])allMap[dn]=[];allMap[dn].push({name,type,c:tc(type)});});});
 
   // ★ 새벽 사역 항상 앞에 오도록 정렬
-  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};Object.keys(allMap).forEach(dn=>{const dow=new Date(curY,curM,parseInt(dn)).getDay();const orderList=SHIFT_ORDER[dow]||[];const shiftRank=(t)=>{const tt=(t||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===tt);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return tt.includes(oc)||oc.includes(tt);});return pi===-1?999:pi;};allMap[dn].forEach(w=>{const tags=w.type.split('/').map(s=>s.trim());let best=tags[0],bestRank=shiftRank(tags[0]);for(const t of tags){const r=shiftRank(t);if(r<bestRank){bestRank=r;best=t;}}w._rank=bestRank;w.c=tc(best);});allMap[dn].sort((a,b)=>a._rank-b._rank);});
+  const _SBT=['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업'];
+  Object.keys(allMap).forEach(dn=>{
+    allMap[dn].sort((a,b)=>{
+      const ai=_SBT.indexOf(a.type.split('/')[0].trim());
+      const bi=_SBT.indexOf(b.type.split('/')[0].trim());
+      if(ai>=0&&bi<0)return -1; if(ai<0&&bi>=0)return 1;
+      if(ai>=0&&bi>=0)return ai-bi; return 0;
+    });
+  });
   // ★ 카테고리 필터 적용
   const {fm, fmMy}=getFilteredMap(allMap, myRaw, myDays);
 
@@ -1809,16 +1906,23 @@ function renderCalendar(){
         const cmtBadge=cc?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff;border:none">${cc}</div>`:'';
         const alarmOffBadge=alarmOff?`<div style="position:absolute;bottom:2px;right:3px;font-size:10px;opacity:.8">🔕</div>`:'';
         const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;outline:2px solid ${bg};outline-offset:1px;position:relative`:`background:${bg};border-color:${bg};position:relative`;
+        const holidayNameMy=getHoliday(curY,curM+1,d);
+        const holidayBadgeMy=holidayNameMy?`<div class="holiday-label" style="font-size:8px;color:#fff;font-weight:700;background:rgba(230,57,70,.85);border-radius:4px;padding:0 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayNameMy}</div>`:'';
+        const eventBarsMy=renderEventBarsHtml(curY,curM+1,d);
         html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
           <div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div>
-          ${typeLabel}${cmtBadge}${alarmOffBadge}
+          ${holidayBadgeMy}${typeLabel}${cmtBadge}${alarmOffBadge}${eventBarsMy}
         </div>`;
       } else {
         // 내 사역 없는 날 — 흐린 셀 (오늘이면 파란 테두리)
         const todayStyle=isToday?`border:2.5px solid #185FA5;border-radius:8px`:``;
-        const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:``;
+        const holidayNameMy2=getHoliday(curY,curM+1,d);
+        const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidayNameMy2?`color:#e63946;font-weight:800`:``;
+        const holidayBadgeMy2=holidayNameMy2?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayNameMy2}</div>`:'';
+        const eventBarsMy2=renderEventBarsHtml(curY,curM+1,d);
         html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
           <div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>
+          ${holidayBadgeMy2}${eventBarsMy2}
         </div>`;
       }
     } else {
@@ -1843,20 +1947,24 @@ function renderCalendar(){
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
       const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
 
-      const dots=(calTeamView?teamWorkers:workers).length?`<div class="shift-dots">${(calTeamView?teamWorkers:workers).slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
+      const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType?(()=>{
         const mts=myType.split('/').map(t=>t.trim());
         const filtered=filterCategory==='all'?mts:mts.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
         return filtered.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
       })():'';
       const cmt=cc?`<div class="cmt-indicator">${cc}</div>`:'';
-      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
+      const holidayName=getHoliday(curY,curM+1,d);
+      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidayName?`color:#e63946;font-weight:800`:hasTeamWorker?`color:#854F0B;font-weight:500`:'';
+      const holidayBadge=holidayName?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayName}</div>`:'';
       const alarmOffBadge=alarmOff?`<div class="alarm-dot-cal" style="opacity:.4;font-size:9px">🔕</div>`:'';
-      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}${cmt}${alarmOffBadge}</div>`;
+      const eventBars=renderEventBarsHtml(curY,curM+1,d);
+      html+=`<div class="${cls}" style="${cellStyle}" onclick="openDayModal(${d})"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${holidayBadge}${typeTip}${dots}${cmt}${alarmOffBadge}${eventBars}</div>`;
     }
   }
 
   $('cal-grid').innerHTML=html; renderLegend(); renderShiftList(dim,MN,DN,myDays,myRaw,fm,allMap);
+  updateCalRowHeight();
   // 이전/다음 달 사이드 패널 렌더
   _renderSideMonth(-1);
   _renderSideMonth(1);
@@ -1915,7 +2023,8 @@ function _renderSideMonth(dir){
         html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="color:#fff;font-weight:800">${d}</span></div><div class="my-type-label">${myType.replace(/[\[\]]/g,'').slice(0,6)}</div></div>`;
       } else {
         const todayStyle=isToday?`border:2.5px solid #185FA5;border-radius:8px`:``;
-        const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:``;
+        const holidaySide=getHoliday(sY,sM+1,d);
+        const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidaySide?`color:#e63946;font-weight:800`:``;
         html+=`<div class="${cls}" style="${todayStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div></div>`;
       }
     } else {
@@ -1926,13 +2035,14 @@ function _renderSideMonth(dir){
       if(hasMy){bgStyle=`background:${myC.bg}`;borderStyle=`border-color:${myC.border}`;}
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
       const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
-      const dots=(calTeamView&&myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).length?`<div class="shift-dots">${(calTeamView&&myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${(calTeamView&&myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).length>5?`<span class="more-dot">+${(calTeamView&&myTeam.length?workers.filter(w=>myTeam.includes(w.name)):workers).length-5}</span>`:''}</div>`:'' ;
+      const dots=workers.length?`<div class="shift-dots">${workers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}"></div>`).join('')}${workers.length>5?`<span class="more-dot">+${workers.length-5}</span>`:''}</div>`:'' ;
       const typeTip=myType?(()=>{
         const mts=myType.split('/').map(t=>t.trim());
         const filtered=filterCategory==='all'?mts:mts.filter(t=>getCategory(t,curY,curM+1,d)===filterCategory);
         return filtered.map(t=>{const c=tc(t);return c?`<div class="type-tip" style="color:${c.text}">${t.replace(/[\[\]]/g,'').slice(0,4)}</div>`:''}).join('');
       })():'';
-      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:'';
+      const holidaySide2=getHoliday(sY,sM+1,d);
+      const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidaySide2?`color:#e63946;font-weight:800`:'';
       html+=`<div class="${cls}" style="${cellStyle}"><div class="day-num-wrap"><span class="day-num" style="${dayNumStyle}">${d}</span></div>${typeTip}${dots}</div>`;
     }
   }
@@ -2036,7 +2146,7 @@ function initDayModalSwipe(){
   if(box._touchEnd)   box.removeEventListener('touchend',   box._touchEnd);
   if(box._touchCancel)box.removeEventListener('touchcancel',box._touchCancel);
 
-  let sx=0, sy=0, dx=0, dy=0, direction=null, bodyScrollTop=0, ignoreGesture=false;
+  let sx=0, sy=0, dx=0, dy=0, direction=null, bodyScrollTop=0;
   const H_THRESHOLD=55, V_THRESHOLD=90;
 
   function preloadAdjacentPanels(){
@@ -2052,7 +2162,7 @@ function initDayModalSwipe(){
     if(next) next.innerHTML=getDayModalHTML(ny,nm,nd);
   }
 
-  box._touchStart = e=>{if(e.target.closest('.modal-close')){ignoreGesture=true;return;}ignoreGesture=false;
+  box._touchStart = e=>{
     e.stopPropagation(); // ★ 캘린더로 버블링 차단
     if(e.touches.length>1) return;
     sx=e.touches[0].clientX; sy=e.touches[0].clientY;
@@ -2065,7 +2175,7 @@ function initDayModalSwipe(){
     if(track) track.style.transition='none';
   };
 
-  box._touchMove = e=>{if(ignoreGesture)return;
+  box._touchMove = e=>{
     dx=e.touches[0].clientX-sx;
     dy=e.touches[0].clientY-sy;
     if(!direction){
@@ -2087,7 +2197,7 @@ function initDayModalSwipe(){
     }
   };
 
-  box._touchEnd = e=>{if(ignoreGesture){ignoreGesture=false;return;}
+  box._touchEnd = e=>{
     if(direction==='vertical'&&bodyScrollTop<=5){
       box.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94), opacity .25s';
       if(dy>V_THRESHOLD){
@@ -2129,7 +2239,7 @@ function initDayModalSwipe(){
     direction=null;
   };
 
-  box._touchCancel = ()=>{ignoreGesture=false;
+  box._touchCancel = ()=>{
     direction=null;
     box.style.transform=''; box.style.opacity=''; box.style.transition='';
     const track=$('modal-track');
@@ -2236,9 +2346,15 @@ function renderDayModal(){
   let alarmHtml='';
   if(myType){alarmHtml=`<div class="modal-section"><div class="modal-section-title">알림 설정</div><div class="alarm-setting-row"><div><div style="font-size:13px;font-weight:600">전날 알림 받기</div><div style="font-size:11px;color:#aaa;margin-top:2px">사역 전날 ${alarm.alarmTime||'18:30'}에 알림</div></div><div class="toggle${alarm.alarm?' on':''}" onclick="toggleShiftAlarm(${year},${month},${day});renderDayModal();updateAlarmBadge()"></div></div>${alarm.alarm?`<div class="alarm-time-row"><label style="font-size:12px;color:#888;font-weight:600;flex-shrink:0">알림 시각</label><input type="time" class="time-input" value="${alarm.alarmTime||'18:30'}" onchange="updateAlarmTime(${year},${month},${day},this.value);renderDayModal()"></div>`:''}
     </div>`;}
+  // ★ 교회 전체 행사 (사역 배정과 무관, 해당 날짜에 걸친 행사 전체 이름 표시)
+  const churchEvs=getChurchEvents(year,month,day);
+  let eventHtml='';
+  if(churchEvs.length){
+    eventHtml=`<div class="modal-section"><div class="modal-section-title">교회 행사</div>${churchEvs.map(e=>`<div style="padding:8px 12px;background:rgba(127,119,221,.14);border-radius:8px;margin:4px 0;font-size:13px;color:#3C3489;font-weight:500">${e.name}</div>`).join('')}</div>`;
+  }
   // ★ 트랙 구조: modal-panel-cur에 렌더
   const curPanel = $('modal-panel-cur') || $('modal-body');
-  curPanel.innerHTML = wHtml+alarmHtml;
+  curPanel.innerHTML = eventHtml+wHtml+alarmHtml;
   curPanel.scrollTop = 0;
 }
 function closeModalById(id){
