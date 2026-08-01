@@ -331,27 +331,30 @@ window.addEventListener('load', setVhVar);
 window.addEventListener('resize', setVhVar);
 
 // ★ 월별 전체 사역 '펼치기'와 하단 네비 사이의 빈 여백을 요일 셀 높이로 균등 분배
+//  ★ 예전엔 requestAnimationFrame으로 한 프레임 미뤄서 계산했는데, 그 한 프레임 동안은
+//  --cal-row-h가 "직전 달"의 값 그대로라 셀이 실제보다 작게 그려졌다가(overflow:hidden
+//  때문에 공휴일 라벨처럼 아래쪽에 있는 내용이 잘려 있다가) 프레임이 지나고서야 제 크기로
+//  넓어지면서 그제서야 보이는 "공휴일이 늦게 표시되는" 현상으로 이어졌다. renderCalendar()가
+//  이미 DOM을 다 갱신한 직후에 호출되므로, 프레임을 기다릴 필요 없이 바로 측정해도 정확하다.
 function updateCalRowHeight(){
-  requestAnimationFrame(()=>{
-    const outer=$('cal-swipe-outer'), shiftList=$('shift-list'), nav=document.querySelector('.bottom-nav');
-    if(!outer||!nav) return;
-    const fd=new Date(curY,curM,1).getDay(), dim=new Date(curY,curM+1,0).getDate();
-    const rows=Math.ceil((fd+dim)/7);
-    const outerTop=outer.getBoundingClientRect().top;
-    const shiftH=shiftList?shiftList.offsetHeight:0;
-    const navH=nav.offsetHeight;
-    // ★ 요일 헤더 행은 이제 --cal-row-h를 쓰지 않고 자기 내용 크기(auto)만 차지한다.
-    //  가용 공간에서 헤더의 실제 높이 + 헤더~첫 주 사이 gap까지 제대로 빼줘야
-    //  달마다 계산 결과가 흔들리지 않는다(전엔 이걸 안 빼서 날짜 행이 항상 필요
-    //  이상으로 커지고, 달마다 그 정도가 달라 간격이 들쭉날쭉해 보였다).
-    const headEl=document.querySelector('#cal-grid .cal-head');
-    const headH=headEl?headEl.offsetHeight:20;
-    const available=window.innerHeight-outerTop-shiftH-navH-16-headH;
-    // ★ 겹치는 사역/행사 표시가 3개 정도 들어갈 정도면 충분하므로 상한(78px)을 둠
-    //  (rows개의 주 행 사이 + 헤더~첫 주 사이까지 포함해 총 rows번의 9px 간격이 있다)
-    const rowH=Math.min(78, Math.max(56, Math.floor((available-rows*9)/rows)));
-    document.documentElement.style.setProperty('--cal-row-h', rowH+'px');
-  });
+  const outer=$('cal-swipe-outer'), shiftList=$('shift-list'), nav=document.querySelector('.bottom-nav');
+  if(!outer||!nav) return;
+  const fd=new Date(curY,curM,1).getDay(), dim=new Date(curY,curM+1,0).getDate();
+  const rows=Math.ceil((fd+dim)/7);
+  const outerTop=outer.getBoundingClientRect().top;
+  const shiftH=shiftList?shiftList.offsetHeight:0;
+  const navH=nav.offsetHeight;
+  // ★ 요일 헤더 행은 이제 --cal-row-h를 쓰지 않고 자기 내용 크기(auto)만 차지한다.
+  //  가용 공간에서 헤더의 실제 높이 + 헤더~첫 주 사이 gap까지 제대로 빼줘야
+  //  달마다 계산 결과가 흔들리지 않는다(전엔 이걸 안 빼서 날짜 행이 항상 필요
+  //  이상으로 커지고, 달마다 그 정도가 달라 간격이 들쭉날쭉해 보였다).
+  const headEl=document.querySelector('#cal-grid .cal-head');
+  const headH=headEl?headEl.offsetHeight:20;
+  const available=window.innerHeight-outerTop-shiftH-navH-16-headH;
+  // ★ 겹치는 사역/행사 표시가 3개 정도 들어갈 정도면 충분하므로 상한(78px)을 둠
+  //  (rows개의 주 행 사이 + 헤더~첫 주 사이까지 포함해 총 rows번의 9px 간격이 있다)
+  const rowH=Math.min(78, Math.max(56, Math.floor((available-rows*9)/rows)));
+  document.documentElement.style.setProperty('--cal-row-h', rowH+'px');
 }
 window.addEventListener('resize', updateCalRowHeight);
 
