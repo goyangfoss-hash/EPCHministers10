@@ -1945,9 +1945,15 @@ function renderCalendar(){
   // ★ 카테고리 필터 적용
   const {fm, fmMy}=getFilteredMap(allMap, myRaw, myDays);
 
-  let html=DN.map(d=>`<div class="cal-head">${d}</div>`).join('');
-  for(let i=0;i<fd;i++)html+=`<div class="cal-cell empty"></div>`;
+  // ★ 요일 헤더/빈 칸/날짜 칸 모두 grid-row/grid-column을 명시적으로 지정한다.
+  // (아래 교회 행사 스팬 막대도 grid-row/column을 명시적으로 지정하는데, CSS Grid는
+  //  명시적 위치가 지정된 아이템을 먼저 배치하고 나서 자동배치 아이템을 채우기 때문에,
+  //  날짜 칸이 자동배치(auto-flow)로 남아있으면 막대가 셀을 먼저 점유해버려서
+  //  그 뒤 날짜들이 전부 밀리는 심각한 버그가 생긴다 — 그래서 날짜 칸도 명시적으로 고정)
+  let html=DN.map((d,i)=>`<div class="cal-head" style="grid-row:1;grid-column:${i+1}">${d}</div>`).join('');
+  for(let i=0;i<fd;i++)html+=`<div class="cal-cell empty" style="grid-row:2;grid-column:${i+1}"></div>`;
   for(let d=1;d<=dim;d++){
+    const _idx=fd+d-1, gridPos=`grid-row:${Math.floor(_idx/7)+2};grid-column:${(_idx%7)+1};`;
     const isMy=myDays.has(d);
     const isToday=now.getFullYear()===curY&&now.getMonth()===curM&&now.getDate()===d;
     const dow=new Date(curY,curM,d).getDay();
@@ -1978,7 +1984,7 @@ function renderCalendar(){
           : `<div class="my-type-label">${displayType.replace(/[\[\]]/g,'').slice(0,6)}</div>`;
         const cmtBadge=cc?`<div class="cmt-indicator" style="background:rgba(255,255,255,.3);color:#fff;border:none">${cc}</div>`:'';
         const alarmOffBadge=alarmOff?`<div style="position:absolute;bottom:2px;right:3px;font-size:10px;opacity:.8">🔕</div>`:'';
-        const todayStyle=isToday?`background:${bg};border:2.5px solid #185FA5;outline:2px solid ${bg};outline-offset:1px;position:relative`:`background:${bg};border-color:${bg};position:relative`;
+        const todayStyle=gridPos+(isToday?`background:${bg};border:2.5px solid #185FA5;outline:2px solid ${bg};outline-offset:1px;position:relative`:`background:${bg};border-color:${bg};position:relative`);
         const holidayNameMy=getHoliday(curY,curM+1,d);
         const holidayBadgeMy=holidayNameMy?`<div class="holiday-label" style="font-size:8px;color:#fff;font-weight:700;background:rgba(230,57,70,.85);border-radius:4px;padding:0 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayNameMy}</div>`:'';
         html+=`<div class="${cls}" style="${todayStyle}" onclick="openDayModal(${d})">
@@ -1987,7 +1993,7 @@ function renderCalendar(){
         </div>`;
       } else {
         // 내 사역 없는 날 — 흐린 셀 (오늘이면 파란 테두리)
-        const todayStyle=isToday?`border:2.5px solid #185FA5;border-radius:8px`:``;
+        const todayStyle=gridPos+(isToday?`border:2.5px solid #185FA5;border-radius:8px`:``);
         const holidayNameMy2=getHoliday(curY,curM+1,d);
         const dayNumStyle=isToday?`color:#185FA5;font-weight:800`:holidayNameMy2?`color:#e63946;font-weight:800`:``;
         const holidayBadgeMy2=holidayNameMy2?`<div class="holiday-label" style="font-size:8px;color:#e63946;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${holidayNameMy2}</div>`:'';
@@ -2016,7 +2022,7 @@ function renderCalendar(){
         borderStyle=`border-color:#FAC775;border-width:1.5px`;
       }
       const todayBorder=isToday?`border:2.5px solid #185FA5`:'';
-      const cellStyle=[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
+      const cellStyle=gridPos+[bgStyle,borderStyle,todayBorder].filter(Boolean).join(';');
 
       const dots=workers.length?`<div class="shift-dots">${teamWorkers.slice(0,5).map(w=>`<div class="shift-dot" style="background:${w.c.dot}" title="${w.name}:${w.type}"></div>`).join('')}${(calTeamView?teamWorkers:workers).length>5?`<span class="more-dot">+${(calTeamView?teamWorkers:workers).length-5}</span>`:''}</div>`:'';
       const typeTip=myType?(()=>{
