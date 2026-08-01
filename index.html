@@ -151,7 +151,7 @@
     .legend-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid transparent;transition:all .15s;white-space:nowrap}
     .legend-btn.active{box-shadow:0 0 0 2.5px #1a1a18}
     .legend-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:var(--cal-row-h,auto);row-gap:4px;column-gap:1px;margin-bottom:4px;overflow:hidden}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:var(--cal-row-h,auto);row-gap:9px;column-gap:1px;margin-bottom:4px;overflow:hidden}
     .cal-head{text-align:center;font-size:11px;color:#bbb;padding:7px 0 5px;font-weight:700}
     .cal-cell{display:flex;flex-direction:column;align-items:center;padding-top:5px;border-radius:12px 12px 0 0;cursor:pointer;transition:filter .12s,opacity .12s,transform .1s;position:relative;overflow:hidden;gap:1px;border:1.5px solid transparent}
     .cal-cell.empty{cursor:default;border:none}
@@ -172,7 +172,8 @@
     .alarm-dot-cal{position:absolute;top:2px;left:2px;font-size:8px;line-height:1}
     /* ★ 교회 전체 행사 바 — 사역 배정과 무관한 별도 표시. cal-grid의 형제 grid item으로
        grid-row/grid-column을 직접 지정해 요일 칸을 가로지르는 진짜 스팬 막대로 그려짐 */
-    .event-bar{box-sizing:border-box;height:12px;background:rgba(127,119,221,.28);display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:3px;cursor:pointer;position:relative;z-index:1}
+    .event-bar{box-sizing:border-box;height:12px;background:rgba(127,119,221,.28);display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:3px;cursor:pointer;position:relative;z-index:1;transition:opacity .15s}
+    .event-bar.dimmed{opacity:.3}
     .event-bar-text{font-size:8px;color:#26215C;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px;text-align:center}
 
     /* 리스트 */

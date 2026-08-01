@@ -182,6 +182,9 @@ function getHoliday(y, m, d){ return (KR_HOLIDAYS[y] && KR_HOLIDAYS[y][`${m}-${d
 //     독립적인 배열로 관리합니다. 사역자 이름/배정과는 무관합니다.
 // ══════════════════════════════════════════════════
 const CHURCH_EVENTS_2026 = [
+  {start:[9,1],  end:null,      name:'은평열린대학 개강'},
+  {start:[9,3],  end:null,      name:'사는길 축복의 날 시작'},
+  {start:[9,4],  end:null,      name:'구역예배 시작'},
   {start:[9,6],  end:null,      name:'오후프로그램 개강'},
   {start:[9,7],  end:[9,11],    name:'하반기특별새벽기도회'},
   {start:[9,8],  end:null,      name:'은평신앙훈련 개강'},
@@ -296,9 +299,11 @@ function assignEventLanes(segs){
 // 이 달(year,month)의 행사 스팬 막대 전체 HTML — cal-grid의 자식으로 그대로 추가(grid-row/column으로 직접 위치)
 function renderMonthEventBarsHtml(year, month){
   const segs=assignEventLanes(getMonthEventSegments(year, month));
+  // ★ 내 사역 보기 / 내 팀 보기 모드에서는 사역 배정과 마찬가지로 행사도 흐리게 표시
+  const dimmed = (calView==='mine' || calTeamView) ? ' dimmed' : '';
   return segs.map(s=>{
     const r=`${s.leftRound?3:0}px ${s.rightRound?3:0}px ${s.rightRound?3:0}px ${s.leftRound?3:0}px`;
-    return `<div class="event-bar" style="grid-row:${s.row};grid-column:${s.colStart} / ${s.colEnd};align-self:end;margin-bottom:${s.lane*14}px;border-radius:${r}" onclick="openDayModal(${s.clickDay})">${s.isLabel?`<span class="event-bar-text">${s.name}</span>`:''}</div>`;
+    return `<div class="event-bar${dimmed}" style="grid-row:${s.row};grid-column:${s.colStart} / ${s.colEnd};align-self:end;margin-bottom:${s.lane*14}px;border-radius:${r}" onclick="openDayModal(${s.clickDay})">${s.isLabel?`<span class="event-bar-text">${s.name}</span>`:''}</div>`;
   }).join('');
 }
 
@@ -326,7 +331,7 @@ function updateCalRowHeight(){
     const navH=nav.offsetHeight;
     const available=window.innerHeight-outerTop-shiftH-navH-16;
     // ★ 겹치는 사역/행사 표시가 3개 정도 들어갈 정도면 충분하므로 상한(78px)을 둠
-    const rowH=Math.min(78, Math.max(56, Math.floor((available-(rows-1)*3)/rows)));
+    const rowH=Math.min(78, Math.max(56, Math.floor((available-(rows-1)*9)/rows)));
     document.documentElement.style.setProperty('--cal-row-h', rowH+'px');
   });
 }
