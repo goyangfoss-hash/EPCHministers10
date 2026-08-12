@@ -339,8 +339,12 @@ window.addEventListener('resize', setVhVar);
 function updateCalRowHeight(){
   const outer=$('cal-swipe-outer'), shiftList=$('shift-list'), nav=document.querySelector('.bottom-nav');
   if(!outer||!nav) return;
-  const fd=new Date(curY,curM,1).getDay(), dim=new Date(curY,curM+1,0).getDate();
-  const rows=Math.ceil((fd+dim)/7);
+  // ★ 셀 "높이" 계산에는 이 달의 실제 주 수(4~6주)가 아니라 항상 최대치인 6주
+  //  기준으로 나눈다. 실제 주 수를 그대로 쓰면 5주짜리 달과 6주짜리 달의 셀 높이가
+  //  서로 달라져서(5주 달은 여유 공간을 셀당 더 많이 나눠 갖게 됨) 스와이프할 때마다
+  //  셀 높이가 들쭉날쭉해 보였다. 항상 6주 기준으로 계산하면 어느 달이든 셀 높이가
+  //  동일하게 유지된다(5주짜리 달은 그만큼 아래에 약간의 여백이 남을 뿐).
+  const ROWS_FOR_SIZING = 6;
   const outerTop=outer.getBoundingClientRect().top;
   const shiftH=shiftList?shiftList.offsetHeight:0;
   const navH=nav.offsetHeight;
@@ -352,8 +356,8 @@ function updateCalRowHeight(){
   const headH=headEl?headEl.offsetHeight:20;
   const available=window.innerHeight-outerTop-shiftH-navH-16-headH;
   // ★ 겹치는 사역/행사 표시가 3개 정도 들어갈 정도면 충분하므로 상한(78px)을 둠
-  //  (rows개의 주 행 사이 + 헤더~첫 주 사이까지 포함해 총 rows번의 9px 간격이 있다)
-  const rowH=Math.min(78, Math.max(56, Math.floor((available-rows*9)/rows)));
+  //  (항상 6주 기준으로 나누므로, 6번의 9px 간격을 뺀다)
+  const rowH=Math.min(78, Math.max(56, Math.floor((available-ROWS_FOR_SIZING*9)/ROWS_FOR_SIZING)));
   document.documentElement.style.setProperty('--cal-row-h', rowH+'px');
 }
 window.addEventListener('resize', updateCalRowHeight);
