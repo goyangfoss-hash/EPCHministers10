@@ -6198,6 +6198,7 @@ async function saveSchedCell(name,y,m,day){
   const val=document.getElementById('sched-edit-input')?.value?.trim();
   const data=getMonthData(y,m);
   if(!data[name]) data[name]={};
+  const prevVal=data[name][String(day)]||'';
   if(val){ data[name][String(day)]=val; }
   else { delete data[name][String(day)]; }
   // 해당 type 원본 업데이트
@@ -6205,6 +6206,26 @@ async function saveSchedCell(name,y,m,day){
   if(!scheduleTypes[y][m]) scheduleTypes[y][m]={};
   scheduleTypes[y][m][currentUploadType]=data;
   if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
+  // ★ 변경 당사자에게 FCM 알림 발송 (등록/변경/취소)
+  if(!OFFLINE && val!==prevVal){
+    const DN2=['일','월','화','수','목','금','토'];
+    const targetUser=allMembers.find(u=>u.name===name);
+    if(targetUser){
+      const dow=DN2[new Date(y,m-1,day).getDay()];
+      let title, body;
+      if(!prevVal && val){
+        title='📅 사역 등록 알림';
+        body=`${m}월 ${day}일(${dow}) ${val} 사역이 등록되었습니다.`;
+      } else if(prevVal && !val){
+        title='🗑️ 사역 취소 알림';
+        body=`${m}월 ${day}일(${dow}) ${prevVal} 사역이 취소되었습니다.`;
+      } else {
+        title='📝 사역 변경 알림';
+        body=`${m}월 ${day}일(${dow}) 사역이 '${prevVal}'에서 '${val}'(으)로 변경되었습니다.`;
+      }
+      sendPushToUsers([targetUser.id], title, body, 'myshift', {action:'openDay', year:String(y), month:String(m), day:String(day)}).catch(e=>console.warn('push err:', e));
+    }
+  }
   document.getElementById('sched-edit-modal')?.remove();
   assignColors(collectAllTypes());
   renderCalendar();
