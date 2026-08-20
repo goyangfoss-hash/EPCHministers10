@@ -2464,35 +2464,40 @@ function commitDayMove(dir){
 
 function moveDayModal(dir){ commitDayMove(dir); }
 
-function getDayModalHTML(year,month,day){
-  if(!cu) return '';
+// ★★★ 특별사역(특새 등) 역할 우선순위 규칙 — 앞으로 특별사역 종류가 추가돼도 이 배열 순서를 따른다.
+// 설교 → 방송실(자막/영상) → 기도지원 → 찬양인도 → 싱어 → 건반 → 세컨건반 → 드럼 → 베이스
+const SPECIAL_ROLE_ORDER=['설교','방송실','자막','영상','기도지원','찬양인도','인도','싱어','건반','세컨건반','드럼','베이스'];
+const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
+function shiftRank(t,dow){
+  const orderList=SHIFT_ORDER[dow]||[];
+  const s=(t||'').replace(/\s/g,'');
+  const e=orderList.findIndex(o=>o.replace(/\s/g,'')===s);
+  if(e!==-1)return e;
+  const p=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return s.includes(oc)||oc.includes(s);});
+  if(p!==-1)return p;
+  // SHIFT_ORDER에 없는 타입(특별사역 등): 그 날의 "새벽" 정규 사역 블록 바로 뒤,
+  // 다른 정규 사역(수요/금요/주일 등)보다는 앞에 배치한다 (새벽 먼저 -> 특별사역 -> 그 외 정규 사역 순)
+  const dawnLen=orderList.filter(o=>o.includes('새벽')).length;
+  const base=Math.max(dawnLen-1,0)+0.001;
+  const rm=s.match(/\]([^(\/]+)/);
+  const role=rm?rm[1]:s;
+  const si=SPECIAL_ROLE_ORDER.findIndex(r=>role.includes(r));
+  return si!==-1?base+si*0.0001:base+0.01;
+}
+function getSortedDayWorkers(year,month,day){
   const d=getMonthData(year,month);
   const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).flatMap(n=>{
     const raw=d[n][String(day)];
     return raw.split('/').map(t=>({name:n,type:t.trim()}));
   });
+  const dow=new Date(year,month-1,day).getDay();
+  return [...workers].sort((a,b)=>shiftRank(a.type,dow)-shiftRank(b.type,dow)||a.type.localeCompare(b.type,'ko')||a.name.localeCompare(b.name,'ko'));
+}
+function getDayModalHTML(year,month,day){
+  if(!cu) return '';
+  const d=getMonthData(year,month);
   const myType=d[cu.name]?.[String(day)]||'';
-  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
-  const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
-  // ★★★ 특별사역(특새 등) 역할 우선순위 규칙 — 앞으로 특별사역 종류가 추가돼도 이 배열 순서를 따른다.
-  // 설교 → 방송실(자막/영상) → 기도지원 → 찬양인도 → 싱어 → 건반 → 세컨건반 → 드럼 → 베이스
-  const SPECIAL_ROLE_ORDER=['설교','방송실','자막','영상','기도지원','찬양인도','인도','싱어','건반','세컨건반','드럼','베이스'];
-  function shiftRank(t){
-    const s=(t||'').replace(/\s/g,'');
-    const e=orderList.findIndex(o=>o.replace(/\s/g,'')===s);
-    if(e!==-1)return e;
-    const p=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return s.includes(oc)||oc.includes(s);});
-    if(p!==-1)return p;
-    // SHIFT_ORDER에 없는 타입(특별사역 등): 그 날의 "새벽" 정규 사역 블록 바로 뒤,
-    // 다른 정규 사역(수요/금요/주일 등)보다는 앞에 배치한다 (새벽 먼저 -> 특별사역 -> 그 외 정규 사역 순)
-    const dawnLen=orderList.filter(o=>o.includes('새벽')).length;
-    const base=Math.max(dawnLen-1,0)+0.001;
-    const rm=s.match(/\]([^(/]+)/);
-    const role=rm?rm[1]:s;
-    const si=SPECIAL_ROLE_ORDER.findIndex(r=>role.includes(r));
-    return si!==-1?base+si*0.0001:base+0.01;
-  }
-  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type)||a.type.localeCompare(b.type,'ko')||a.name.localeCompare(b.name,'ko'));
+  const sorted=getSortedDayWorkers(year,month,day);
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
   wHtml+=sorted.length?sorted.map(w=>{
     const c=tc(w.type);
@@ -2516,35 +2521,11 @@ function getDayModalHTML(year,month,day){
 }
 function renderDayModal(){
   if(!modalDate)return;
-  const{year,month,day}=modalDate,key=`${year}-${month}-${day}`,d=getMonthData(year,month);
-  const workers=Object.keys(d).filter(n=>d[n]?.[String(day)]).flatMap(n=>{
-    const raw=d[n][String(day)];
-    return raw.split('/').map(t=>({name:n,type:t.trim()}));
-  });
+  const{year,month,day}=modalDate;
   // ★ modalDate 기준으로 정확하게 내 사역 읽기
   const myType=getMonthData(year,month)[cu.name]?.[String(day)]||'';
   const alarm=getAlarm(year,month,day);
-  const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
-  const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
-  // ★★★ 특별사역(특새 등) 역할 우선순위 규칙 — 앞으로 특별사역 종류가 추가돼도 이 배열 순서를 따른다.
-  // 설교 → 방송실(자막/영상) → 기도지원 → 찬양인도 → 싱어 → 건반 → 세컨건반 → 드럼 → 베이스
-  const SPECIAL_ROLE_ORDER=['설교','방송실','자막','영상','기도지원','찬양인도','인도','싱어','건반','세컨건반','드럼','베이스'];
-  function shiftRank(type){
-    const s=(type||'').replace(/\s/g,'');
-    const e=orderList.findIndex(o=>o.replace(/\s/g,'')===s);
-    if(e!==-1)return e;
-    const p=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return s.includes(oc)||oc.includes(s);});
-    if(p!==-1)return p;
-    // SHIFT_ORDER에 없는 타입(특별사역 등): 그 날의 "새벽" 정규 사역 블록 바로 뒤,
-    // 다른 정규 사역(수요/금요/주일 등)보다는 앞에 배치한다 (새벽 먼저 -> 특별사역 -> 그 외 정규 사역 순)
-    const dawnLen=orderList.filter(o=>o.includes('새벽')).length;
-    const base=Math.max(dawnLen-1,0)+0.001;
-    const rm=s.match(/\]([^(/]+)/);
-    const role=rm?rm[1]:s;
-    const si=SPECIAL_ROLE_ORDER.findIndex(r=>role.includes(r));
-    return si!==-1?base+si*0.0001:base+0.01;
-  }
-  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type)||a.type.localeCompare(b.type,'ko')||a.name.localeCompare(b.name,'ko'));
+  const sorted=getSortedDayWorkers(year,month,day);
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
   const seenNames=new Set();
   wHtml+=sorted.length?sorted.map(w=>{
@@ -6175,12 +6156,16 @@ async function doUndo(){
   if(!undoData){showToastMsg('되돌릴 데이터가 없습니다.');return;}
   const{year,month,data,files}=undoData;
   if(!confirm('이전 사역표로 되돌리시겠습니까?'))return;
+  // ★ 되돌리기 전 현재 상태 백업 (알림 발송용)
+  const prevData=JSON.parse(JSON.stringify(allSchedules[year]?.[month]||{}));
   if(!allSchedules[year])allSchedules[year]={};
   allSchedules[year][month]=data;
   if(uploadedFiles[year]?.[month]) uploadedFiles[year][month]=files;
   assignColors(collectAllTypes());filterType='';
   if(!OFFLINE){
     await sb.from('schedules').upsert({year,month,data,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
+    // ★ 되돌리기로 바뀐 사역 당사자에게 FCM 알림 발송
+    notifyScheduleDiff(year,month,prevData,data);
     await refreshSchedules();
   }
   $('undo-toast').style.display='none';
@@ -6261,6 +6246,38 @@ function editSchedCell(name, y, m, day, currentType){
   setTimeout(()=>document.getElementById('sched-edit-input')?.focus(),100);
 }
 
+// ★ 월 단위 사역표 변경사항을 비교해 영향받는 사역자에게 FCM 알림 발송
+// (한 사람당 여러 날짜가 바뀌어도 최대 3건까지 묶어서 1건의 알림으로 발송)
+async function notifyScheduleDiff(year, month, prevData, newData){
+  if(OFFLINE) return;
+  const DN2=['일','월','화','수','목','금','토'];
+  const names=new Set([...Object.keys(prevData||{}),...Object.keys(newData||{})]);
+  const byUser={};
+  names.forEach(name=>{
+    const prevDays=prevData?.[name]||{}, newDays=newData?.[name]||{};
+    const days=new Set([...Object.keys(prevDays),...Object.keys(newDays)]);
+    days.forEach(day=>{
+      const prevType=prevDays[day]||'', newType=newDays[day]||'';
+      if(prevType===newType) return;
+      const u=allMembers.find(m=>m.name===name);
+      if(!u) return;
+      if(!byUser[u.id]) byUser[u.id]={userId:u.id,name,shifts:[]};
+      byUser[u.id].shifts.push({day:parseInt(day),prevType,newType});
+    });
+  });
+  for(const {userId,shifts} of Object.values(byUser)){
+    const shiftDesc=shifts.slice(0,3).map(({day,prevType,newType})=>{
+      const dow=DN2[new Date(year,month-1,day).getDay()];
+      return `${month}월 ${day}일(${dow}) ${newType||prevType}`;
+    }).join(', ');
+    const allRemoved=shifts.every(s=>!s.newType);
+    const allNew=shifts.every(s=>!s.prevType);
+    const title=allRemoved?'🗑️ 사역 취소 알림':(allNew?'📅 사역 등록 알림':'📝 사역 변경 알림');
+    const body=allRemoved?`${shiftDesc} 사역이 취소되었습니다.`:(allNew?`${shiftDesc} 사역이 등록되었습니다.`:`${shiftDesc} 사역이 변경되었습니다.`);
+    const shiftDay=String(shifts[0]?.day||'');
+    sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
+  }
+}
 async function saveSchedCell(name,y,m,day){
   const val=document.getElementById('sched-edit-input')?.value?.trim();
   const data=getMonthData(y,m);
@@ -6313,8 +6330,12 @@ function addSchedRow(y,m){
 async function deleteSchedMonth(y,m){
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   if(!confirm(`${y}년 ${MN[m]} 사역표를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  // ★ 삭제 전 데이터 백업 (알림 발송용)
+  const prevData=JSON.parse(JSON.stringify(scheduleTypes[y]?.[m]?.[currentUploadType]||{}));
   if(allSchedules[y]) delete allSchedules[y][m];
   if(!OFFLINE) await sb.from('schedules').delete().eq('year',y).eq('month',m).eq('type',currentUploadType);
+  // ★ 삭제된 사역 당사자에게 FCM 알림 발송
+  if(!OFFLINE) notifyScheduleDiff(y,m,prevData,{});
   // 메모리에서도 해당 type 제거
   if(scheduleTypes[y]?.[m]) delete scheduleTypes[y][m][currentUploadType];
   // allSchedules 재병합
