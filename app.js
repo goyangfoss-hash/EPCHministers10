@@ -2315,14 +2315,10 @@ function openDayModal(day){
     tabCal.style.overflow='hidden';
     tabCal.style.height=tabCal.offsetHeight+'px';
   }
-  // ★ 모달 열릴 때 배경(문서 전체) 스크롤도 함께 잠금 — 패널 뒤 레이어가 스크롤되는 고질적 버그 방지
-  const _scrollY=window.scrollY||document.documentElement.scrollTop||0;
-  document.body.dataset.scrollLockY=String(_scrollY);
-  document.body.style.position='fixed';
-  document.body.style.top=`-${_scrollY}px`;
-  document.body.style.left='0';
-  document.body.style.right='0';
-  document.body.style.width='100%';
+  // ★ 모달 열릴 때 배경(문서 전체) 스크롤 잠금 — 패널 뒤 레이어가 스크롤되는 버그 방지
+  //  (주의: position:fixed 방식은 .modal-box의 touch-action:pan-y 네이티브 스크롤과 충돌해서
+  //   패널 내부 스크롤이 먹통되거나 위로 스크롤 시 모달이 닫혀버리는 부작용이 있었음 -> overflow:hidden만 사용)
+  document.body.dataset.scrollLockY=String(window.scrollY||document.documentElement.scrollTop||0);
   document.body.style.overflow='hidden';
   initDayModalSwipe();
 }
@@ -2605,15 +2601,8 @@ function closeModalById(id){
       }
     }
     // ★ 배경 스크롤 잠금 해제
-    const _savedY=parseInt(document.body.dataset.scrollLockY||'0',10);
-    document.body.style.position='';
-    document.body.style.top='';
-    document.body.style.left='';
-    document.body.style.right='';
-    document.body.style.width='';
     document.body.style.overflow='';
     delete document.body.dataset.scrollLockY;
-    window.scrollTo(0,_savedY);
   }
 }
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
