@@ -2445,8 +2445,19 @@ function getDayModalHTML(year,month,day){
   const myType=d[cu.name]?.[String(day)]||'';
   const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
   const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
-  function shiftRank(t){const e=orderList.findIndex(o=>o.replace(/\s/g,'')===(t||'').replace(/\s/g,''));return e!==-1?e:999;}
-  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
+  const SPECIAL_ROLE_ORDER=['설교','찬양인도','인도','건반','세컨건반','드럼','베이스','싱어','자막','영상','기도지원'];
+  function shiftRank(t){
+    const s=(t||'').replace(/\s/g,'');
+    const e=orderList.findIndex(o=>o.replace(/\s/g,'')===s);
+    if(e!==-1)return e;
+    const p=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return s.includes(oc)||oc.includes(s);});
+    if(p!==-1)return p;
+    const rm=s.match(/\]([^(/]+)/);
+    const role=rm?rm[1]:s;
+    const si=SPECIAL_ROLE_ORDER.findIndex(r=>role.includes(r));
+    return si!==-1?100+si:200;
+  }
+  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type)||a.type.localeCompare(b.type,'ko')||a.name.localeCompare(b.name,'ko'));
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
   wHtml+=sorted.length?sorted.map(w=>{
     const c=tc(w.type);
@@ -2480,8 +2491,19 @@ function renderDayModal(){
   const alarm=getAlarm(year,month,day);
   const SHIFT_ORDER={0:['[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원'],1:['[새벽]설교','[새벽]방송실'],2:['[새벽]설교','[새벽]방송실'],3:['[새벽]설교','[새벽]방송실','[수요]설교','[수요오전]사회','[수요오전]자막','[수요저녁]사회','[수요저녁]자막','[수요저녁]영상'],4:['[새벽]설교','[새벽]방송실'],5:['[새벽]설교','[새벽]방송실','[금요]설교','[금요]기도지원','[금요]자막','[금요]영상'],6:['[새벽]설교','[새벽]방송실','[주일새벽]설교','[주일새벽]백업','[주일4부]설교','[주일저녁]설교','[주일저녁]봉독지원']};
   const dow=new Date(year,month-1,day).getDay(),orderList=SHIFT_ORDER[dow]||[];
-  function shiftRank(type){const t=(type||'').replace(/\s/g,'');const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);if(ei!==-1)return ei;const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});return pi===-1?999:pi;}
-  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type));
+  const SPECIAL_ROLE_ORDER=['설교','찬양인도','인도','건반','세컨건반','드럼','베이스','싱어','자막','영상','기도지원'];
+  function shiftRank(type){
+    const t=(type||'').replace(/\s/g,'');
+    const ei=orderList.findIndex(o=>o.replace(/\s/g,'')===t);
+    if(ei!==-1)return ei;
+    const pi=orderList.findIndex(o=>{const oc=o.replace(/\s/g,'');return t.includes(oc)||oc.includes(t);});
+    if(pi!==-1)return pi;
+    const rm=t.match(/\]([^(/]+)/);
+    const role=rm?rm[1]:t;
+    const si=SPECIAL_ROLE_ORDER.findIndex(r=>role.includes(r));
+    return si!==-1?100+si:200;
+  }
+  const sorted=[...workers].sort((a,b)=>shiftRank(a.type)-shiftRank(b.type)||a.type.localeCompare(b.type,'ko')||a.name.localeCompare(b.name,'ko'));
   let wHtml=`<div class="modal-section"><div class="modal-section-title">이 날 사역자</div>`;
   const seenNames=new Set();
   wHtml+=sorted.length?sorted.map(w=>{
