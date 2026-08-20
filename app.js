@@ -2319,6 +2319,9 @@ function openDayModal(day){
   //  (주의: position:fixed 방식은 .modal-box의 touch-action:pan-y 네이티브 스크롤과 충돌해서
   //   패널 내부 스크롤이 먹통되거나 위로 스크롤 시 모달이 닫혀버리는 부작용이 있었음 -> overflow:hidden만 사용)
   document.body.dataset.scrollLockY=String(window.scrollY||document.documentElement.scrollTop||0);
+  // ★ standards mode에서는 실제 스크롤 요소가 <body>가 아니라 <html>(documentElement)이라
+  //   body만 잠그면 배경이 계속 스크롤됨 -> 둘 다 잠금
+  document.documentElement.style.overflow='hidden';
   document.body.style.overflow='hidden';
   initDayModalSwipe();
 }
@@ -2601,6 +2604,7 @@ function closeModalById(id){
       }
     }
     // ★ 배경 스크롤 잠금 해제
+    document.documentElement.style.overflow='';
     document.body.style.overflow='';
     delete document.body.dataset.scrollLockY;
   }
