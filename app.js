@@ -5,6 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
+const APP_VERSION='20260820a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -398,6 +399,19 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ══════════════════════════════════════════════════
+//  새 버전 배포 확인 (커밋 후 당겨서 새로고침 해도 코드가 갱신 안 되던 문제 대응)
+// ══════════════════════════════════════════════════
+async function checkForAppUpdate(){
+  try{
+    const res=await fetch('/index.html',{cache:'no-store'});
+    const html=await res.text();
+    const m=html.match(/app\.js\?v=([\w.\-]+)/);
+    const liveVersion=m?m[1]:null;
+    if(liveVersion && typeof APP_VERSION!=='undefined' && liveVersion!==APP_VERSION) return true;
+  }catch(e){ console.warn('버전 확인 실패:', e); }
+  return false;
+}
+// ══════════════════════════════════════════════════
 //  당겨서 새로고침 (Pull to Refresh)
 // ══════════════════════════════════════════════════
 function initPullToRefresh(){
@@ -473,6 +487,13 @@ function initPullToRefresh(){
     const dist=e.changedTouches[0].clientY-startY;
     if(dist>threshold && indicator){
       $('ptr-text').textContent='새로고침 중...';
+      const needsUpdate=await checkForAppUpdate();
+      if(needsUpdate){
+        $('ptr-text').textContent='새 버전 적용 중...';
+        if(indicator) indicator.style.display='none';
+        location.reload();
+        return;
+      }
       await refreshSchedules();
       if(cu) updateNoticeBadge();
     }
@@ -2294,6 +2315,15 @@ function openDayModal(day){
     tabCal.style.overflow='hidden';
     tabCal.style.height=tabCal.offsetHeight+'px';
   }
+  // ★ 모달 열릴 때 배경(문서 전체) 스크롤도 함께 잠금 — 패널 뒤 레이어가 스크롤되는 고질적 버그 방지
+  const _scrollY=window.scrollY||document.documentElement.scrollTop||0;
+  document.body.dataset.scrollLockY=String(_scrollY);
+  document.body.style.position='fixed';
+  document.body.style.top=`-${_scrollY}px`;
+  document.body.style.left='0';
+  document.body.style.right='0';
+  document.body.style.width='100%';
+  document.body.style.overflow='hidden';
   initDayModalSwipe();
 }
 
@@ -2574,6 +2604,16 @@ function closeModalById(id){
         tabCal._savedScrollTop=null;
       }
     }
+    // ★ 배경 스크롤 잠금 해제
+    const _savedY=parseInt(document.body.dataset.scrollLockY||'0',10);
+    document.body.style.position='';
+    document.body.style.top='';
+    document.body.style.left='';
+    document.body.style.right='';
+    document.body.style.width='';
+    document.body.style.overflow='';
+    delete document.body.dataset.scrollLockY;
+    window.scrollTo(0,_savedY);
   }
 }
 function closeBgModal(e,id){if(e.target===$(id))closeModalById(id);}
