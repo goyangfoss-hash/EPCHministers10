@@ -618,7 +618,7 @@ async function refreshSchedules() {
     Object.entries(r.data||{}).forEach(([name,days])=>{
       if(!merged[name]) merged[name]={};
       Object.entries(days||{}).forEach(([day,type])=>{
-        if(merged[name][day]&&!merged[name][day].includes(type)) merged[name][day]+='/'+type;
+        if(merged[name][day]){ if(!merged[name][day].includes(type)) merged[name][day]+='/'+type; }
         else merged[name][day]=type;
       });
     });
