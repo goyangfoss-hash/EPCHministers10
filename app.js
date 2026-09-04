@@ -38,6 +38,12 @@ let allSchedules = {};
 let currentUploadType = 'regular'; // 'regular' | 'special'
 let scheduleTypes = {}; // {year: {month: 'regular'|'special'}}
 const getMonthData = (y, m) => allSchedules[y]?.[m] || {};
+// ★ 역할 문자열을 태그 단위로 합치고 중복 제거 (여러 타입/재저장 시 중복 누적 방지)
+function mergeShiftValue(a, b){
+  const tags = new Set((a||'').split('/').filter(Boolean));
+  (b||'').split('/').filter(Boolean).forEach(t=>tags.add(t));
+  return Array.from(tags).join('/');
+}
 const curData = () => getMonthData(curY, curM + 1);
 let allMembers = [], notices = [], feedPosts = [];
 let shiftComments = {}, commentLikes = {}, modalDate = null, parsedExcel = null;
@@ -618,8 +624,7 @@ async function refreshSchedules() {
     Object.entries(r.data||{}).forEach(([name,days])=>{
       if(!merged[name]) merged[name]={};
       Object.entries(days||{}).forEach(([day,type])=>{
-        if(merged[name][day]){ if(!merged[name][day].includes(type)) merged[name][day]+='/'+type; }
-        else merged[name][day]=type;
+        merged[name][day] = merged[name][day] ? mergeShiftValue(merged[name][day], type) : type;
       });
     });
     allSchedules[r.year][r.month]=merged;
@@ -5909,17 +5914,13 @@ async function doApplySchedule(year, month, isMerge){
 
   let finalData;
   if(isMerge){
-    // 병합: 기존 데이터에 새 데이터 추가
-    const existing=allSchedules[year][month]||{};
+    // 병합: 기존 데이터에 새 데이터 추가 (★ 다른 타입과 섞이지 않도록 현재 타입 원본만 사용)
+    const existing=JSON.parse(JSON.stringify(scheduleTypes[year]?.[month]?.[currentUploadType]||{}));
     finalData={...existing};
     Object.entries(data).forEach(([name,days])=>{
       if(!finalData[name]) finalData[name]={};
       Object.entries(days).forEach(([day,type])=>{
-        if(finalData[name][day]){
-          if(!finalData[name][day].includes(type)) finalData[name][day]+='/'+type;
-        } else {
-          finalData[name][day]=type;
-        }
+        finalData[name][day] = finalData[name][day] ? mergeShiftValue(finalData[name][day], type) : type;
       });
     });
   } else {
@@ -6280,15 +6281,23 @@ async function notifyScheduleDiff(year, month, prevData, newData){
 }
 async function saveSchedCell(name,y,m,day){
   const val=document.getElementById('sched-edit-input')?.value?.trim();
-  const data=getMonthData(y,m);
+  if(!scheduleTypes[y]) scheduleTypes[y]={};
+  if(!scheduleTypes[y][m]) scheduleTypes[y][m]={};
+  // ★ 병합된 화면용 데이터가 아니라 현재 타입 원본만 기준으로 수정 (다른 타입 오염 방지)
+  const data=JSON.parse(JSON.stringify(scheduleTypes[y][m][currentUploadType]||{}));
   if(!data[name]) data[name]={};
   const prevVal=data[name][String(day)]||'';
   if(val){ data[name][String(day)]=val; }
-  else { delete data[name][String(day)]; }
-  // 해당 type 원본 업데이트
-  if(!scheduleTypes[y]) scheduleTypes[y]={};
-  if(!scheduleTypes[y][m]) scheduleTypes[y][m]={};
+  else { delete data[name][String(day)]; if(!Object.keys(data[name]).length) delete data[name]; }
   scheduleTypes[y][m][currentUploadType]=data;
+  // ★ 전체 타입을 다시 합쳐 화면용 데이터 재계산 (중복 없이)
+  const remerged={};
+  Object.values(scheduleTypes[y][m]).forEach(td=>Object.entries(td||{}).forEach(([n,days])=>{
+    if(!remerged[n]) remerged[n]={};
+    Object.entries(days||{}).forEach(([dd,tt])=>{ remerged[n][dd]=remerged[n][dd]?mergeShiftValue(remerged[n][dd],tt):tt; });
+  }));
+  if(!allSchedules[y]) allSchedules[y]={};
+  allSchedules[y][m]=remerged;
   if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
   // ★ 변경 당사자에게 FCM 알림 발송 (등록/변경/취소)
   if(!OFFLINE && val!==prevVal){
