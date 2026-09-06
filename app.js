@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20260904a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION='20260907a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -6177,17 +6177,17 @@ async function doUndo(){
 }
 function buildSchedPreview(){
   const el=$('sched-form'),allMonths=[];
-  const filterType = currentUploadType;
-  // ★ 해당 타입의 원본 데이터가 있는 월만 표시
+  // ★ 정기·특새 어느 한쪽에라도 데이터가 있는 월은 모두 표시 (병합 기준)
   Object.entries(scheduleTypes).forEach(([y,ym])=>Object.entries(ym).forEach(([m,types])=>{
-    if(types[filterType]) allMonths.push({y:parseInt(y),m:parseInt(m)});
+    if((types.regular&&Object.keys(types.regular).length)||(types.special&&Object.keys(types.special).length)) allMonths.push({y:parseInt(y),m:parseInt(m)});
   }));
   allMonths.sort((a,b)=>a.y!==b.y?b.y-a.y:b.m-a.m);
   if(!allMonths.length){el.innerHTML='<p class="empty-state">업로드된 사역표가 없습니다.</p>';return;}
   const MN=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   let html='';
   allMonths.forEach(({y,m})=>{
-    const d=scheduleTypes[y]?.[m]?.[filterType]||{},names=Object.keys(d);
+    // ★ 사역표 편집 화면은 정기+특새를 합친 병합 데이터를 기준으로 보여준다 (관리자가 타입을 몰라도 됨)
+    const d=allSchedules[y]?.[m]||{},names=Object.keys(d);
     const key=`sched-${y}-${m}`;
     const isOpen=collapseState[key]===true;
     const totalDays=names.reduce((s,n)=>s+Object.keys(d[n]||{}).length,0);
@@ -6212,7 +6212,7 @@ function buildSchedPreview(){
             <span class="sched-days">${days.map(d2=>{
               const t=wd[String(d2)],c=t?tc(t):null;
               return c
-                ?`<span class="day-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border};cursor:pointer" title="${t}" onclick="editSchedCell('${name}',${y},${m},${d2},'${t}')">${d2}</span>`
+                ?`<span class="day-chip" style="background:${c.bg};color:${c.text};border:1px solid ${c.border};cursor:pointer" title="${t}" onclick="editSchedCell('${name}',${y},${m},${d2})">${d2}</span>`
                 :`<span class="day-chip">${d2}</span>`;
             }).join('')}</span>
           </div>`;
@@ -6224,9 +6224,20 @@ function buildSchedPreview(){
   el.innerHTML=html;
 }
 
-// ★ 사역표 셀 수정
-function editSchedCell(name, y, m, day, currentType){
+// ★ 사역표 셀 수정 — 정기/특새 어디 소속인지 자동 감지해서 보여줌 (관리자가 타입을 고를 필요 없음)
+function editSchedCell(name, y, m, day){
   document.getElementById('sched-edit-modal')?.remove();
+  const regVal = scheduleTypes[y]?.[m]?.regular?.[name]?.[String(day)] || '';
+  const spcVal = scheduleTypes[y]?.[m]?.special?.[name]?.[String(day)] || '';
+  const rows = [];
+  if(regVal) rows.push({type:'regular', label:'정기', val:regVal});
+  if(spcVal) rows.push({type:'special', label:'특새', val:spcVal});
+  if(!rows.length){
+    // 완전히 새로운 항목 — 그 달에 특새 데이터가 있으면 특새로, 없으면 정기로 자동 귀속
+    const monthHasSpecial = !!(scheduleTypes[y]?.[m]?.special && Object.keys(scheduleTypes[y][m].special).length);
+    rows.push({type: monthHasSpecial ? 'special' : 'regular', label: monthHasSpecial ? '특새' : '정기', val:''});
+  }
+  const badgeStyle = {regular:'background:#E6F1FB;color:#0C447C', special:'background:#EAF3DE;color:#27500A'};
   const modal=document.createElement('div');
   modal.id='sched-edit-modal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -6234,8 +6245,12 @@ function editSchedCell(name, y, m, day, currentType){
     <div style="background:#fff;border-radius:18px;padding:22px;width:100%;max-width:360px">
       <div style="font-size:15px;font-weight:700;color:#185FA5;margin-bottom:4px">✏️ 사역 수정</div>
       <div style="font-size:12px;color:#888;margin-bottom:12px">${name} · ${y}년 ${m}월 ${day}일</div>
-      <input id="sched-edit-input" type="text" value="${esc(currentType)}"
-        style="width:100%;padding:10px 12px;border:1.5px solid #185FA5;border-radius:10px;font-size:14px;box-sizing:border-box;font-family:inherit">
+      ${rows.map(r=>`
+        <div style="margin-bottom:10px">
+          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;${badgeStyle[r.type]}">${r.label}</span>
+          <input class="sched-edit-row-input" data-type="${r.type}" type="text" value="${esc(r.val)}"
+            style="width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid #185FA5;border-radius:10px;font-size:14px;box-sizing:border-box;font-family:inherit">
+        </div>`).join('')}
       <div style="font-size:11px;color:#aaa;margin:6px 0 14px">비우면 해당 사역 삭제</div>
       <div style="display:flex;gap:8px">
         <button onclick="document.getElementById('sched-edit-modal').remove()" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;background:#fff;border-radius:10px;font-size:13px;color:#888;cursor:pointer">취소</button>
@@ -6244,7 +6259,7 @@ function editSchedCell(name, y, m, day, currentType){
     </div>`;
   modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
   document.body.appendChild(modal);
-  setTimeout(()=>document.getElementById('sched-edit-input')?.focus(),100);
+  setTimeout(()=>modal.querySelector('.sched-edit-row-input')?.focus(),100);
 }
 
 // ★ 월 단위 사역표 변경사항을 비교해 영향받는 사역자에게 FCM 알림 발송
@@ -6280,31 +6295,24 @@ async function notifyScheduleDiff(year, month, prevData, newData){
   }
 }
 async function saveSchedCell(name,y,m,day){
-  const val=document.getElementById('sched-edit-input')?.value?.trim();
+  const inputs=[...document.querySelectorAll('#sched-edit-modal .sched-edit-row-input')];
   if(!scheduleTypes[y]) scheduleTypes[y]={};
   if(!scheduleTypes[y][m]) scheduleTypes[y][m]={};
-  // ★ 병합된 화면용 데이터가 아니라 현재 타입 원본만 기준으로 수정 (다른 타입 오염 방지)
-  const data=JSON.parse(JSON.stringify(scheduleTypes[y][m][currentUploadType]||{}));
-  if(!data[name]) data[name]={};
-  const prevVal=data[name][String(day)]||'';
-  if(val){ data[name][String(day)]=val; }
-  else { delete data[name][String(day)]; if(!Object.keys(data[name]).length) delete data[name]; }
-  scheduleTypes[y][m][currentUploadType]=data;
-  // ★ 전체 타입을 다시 합쳐 화면용 데이터 재계산 (중복 없이)
-  const remerged={};
-  Object.values(scheduleTypes[y][m]).forEach(td=>Object.entries(td||{}).forEach(([n,days])=>{
-    if(!remerged[n]) remerged[n]={};
-    Object.entries(days||{}).forEach(([dd,tt])=>{ remerged[n][dd]=remerged[n][dd]?mergeShiftValue(remerged[n][dd],tt):tt; });
-  }));
-  if(!allSchedules[y]) allSchedules[y]={};
-  allSchedules[y][m]=remerged;
-  if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
-  // ★ 변경 당사자에게 FCM 알림 발송 (등록/변경/취소)
-  if(!OFFLINE && val!==prevVal){
-    const DN2=['일','월','화','수','목','금','토'];
-    const targetUser=allMembers.find(u=>u.name===name);
-    if(targetUser){
-      const dow=DN2[new Date(y,m-1,day).getDay()];
+  const DN2=['일','월','화','수','목','금','토'];
+  const dow=DN2[new Date(y,m-1,day).getDay()];
+  const targetUser=allMembers.find(u=>u.name===name);
+  for(const inp of inputs){
+    const type=inp.dataset.type;
+    const val=inp.value.trim();
+    const data=JSON.parse(JSON.stringify(scheduleTypes[y][m][type]||{}));
+    if(!data[name]) data[name]={};
+    const prevVal=data[name][String(day)]||'';
+    if(val===prevVal) continue;
+    if(val){ data[name][String(day)]=val; }
+    else { delete data[name][String(day)]; if(!Object.keys(data[name]).length) delete data[name]; }
+    scheduleTypes[y][m][type]=data;
+    if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,type,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
+    if(!OFFLINE && targetUser){
       let title, body;
       if(!prevVal && val){
         title='📅 사역 등록 알림';
@@ -6319,6 +6327,14 @@ async function saveSchedCell(name,y,m,day){
       sendPushToUsers([targetUser.id], title, body, 'myshift', {action:'openDay', year:String(y), month:String(m), day:String(day)}).catch(e=>console.warn('push err:', e));
     }
   }
+  // ★ 전체 타입을 다시 합쳐 화면용 데이터 재계산 (중복 없이)
+  const remerged={};
+  Object.values(scheduleTypes[y][m]).forEach(td=>Object.entries(td||{}).forEach(([n,days])=>{
+    if(!remerged[n]) remerged[n]={};
+    Object.entries(days||{}).forEach(([dd,tt])=>{ remerged[n][dd]=remerged[n][dd]?mergeShiftValue(remerged[n][dd],tt):tt; });
+  }));
+  if(!allSchedules[y]) allSchedules[y]={};
+  allSchedules[y][m]=remerged;
   document.getElementById('sched-edit-modal')?.remove();
   assignColors(collectAllTypes());
   renderCalendar();
@@ -6357,7 +6373,8 @@ async function deleteSchedMonth(y,m){
 
 // ★ 월 전체 수정 (미리보기로 열기)
 function editSchedMonth(y,m){
-  const data=getMonthData(y,m);
+  // ★ 월 전체 수정(엑셀형 편집)은 지금 선택된 타입 원본만 기준으로 열어서, 다른 타입 데이터가 같이 딸려나가 저장되는 것을 방지
+  const data=JSON.parse(JSON.stringify(scheduleTypes[y]?.[m]?.[currentUploadType]||{}));
   parsedExcel={year:y,month:m,data:JSON.parse(JSON.stringify(data)),fileName:`${y}년 ${m}월 수정`};
   $('upload-zone').style.display='none';
   $('excel-preview').style.display='block';
