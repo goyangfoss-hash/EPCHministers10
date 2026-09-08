@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20260908a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION='20260908b'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -5929,22 +5929,8 @@ async function doApplySchedule(year, month, isMerge){
 
   prevFiles.add(fileName);
 
-  // ★ 변경된 사역자 감지 (알림 발송용)
+  // ★ 변경 전 상태 (타입별 원본 기준 — 알림 발송용)
   const prevData = undoData?.data || {};
-  const changedWorkers = [];
-  const MN2=['','1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const DN2=['일','월','화','수','목','금','토'];
-
-  Object.entries(finalData).forEach(([name, days])=>{
-    Object.entries(days||{}).forEach(([day, type])=>{
-      const prevType = prevData[name]?.[day];
-      if(prevType !== type){
-        // 새로 추가되거나 변경된 사역
-        const u = allMembers.find(m=>m.name===name);
-        if(u) changedWorkers.push({userId: u.id, name, day: parseInt(day), type, isNew: !prevType});
-      }
-    });
-  });
 
   // ★ 관리자가 앱에서 직접 업로드하는 경우: 바로 실제 서비스에 반영한다 (기존 동작).
   // 초안(schedules_draft)→게시 단계는 무인 자동화(구글시트 자동 업로드)에서만 사용하고,
@@ -5959,27 +5945,8 @@ async function doApplySchedule(year, month, isMerge){
     );
     if(error){showExcelErr('저장 오류: '+error.message);return;}
 
-    // ★ 변경된 사역자들에게 FCM 알림 발송
-    if(changedWorkers.length){
-      const byUser={};
-      changedWorkers.forEach(({userId,name,day,type,isNew})=>{
-        if(!byUser[userId]) byUser[userId]={userId,name,shifts:[]};
-        byUser[userId].shifts.push({day,type,isNew});
-      });
-      for(const {userId,name,shifts} of Object.values(byUser)){
-        const shiftDesc = shifts.slice(0,3).map(({day,type,isNew})=>{
-          const dow=DN2[new Date(year,month-1,day).getDay()];
-          return `${month}월 ${day}일(${dow}) ${type}`;
-        }).join(', ');
-        const title = shifts[0].isNew ? '📅 사역 등록 알림' : '📝 사역 변경 알림';
-        const body = shifts[0].isNew
-          ? `${shiftDesc} 사역이 등록되었습니다.`
-          : `${shiftDesc} 사역이 변경되었습니다.`;
-        const shiftDay=String(shifts[0]?.day||'');
-        sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
-      }
-      console.log(`[알림] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
-    }
+    // ★ 변경된 사역자들에게 FCM 알림 발송 — 등록/변경뿐 아니라 삭제(취소)도 놓치지 않도록 공통 diff 함수 사용
+    notifyScheduleDiff(year,month,prevData,finalData);
     await refreshSchedules();
   }
 
