@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20260908b'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION='20260908c'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -6246,26 +6246,58 @@ async function notifyScheduleDiff(year, month, prevData, newData){
   names.forEach(name=>{
     const prevDays=prevData?.[name]||{}, newDays=newData?.[name]||{};
     const days=new Set([...Object.keys(prevDays),...Object.keys(newDays)]);
+    const shifts=[]; const removedList=[]; const addedList=[];
     days.forEach(day=>{
       const prevType=prevDays[day]||'', newType=newDays[day]||'';
       if(prevType===newType) return;
-      const u=allMembers.find(m=>m.name===name);
-      if(!u) return;
-      if(!byUser[u.id]) byUser[u.id]={userId:u.id,name,shifts:[]};
-      byUser[u.id].shifts.push({day:parseInt(day),prevType,newType});
+      if(prevType && newType){ shifts.push({day:parseInt(day),prevType,newType}); }
+      else if(prevType && !newType){ removedList.push({day:parseInt(day),type:prevType}); }
+      else if(!prevType && newType){ addedList.push({day:parseInt(day),type:newType}); }
     });
+    const moved=[];
+    removedList.slice().forEach(r=>{
+      const idx=addedList.findIndex(a=>a.type===r.type);
+      if(idx>=0){
+        moved.push({fromDay:r.day, toDay:addedList[idx].day, type:r.type});
+        addedList.splice(idx,1);
+        removedList.splice(removedList.indexOf(r),1);
+      }
+    });
+    if(!shifts.length && !removedList.length && !addedList.length && !moved.length) return;
+    const u=allMembers.find(m=>m.name===name);
+    if(!u) return;
+    if(!byUser[u.id]) byUser[u.id]={userId:u.id,name,shifts:[],moved:[],removed:[],added:[]};
+    byUser[u.id].shifts.push(...shifts);
+    byUser[u.id].moved.push(...moved);
+    byUser[u.id].removed.push(...removedList);
+    byUser[u.id].added.push(...addedList);
   });
-  for(const {userId,shifts} of Object.values(byUser)){
-    const shiftDesc=shifts.slice(0,3).map(({day,prevType,newType})=>{
+  for(const {userId,shifts,moved,removed,added} of Object.values(byUser)){
+    const descs=[];
+    moved.slice(0,3).forEach(({fromDay,toDay,type})=>{
+      const dow1=DN2[new Date(year,month-1,fromDay).getDay()], dow2=DN2[new Date(year,month-1,toDay).getDay()];
+      descs.push(`${month}월 ${fromDay}일(${dow1}) ${type} 사역이 ${month}월 ${toDay}일(${dow2})로 변경되었습니다`);
+    });
+    shifts.slice(0,3).forEach(({day,prevType,newType})=>{
       const dow=DN2[new Date(year,month-1,day).getDay()];
-      return `${month}월 ${day}일(${dow}) ${newType||prevType}`;
-    }).join(', ');
-    const allRemoved=shifts.every(s=>!s.newType);
-    const allNew=shifts.every(s=>!s.prevType);
-    const title=allRemoved?'🗑️ 사역 취소 알림':(allNew?'📅 사역 등록 알림':'📝 사역 변경 알림');
-    const body=allRemoved?`${shiftDesc} 사역이 취소되었습니다.`:(allNew?`${shiftDesc} 사역이 등록되었습니다.`:`${shiftDesc} 사역이 변경되었습니다.`);
-    const shiftDay=String(shifts[0]?.day||'');
-    sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
+      descs.push(`${month}월 ${day}일(${dow}) 사역이 '${prevType}'에서 '${newType}'(으)로 변경되었습니다`);
+    });
+    added.slice(0,3).forEach(({day,type})=>{
+      const dow=DN2[new Date(year,month-1,day).getDay()];
+      descs.push(`${month}월 ${day}일(${dow}) ${type} 사역이 등록되었습니다`);
+    });
+    removed.slice(0,3).forEach(({day,type})=>{
+      const dow=DN2[new Date(year,month-1,day).getDay()];
+      descs.push(`${month}월 ${day}일(${dow}) ${type} 사역이 취소되었습니다`);
+    });
+    if(!descs.length) continue;
+    const onlyMoved = moved.length && !shifts.length && !added.length && !removed.length;
+    const onlyRemoved = removed.length && !shifts.length && !added.length && !moved.length;
+    const onlyAdded = added.length && !shifts.length && !removed.length && !moved.length;
+    const title = onlyMoved?'📅 사역 일정 변경 알림':onlyRemoved?'🗑️ 사역 취소 알림':onlyAdded?'📅 사역 등록 알림':'📝 사역 변경 알림';
+    const body = descs.slice(0,3).join(' / ');
+    const firstDay = String((moved[0]?.toDay ?? shifts[0]?.day ?? added[0]?.day ?? removed[0]?.day) || '');
+    sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:firstDay}).catch(e=>console.warn('push err:', e));
   }
 }
 async function saveSchedCell(name,y,m,day){
