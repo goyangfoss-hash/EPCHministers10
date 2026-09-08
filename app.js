@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20260907a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION='20260908a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -5907,9 +5907,9 @@ async function doApplySchedule(year, month, isMerge){
   if(!uploadedFiles[year][month]) uploadedFiles[year][month]=new Set();
   const prevFiles=uploadedFiles[year][month];
 
-  // 되돌리기용 이전 상태 저장
+  // 되돌리기용 이전 상태 저장 (★ 병합뷰가 아니라 현재 타입 원본만 저장 — 되돌릴 때 다른 타입 오염 방지)
   if(settings.enableUndo!==false){
-    undoData={year,month,data:JSON.parse(JSON.stringify(allSchedules[year]?.[month]||{})),files:new Set(prevFiles)};
+    undoData={year,month,type:currentUploadType,data:JSON.parse(JSON.stringify(scheduleTypes[year]?.[month]?.[currentUploadType]||{})),files:new Set(prevFiles)};
   }
 
   let finalData;
@@ -6155,18 +6155,25 @@ function showUndoToast(msg){
 
 async function doUndo(){
   if(!undoData){showToastMsg('되돌릴 데이터가 없습니다.');return;}
-  const{year,month,data,files}=undoData;
+  const{year,month,type,data,files}=undoData;
+  const targetType = type || currentUploadType;
   if(!confirm('이전 사역표로 되돌리시겠습니까?'))return;
-  // ★ 되돌리기 전 현재 상태 백업 (알림 발송용)
-  const prevData=JSON.parse(JSON.stringify(allSchedules[year]?.[month]||{}));
+  // ★ 되돌리기는 관리자 실수 복구용 안전장치이므로 알림을 보내지 않는다 (실수할 때마다 알림 스팸 방지)
+  if(!scheduleTypes[year]) scheduleTypes[year]={};
+  if(!scheduleTypes[year][month]) scheduleTypes[year][month]={};
+  scheduleTypes[year][month][targetType]=data;
+  // ★ 전체 타입을 다시 합쳐 화면용 데이터 재계산 (다른 타입과 섞이지 않게)
+  const remerged={};
+  Object.values(scheduleTypes[year][month]).forEach(td=>Object.entries(td||{}).forEach(([n,days])=>{
+    if(!remerged[n]) remerged[n]={};
+    Object.entries(days||{}).forEach(([dd,tt])=>{ remerged[n][dd]=remerged[n][dd]?mergeShiftValue(remerged[n][dd],tt):tt; });
+  }));
   if(!allSchedules[year])allSchedules[year]={};
-  allSchedules[year][month]=data;
+  allSchedules[year][month]=remerged;
   if(uploadedFiles[year]?.[month]) uploadedFiles[year][month]=files;
   assignColors(collectAllTypes());filterType='';
   if(!OFFLINE){
-    await sb.from('schedules').upsert({year,month,data,type:currentUploadType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
-    // ★ 되돌리기로 바뀐 사역 당사자에게 FCM 알림 발송
-    notifyScheduleDiff(year,month,prevData,data);
+    await sb.from('schedules').upsert({year,month,data,type:targetType,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
     await refreshSchedules();
   }
   $('undo-toast').style.display='none';
@@ -6372,8 +6379,10 @@ async function deleteSchedMonth(y,m){
 }
 
 // ★ 월 전체 수정 (미리보기로 열기)
-function editSchedMonth(y,m){
+async function editSchedMonth(y,m){
   // ★ 월 전체 수정(엑셀형 편집)은 지금 선택된 타입 원본만 기준으로 열어서, 다른 타입 데이터가 같이 딸려나가 저장되는 것을 방지
+  // ★ 또한 열기 직전에 항상 서버에서 새로 받아와서, 캐시가 낡아 일부 데이터가 빠진 채로 저장되는 사고를 막는다
+  if(!OFFLINE) await refreshSchedules();
   const data=JSON.parse(JSON.stringify(scheduleTypes[y]?.[m]?.[currentUploadType]||{}));
   parsedExcel={year:y,month:m,data:JSON.parse(JSON.stringify(data)),fileName:`${y}년 ${m}월 수정`};
   $('upload-zone').style.display='none';
