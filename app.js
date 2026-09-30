@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20260908c'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION='20260930a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -5927,6 +5927,28 @@ async function doApplySchedule(year, month, isMerge){
     finalData=data;
   }
 
+  // ★ 같은 날짜·같은 역할에 서로 다른 사람이 중복 배정됐는지 저장 전 검사
+  {
+    const tagMap={};
+    Object.entries(finalData).forEach(([nm,days])=>{
+      Object.entries(days||{}).forEach(([dd,vv])=>{
+        String(vv||'').split('/').map(s=>s.trim()).filter(Boolean).forEach(tag=>{
+          const key=dd+'|'+tag;
+          if(!tagMap[key]) tagMap[key]=[];
+          if(!tagMap[key].includes(nm)) tagMap[key].push(nm);
+        });
+      });
+    });
+    const dupEntries=Object.entries(tagMap).filter(([k,names])=>names.length>1);
+    if(dupEntries.length){
+      const desc=dupEntries.slice(0,5).map(([k,names])=>{
+        const [dd,tag]=k.split('|');
+        return `${month}월 ${dd}일 ${tag}: ${names.join(', ')}`;
+      }).join('\n');
+      if(!confirm(`같은 날짜·같은 사역에 두 명 이상이 배정되어 있습니다:\n${desc}${dupEntries.length>5?'\n...':''}\n\n그래도 저장하시겠습니까?`)) return;
+    }
+  }
+
   prevFiles.add(fileName);
 
   // ★ 변경 전 상태 (타입별 원본 기준 — 알림 발송용)
@@ -6300,7 +6322,22 @@ async function notifyScheduleDiff(year, month, prevData, newData){
     sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:firstDay}).catch(e=>console.warn('push err:', e));
   }
 }
-async function saveSchedCell(name,y,m,day){
+async // ★ 같은 날짜·같은 역할에 다른 사람이 이미 배정되어 있는지 검사 (중복 배정 방지 가드)
+function findDupHolders(data, day, val, excludeName){
+  const newTags = new Set(String(val||'').split('/').map(s=>s.trim()).filter(Boolean));
+  if(!newTags.size) return [];
+  const holders=[];
+  Object.entries(data||{}).forEach(([n,days])=>{
+    if(n===excludeName) return;
+    const existing = days?.[day] || '';
+    if(!existing) return;
+    const existingTags = existing.split('/').map(s=>s.trim());
+    if(existingTags.some(t=>newTags.has(t))) holders.push(n);
+  });
+  return holders;
+}
+
+function saveSchedCell(name,y,m,day){
   const inputs=[...document.querySelectorAll('#sched-edit-modal .sched-edit-row-input')];
   if(!scheduleTypes[y]) scheduleTypes[y]={};
   if(!scheduleTypes[y][m]) scheduleTypes[y][m]={};
@@ -6314,7 +6351,11 @@ async function saveSchedCell(name,y,m,day){
     if(!data[name]) data[name]={};
     const prevVal=data[name][String(day)]||'';
     if(val===prevVal) continue;
-    if(val){ data[name][String(day)]=val; }
+    if(val){
+      const dupHolders = findDupHolders(data, String(day), val, name);
+      if(dupHolders.length && !confirm(`${dupHolders.join(', ')}님이 이미 ${m}월 ${day}일에 같은 사역(${val})을 갖고 있습니다.\n그래도 저장할까요?`)) continue;
+      data[name][String(day)]=val;
+    }
     else { delete data[name][String(day)]; if(!Object.keys(data[name]).length) delete data[name]; }
     scheduleTypes[y][m][type]=data;
     if(!OFFLINE) await sb.from('schedules').upsert({year:y,month:m,data,type,updated_by:cu.id,updated_at:new Date().toISOString()},{onConflict:'year,month,type'});
