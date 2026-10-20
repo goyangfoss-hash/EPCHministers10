@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20260930b'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION='20261020a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -58,6 +58,7 @@ let srchDept = 'team'; // 검색탭 선택 파트
 let chatMessages = {};   // { userId: [messages] }
 let chatTarget = null;   // 현재 채팅 상대 (관리자↔이용자)
 let dmUnreadCount = 0;
+let userNotices = [];
 let userDmTarget = null; // 이용자↔이용자 채팅 상대
 
 // ── 알림 & 메모 (Supabase + localStorage 이중 저장) ──
@@ -805,6 +806,7 @@ async function enterApp() {
     navigator.serviceWorker.register('firebase-messaging-sw.js').catch(()=>{});
   }
   initFCM();
+  loadUserNotices();
   initPullToRefresh();
   initCalendarSwipe();
   // ★ 알림 클릭으로 열렸을 때 URL ?tab= 파라미터로 탭 이동
@@ -857,7 +859,8 @@ async function initFCM(){
 
     // 포그라운드 메시지 수신
     messaging.onMessage(payload=>{
-      const {title, body} = payload.notification || {};
+      const {title, body} = payload.notification || payload.data || {};
+      loadUserNotices();
       window._fcmForeground = true;
       // ★ SW에 포그라운드 상태 전달 → SW가 배너 표시 안 함
       navigator.serviceWorker.ready.then(reg=>{
@@ -908,9 +911,11 @@ async function sendPushToUsers(userIds, title, body, tab='feed', extra={}){
   if(OFFLINE||!userIds?.length) return;
   try {
     const urlParams = new URLSearchParams({tab, ...Object.fromEntries(Object.entries(extra).filter(([k])=>k!=='action'||true))});
-    const data = { tab, url: '/?'+urlParams.toString(), ...extra };
+    const {kind:_k, ...rest} = extra;
+    const kind = _k || (rest.action==='openDay' ? 'shift_change' : null);
+    const data = { tab, url: '/?'+urlParams.toString(), ...rest };
     await sb.functions.invoke('send-push', {
-      body: { user_ids: userIds, title, body, data }
+      body: { user_ids: userIds, title, body, data, kind }
     });
   } catch(e){ console.warn('Push send error:', e.message); }
 }
@@ -1193,7 +1198,7 @@ function getNotifCount(){
   // ③ 미읽은 DM
   const unreadDM=dmUnreadCount||0;
 
-  return shiftCnt+unreadNotices+unreadDM;
+  return shiftCnt+unreadNotices+unreadDM+(userNotices||[]).filter(n=>!n.read_at).length;
 }
 
 function renderAlarmPanel(){
@@ -1246,6 +1251,15 @@ function renderAlarmPanel(){
   // ② 미확인 공지
   const readIds=new Set(JSON.parse(localStorage.getItem('ws_read_notices')||'[]'));
   const unreadNotices=(notices||[]).filter(n=>!readIds.has(n.id));
+  const myUnread=(userNotices||[]).filter(n=>!n.read_at);
+  if(myUnread.length){
+    html+='<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">내 알림 내역</div>';
+    html+=myUnread.slice(0,5).map(n=>'<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:'+(n.kind==='admin_alert'?'#FCEBEB':'#E6F1FB')+';cursor:pointer" onclick="openMyNotice('+n.id+')">'
+      +'<div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">'+myNoticeIcon(n.kind)+'</div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(n.title)+'</div>'
+      +'<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(n.body)+'</div></div>'
+      +'<div style="width:6px;height:6px;border-radius:50%;background:'+(n.kind==='admin_alert'?'#E24B4A':'#185FA5')+';flex-shrink:0"></div></div>').join('');
+  }
   if(unreadNotices.length){
     html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">새 공지</div>`;
     html+=unreadNotices.slice(0,3).map(n=>`
@@ -1273,7 +1287,7 @@ function renderAlarmPanel(){
   }
 
   // 아무것도 없을 때
-  if(!shiftItems.length&&!unreadNotices.length&&!dmUnreadCount){
+  if(!shiftItems.length&&!unreadNotices.length&&!dmUnreadCount&&!myUnread.length){
     html+='<div style="padding:24px 16px;text-align:center;font-size:13px;color:var(--color-text-tertiary)">새 알림이 없습니다</div>';
   }
 
@@ -1335,6 +1349,9 @@ function markNoticeRead(noticeId){
 }
 
 async function markAllRead(){
+  (userNotices||[]).forEach(n=>{ n.read_at=n.read_at||new Date().toISOString(); });
+  if(cu&&!OFFLINE) sb.from('user_notices').update({read_at:new Date().toISOString()}).eq('user_id',cu.id).is('read_at',null).then(function(){});
+  renderMyNotices();
   // ① 사역 알림 모두 확인 — 오늘/내일 해당 날짜 전부 seen 처리
   const now=new Date();
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
@@ -1474,6 +1491,55 @@ function saveShiftMemo(y,m,d){
   if($('tab-myshift')?.style.display!=='none')renderMyShift();
 }
 
+async function loadUserNotices(){
+  if(OFFLINE||!cu) return;
+  try{
+    const {data,error}=await sb.from('user_notices').select('*').eq('user_id',cu.id).order('created_at',{ascending:false}).limit(100);
+    if(!error) userNotices=data||[];
+  }catch(e){ console.warn('loadUserNotices:',e.message); }
+  updateAlarmBadge();
+  renderMyNotices();
+}
+document.addEventListener('visibilitychange',function(){ if(!document.hidden&&cu) loadUserNotices(); });
+function myNoticeIcon(k){ return k==='admin_alert'?'⚠️':'📅'; }
+function renderMyNotices(highlightId){
+  const list=$('notice-list'); if(!list||!list.parentNode) return;
+  let box=$('my-notices-box');
+  if(!box){ box=document.createElement('div'); box.id='my-notices-box'; list.parentNode.insertBefore(box,list); }
+  const items=(userNotices||[]).slice(0,30);
+  if(!items.length){ box.innerHTML=''; return; }
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px 4px"><span style="font-size:12px;font-weight:500;color:var(--color-text-secondary)">내 알림 내역 <span style="font-weight:400;color:var(--color-text-tertiary)">(나에게만 보임)</span></span><button onclick="clearMyNotices()" style="font-size:11px;color:var(--color-text-tertiary);background:none;border:none;cursor:pointer">비우기</button></div>';
+  h+=items.map(function(n){
+    const unread=!n.read_at;
+    return '<div id="mn-'+n.id+'" style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:6px;border:0.5px solid var(--color-border-tertiary);border-radius:10px;background:'+(n.id===highlightId?'#E6F1FB':'var(--color-background-primary)')+'">'
+      +'<span style="width:7px;height:7px;border-radius:50%;margin-top:6px;flex-shrink:0;background:'+(unread?(n.kind==='admin_alert'?'#E24B4A':'#378ADD'):'transparent')+'"></span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500">'+myNoticeIcon(n.kind)+' '+esc(n.title)+'</div>'
+      +'<div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px;line-height:1.5;white-space:pre-wrap">'+esc(n.body)+'</div>'
+      +'<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:3px">'+fmtDate(n.created_at)+'</div></div>'
+      +'<button onclick="deleteMyNotice('+n.id+')" aria-label="삭제" style="background:none;border:none;color:var(--color-text-tertiary);font-size:15px;cursor:pointer;padding:0 2px">✕</button></div>';
+  }).join('');
+  box.innerHTML=h;
+}
+async function openMyNotice(id){
+  const n=(userNotices||[]).find(function(x){return x.id===id;});
+  if(n&&!n.read_at){ n.read_at=new Date().toISOString(); sb.from('user_notices').update({read_at:n.read_at}).eq('id',id).then(function(){}); }
+  closeAllPanels();
+  switchTab('notice',$('btn-notice'));
+  updateAlarmBadge();
+  renderMyNotices(id);
+  setTimeout(function(){ $('mn-'+id)?.scrollIntoView({behavior:'smooth',block:'center'}); },150);
+}
+async function deleteMyNotice(id){
+  userNotices=(userNotices||[]).filter(function(x){return x.id!==id;});
+  renderMyNotices(); updateAlarmBadge();
+  try{ await sb.from('user_notices').delete().eq('id',id).eq('user_id',cu.id); }catch(e){}
+}
+async function clearMyNotices(){
+  if(!confirm('내 알림 내역을 모두 지울까요?')) return;
+  userNotices=[]; renderMyNotices(); updateAlarmBadge();
+  try{ await sb.from('user_notices').delete().eq('user_id',cu.id); }catch(e){}
+}
+
 // ★ 알림 클릭 → URL 파라미터로 앱 진입 시 딥링크 처리
 function handleNotifLaunchTab(){
   try {
@@ -1504,7 +1570,7 @@ function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}
   };
 
   // 탭 전환
-  const targetTab = tab || 'feed';
+  const targetTab = action==='openAlarm' ? (window._currentTab||'cal') : (tab || 'feed');
   const btn = btnMap[targetTab];
   if(btn) switchTab(targetTab, btn);
 
@@ -1544,6 +1610,10 @@ function handleDeepLink({tab, action, chatUserId, noticeId, year, month, day}={}
           renderCalendar();
           setTimeout(()=>openDayModal(parseInt(day)), 100);
         }
+        break;
+
+      case 'openAlarm':
+        loadUserNotices().then(()=>{ const p=$('alarm-panel'); if(!p||p.style.display!=='flex') toggleAlarmPanel(); });
         break;
 
       case 'openAdmin':
