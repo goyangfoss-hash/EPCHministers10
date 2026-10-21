@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20261020a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION='20261022a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -1228,6 +1228,8 @@ function renderAlarmPanel(){
   shiftItems.sort((a,b)=>a.dt-b.dt);
 
   if(shiftItems.length){
+    // ★ 배지 카운트와 같은 기준(seen)으로 읽음 표시 — 확인한 사역은 초록 배경·점을 끈다
+    const seenShifts = window._seenShifts || new Set(JSON.parse(localStorage.getItem('ws_seen_shifts')||'[]'));
     html+=`<div style="padding:4px 14px;font-size:10px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.5px;background:var(--color-background-secondary)">오늘/내일 사역</div>`;
     html+=shiftItems.map(({y,m,d,type,dt})=>{
       const c=tc(type);
@@ -1237,13 +1239,14 @@ function renderAlarmPanel(){
       const types2 = type.includes('/') ? type.split('/').map(t=>t.trim()) : [type];
       const allDone = types2.every(t=>!!shiftCompletions[makeCompKey(y,m,d,t)]);
       if(allDone) return ''; // ★ 완료된 사역은 알림패널에서 삭제
-      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:#EAF3DE;cursor:pointer" onclick="markShiftSeen('${y}-${m}-${d}');viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
+      const seen = seenShifts.has(`${y}-${m}-${d}`);
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:0.5px solid var(--color-border-tertiary);background:${seen?'transparent':'#EAF3DE'};cursor:pointer" onclick="markShiftSeen('${y}-${m}-${d}');viewDayInCal(${y},${m-1},${d});toggleAlarmPanel()">
         <div style="width:32px;height:32px;border-radius:50%;background:#FAEEDA;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📅</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">${label} 사역</div>
           <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">${m}월 ${d}일(${DN[new Date(y,m-1,d).getDay()]}) ${type.split('/').map(t=>{const tc2=tc(t.trim());return tc2?`<span style="background:${tc2.bg};color:${tc2.text};padding:1px 6px;border-radius:4px;font-size:10px;margin-right:2px">${t.trim()}</span>`:''}).join('')}</div>
         </div>
-        <div style="width:6px;height:6px;border-radius:50%;background:#639922;flex-shrink:0"></div>
+        <div style="width:6px;height:6px;border-radius:50%;background:${seen?'transparent':'#639922'};flex-shrink:0"></div>
       </div>`;
     }).join('');
   }
@@ -1306,8 +1309,9 @@ async function markShiftSeen(key){
     return new Date(y,m-1,d)>=cutoff;
   }));
   window._seenShifts = cleaned;
-  await saveSeenShifts(cleaned);
   updateAlarmBadge();
+  if($('alarm-panel-list')) renderAlarmPanel(); // ★ 패널의 읽음 표시도 즉시 갱신
+  await saveSeenShifts(cleaned);
 }
 
 // DM 전체 읽음 처리 (알림 클릭 시)
