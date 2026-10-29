@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION='20261022a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION = '20261029a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -6154,18 +6154,6 @@ async function publishDraftSchedule(year, month, type){
   const finalData = draftRow.data||{};
   const prevData = liveRow?.data||{};
 
-  // 변경된 사역자 감지 (기존 doApplySchedule과 동일한 로직)
-  const changedWorkers=[];
-  Object.entries(finalData).forEach(([name, days])=>{
-    Object.entries(days||{}).forEach(([day, val])=>{
-      const prevVal = prevData[name]?.[day];
-      if(prevVal !== val){
-        const u = allMembers.find(m=>m.name===name);
-        if(u) changedWorkers.push({userId:u.id, name, day:parseInt(day), type:val, isNew:!prevVal});
-      }
-    });
-  });
-
   const {error:upErr} = await sb.from('schedules').upsert(
     {year,month,data:finalData,type,updated_by:cu.id,updated_at:new Date().toISOString()},
     {onConflict:'year,month,type'}
@@ -6175,25 +6163,8 @@ async function publishDraftSchedule(year, month, type){
   // 게시 완료 후 해당 초안은 정리
   await sb.from('schedules_draft').delete().eq('year',year).eq('month',month).eq('type',type);
 
-  // 변경된 사역자들에게 FCM 알림 발송 (기존 앱과 동일한 문구)
-  if(changedWorkers.length){
-    const byUser={};
-    changedWorkers.forEach(({userId,name,day,type:t,isNew})=>{
-      if(!byUser[userId]) byUser[userId]={userId,name,shifts:[]};
-      byUser[userId].shifts.push({day,type:t,isNew});
-    });
-    for(const {userId,shifts} of Object.values(byUser)){
-      const shiftDesc = shifts.slice(0,3).map(({day,type:t})=>{
-        const dow=DN2[new Date(year,month-1,day).getDay()];
-        return `${month}월 ${day}일(${dow}) ${t}`;
-      }).join(', ');
-      const title = shifts[0].isNew ? '📅 사역 등록 알림' : '📝 사역 변경 알림';
-      const body = shifts[0].isNew ? `${shiftDesc} 사역이 등록되었습니다.` : `${shiftDesc} 사역이 변경되었습니다.`;
-      const shiftDay=String(shifts[0]?.day||'');
-      sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:shiftDay}).catch(e=>console.warn('push err:', e));
-    }
-    console.log(`[게시] ${Object.keys(byUser).length}명에게 사역 알림 발송`);
-  }
+  // 변경된 사역자에게 알림 (교대/대신/등록 문구 자동 구성, 빠지는 쪽 취소 알림은 생략)
+  notifyScheduleDiff(year, month, prevData, finalData, {skipRemoved:true});
 
   await refreshSchedules();
   renderAdmin();
@@ -6334,66 +6305,79 @@ function editSchedCell(name, y, m, day){
 
 // ★ 월 단위 사역표 변경사항을 비교해 영향받는 사역자에게 FCM 알림 발송
 // (한 사람당 여러 날짜가 바뀌어도 최대 3건까지 묶어서 1건의 알림으로 발송)
-async function notifyScheduleDiff(year, month, prevData, newData){
+// ★ 역할 단위로 변경을 비교해 사람마다 알림 1건씩 발송
+//   맞교환 → '교대', 같은 사람 날짜 이동 → '일정 변경', 다른 사람 자리 → 'OOO님 대신', 그 외 등록/취소
+//   opts.skipRemoved: 취소(빠지는 쪽) 알림은 보내지 않음 (초안 게시용)
+async function notifyScheduleDiff(year, month, prevData, newData, opts={}){
   if(OFFLINE) return;
   const DN2=['일','월','화','수','목','금','토'];
+  const dl=d=>`${month}월 ${d}일(${DN2[new Date(year,month-1,d).getDay()]})`;
+  const roles=v=>String(v||'').split('/').map(s=>s.trim()).filter(Boolean);
+  const added=[], removed=[];
   const names=new Set([...Object.keys(prevData||{}),...Object.keys(newData||{})]);
-  const byUser={};
   names.forEach(name=>{
-    const prevDays=prevData?.[name]||{}, newDays=newData?.[name]||{};
-    const days=new Set([...Object.keys(prevDays),...Object.keys(newDays)]);
-    const shifts=[]; const removedList=[]; const addedList=[];
-    days.forEach(day=>{
-      const prevType=prevDays[day]||'', newType=newDays[day]||'';
-      if(prevType===newType) return;
-      if(prevType && newType){ shifts.push({day:parseInt(day),prevType,newType}); }
-      else if(prevType && !newType){ removedList.push({day:parseInt(day),type:prevType}); }
-      else if(!prevType && newType){ addedList.push({day:parseInt(day),type:newType}); }
+    const pd=prevData?.[name]||{}, nd=newData?.[name]||{};
+    new Set([...Object.keys(pd),...Object.keys(nd)]).forEach(day=>{
+      const pr=roles(pd[day]), nr=roles(nd[day]);
+      nr.filter(r=>!pr.includes(r)).forEach(role=>added.push({name,day:parseInt(day),role}));
+      pr.filter(r=>!nr.includes(r)).forEach(role=>removed.push({name,day:parseInt(day),role}));
     });
-    const moved=[];
-    removedList.slice().forEach(r=>{
-      const idx=addedList.findIndex(a=>a.type===r.type);
-      if(idx>=0){
-        moved.push({fromDay:r.day, toDay:addedList[idx].day, type:r.type});
-        addedList.splice(idx,1);
-        removedList.splice(removedList.indexOf(r),1);
-      }
-    });
-    if(!shifts.length && !removedList.length && !addedList.length && !moved.length) return;
-    const u=allMembers.find(m=>m.name===name);
-    if(!u) return;
-    if(!byUser[u.id]) byUser[u.id]={userId:u.id,name,shifts:[],moved:[],removed:[],added:[]};
-    byUser[u.id].shifts.push(...shifts);
-    byUser[u.id].moved.push(...moved);
-    byUser[u.id].removed.push(...removedList);
-    byUser[u.id].added.push(...addedList);
   });
-  for(const {userId,shifts,moved,removed,added} of Object.values(byUser)){
-    const descs=[];
-    moved.slice(0,3).forEach(({fromDay,toDay,type})=>{
-      const dow1=DN2[new Date(year,month-1,fromDay).getDay()], dow2=DN2[new Date(year,month-1,toDay).getDay()];
-      descs.push(`${month}월 ${fromDay}일(${dow1}) ${type} 사역이 ${month}월 ${toDay}일(${dow2})로 변경되었습니다`);
-    });
-    shifts.slice(0,3).forEach(({day,prevType,newType})=>{
-      const dow=DN2[new Date(year,month-1,day).getDay()];
-      descs.push(`${month}월 ${day}일(${dow}) 사역이 '${prevType}'에서 '${newType}'(으)로 변경되었습니다`);
-    });
-    added.slice(0,3).forEach(({day,type})=>{
-      const dow=DN2[new Date(year,month-1,day).getDay()];
-      descs.push(`${month}월 ${day}일(${dow}) ${type} 사역이 등록되었습니다`);
-    });
-    removed.slice(0,3).forEach(({day,type})=>{
-      const dow=DN2[new Date(year,month-1,day).getDay()];
-      descs.push(`${month}월 ${day}일(${dow}) ${type} 사역이 취소되었습니다`);
-    });
-    if(!descs.length) continue;
-    const onlyMoved = moved.length && !shifts.length && !added.length && !removed.length;
-    const onlyRemoved = removed.length && !shifts.length && !added.length && !moved.length;
-    const onlyAdded = added.length && !shifts.length && !removed.length && !moved.length;
-    const title = onlyMoved?'📅 사역 일정 변경 알림':onlyRemoved?'🗑️ 사역 취소 알림':onlyAdded?'📅 사역 등록 알림':'📝 사역 변경 알림';
-    const body = descs.slice(0,3).join(' / ');
-    const firstDay = String((moved[0]?.toDay ?? shifts[0]?.day ?? added[0]?.day ?? removed[0]?.day) || '');
-    sendPushToUsers([userId], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:firstDay}).catch(e=>console.warn('push err:', e));
+  const items=[]; // {name, kind, day, desc}
+  const take=(list,fn)=>{ const i=list.findIndex(fn); return i>=0?list.splice(i,1)[0]:null; };
+  // 1) 맞교환: A가 d2→d1, B가 d1→d2 (같은 역할)
+  added.slice().forEach(a=>{
+    if(!added.includes(a)) return;
+    const aOut=removed.find(r=>r.name===a.name&&r.role===a.role&&r.day!==a.day);
+    if(!aOut) return;
+    const bIn=added.find(x=>x.name!==a.name&&x.role===a.role&&x.day===aOut.day&&removed.some(r=>r.name===x.name&&r.role===a.role&&r.day===a.day));
+    if(!bIn) return;
+    const bOut=removed.find(r=>r.name===bIn.name&&r.role===a.role&&r.day===a.day);
+    [a,bIn].forEach(x=>added.splice(added.indexOf(x),1));
+    [aOut,bOut].forEach(x=>removed.splice(removed.indexOf(x),1));
+    items.push({name:a.name,kind:'swap',day:a.day,desc:`${a.role} 사역이 ${bIn.name}님과 교대되어 ${dl(aOut.day)} → ${dl(a.day)}로 변경되었습니다`});
+    items.push({name:bIn.name,kind:'swap',day:bIn.day,desc:`${a.role} 사역이 ${a.name}님과 교대되어 ${dl(bOut.day)} → ${dl(bIn.day)}로 변경되었습니다`});
+  });
+  // 2) 같은 사람의 날짜 이동
+  added.slice().forEach(a=>{
+    const r=take(removed,r=>r.name===a.name&&r.role===a.role);
+    if(!r) return;
+    added.splice(added.indexOf(a),1);
+    items.push({name:a.name,kind:'move',day:a.day,desc:`${a.role} 사역이 ${dl(r.day)} → ${dl(a.day)}로 변경되었습니다`});
+  });
+  // 3) 같은 날·같은 역할을 다른 사람이 맡음 (대신)
+  added.slice().forEach(a=>{
+    const r=take(removed,r=>r.day===a.day&&r.role===a.role);
+    if(!r) return;
+    added.splice(added.indexOf(a),1);
+    items.push({name:a.name,kind:'add',day:a.day,desc:`${dl(a.day)} ${a.role} 사역이 등록되었습니다 (${r.name}님 대신)`});
+    items.push({name:r.name,kind:'remove',day:r.day,desc:`${dl(r.day)} ${r.role} 사역이 ${a.name}님으로 변경되었습니다`});
+  });
+  // 4) 같은 사람·같은 날 역할 변경
+  added.slice().forEach(a=>{
+    const r=take(removed,r=>r.name===a.name&&r.day===a.day);
+    if(!r) return;
+    added.splice(added.indexOf(a),1);
+    items.push({name:a.name,kind:'change',day:a.day,desc:`${dl(a.day)} 사역이 ${r.role}에서 ${a.role}(으)로 변경되었습니다`});
+  });
+  added.forEach(a=>items.push({name:a.name,kind:'add',day:a.day,desc:`${dl(a.day)} ${a.role} 사역이 등록되었습니다`}));
+  removed.forEach(r=>items.push({name:r.name,kind:'remove',day:r.day,desc:`${dl(r.day)} ${r.role} 사역이 취소되었습니다`}));
+
+  const byUser={};
+  items.forEach(it=>{
+    if(opts.skipRemoved && it.kind==='remove') return;
+    const u=allMembers.find(m=>m.name===it.name);
+    if(!u) return;
+    (byUser[u.id]=byUser[u.id]||[]).push(it);
+  });
+  const TITLES={swap:'🔄 사역 교대 알림',move:'📅 사역 일정 변경 알림',add:'📅 사역 등록 알림',remove:'🗑️ 사역 취소 알림'};
+  for(const [userId,list] of Object.entries(byUser)){
+    const PRI={swap:0,move:1,change:2,add:3,remove:4};
+    list.sort((x,y)=>PRI[x.kind]-PRI[y.kind]||x.day-y.day);
+    const kinds=new Set(list.map(x=>x.kind));
+    const title=kinds.size===1&&TITLES[list[0].kind]?TITLES[list[0].kind]:'📝 사역 변경 알림';
+    const body=list.slice(0,3).map(x=>x.desc).join(' / ')+(list.length>3?` 외 ${list.length-3}건`:'');
+    sendPushToUsers([parseInt(userId)], title, body, 'myshift', {action:'openDay', year:String(year), month:String(month), day:String(list[0].day)}).catch(e=>console.warn('push err:', e));
   }
 }
 // ★ 같은 날짜·같은 역할에 다른 사람이 이미 배정되어 있는지 검사 (중복 배정 방지 가드)
