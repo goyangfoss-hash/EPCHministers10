@@ -5,7 +5,7 @@ const SUPABASE_URL      = 'https://uvkhjulyccytzeilykum.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2a2hqdWx5Y2N5dHplaWx5a3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NTQ5NzQsImV4cCI6MjA5MjAzMDk3NH0.AXb-AyKGhmJq_SvEMqFza47qegiTndwXH0ajU40kWiE';
 // ════════════════════════════════════════════════════
 
-const APP_VERSION = '20261029a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
+const APP_VERSION = '20261114a'; // ★ index.html의 app.js?v= 값과 반드시 일치시킬 것 (배포마다 갱신)
 const OFFLINE = SUPABASE_URL.includes('여기에');
 const sb = OFFLINE ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: { params: { eventsPerSecond: 10 } }
@@ -3451,6 +3451,27 @@ const DEPT_META = {
   '행정/선교':  { icon:'⚙️', label:'행정/선교', color:'#374151', bg:'#F3F4F6', border:'#D1D5DB' },
 };
 const DEPT_ORDER = ['team','담임목사님','교구','청년국','교육국','행정/선교'];
+// ★ 부서 명단: app_users.department 기준 자동 분류 (2026-11-14)
+const DEPT_LIST = ['담임목사님','교구','청년국','교육국','행정/선교'];
+// 부서 안 표시 순서 (여기 없는 사람은 뒤에 가입순으로)
+const DEPT_NAME_ORDER = ['박지현','안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수',
+  '빈성결','서동빈','손우성',
+  '김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경',
+  '김동권','최성은'];
+// 앱 미가입자지만 부서 명단에 보여야 하는 사람 (가입하면 자동으로 회원 정보로 대체)
+const DEPT_UNREGISTERED = {'담임목사님':['박지현'], '청년국':['빈성결']};
+function getDeptMembers(dept){
+  const ord=n=>{const i=DEPT_NAME_ORDER.indexOf(n);return i<0?9999:i;};
+  return allMembers.filter(u=>(u.department||'미지정')===dept)
+    .sort((a,b)=>ord(a.name)-ord(b.name)||a.id-b.id);
+}
+function getDeptNames(dept){
+  const names=getDeptMembers(dept).map(u=>u.name);
+  (DEPT_UNREGISTERED[dept]||[]).forEach(n=>{if(!allMembers.some(u=>u.name===n)&&!names.includes(n))names.push(n);});
+  const ord=n=>{const i=DEPT_NAME_ORDER.indexOf(n);return i<0?9999:i;};
+  return names.sort((a,b)=>ord(a)-ord(b));
+}
+function getDeptSections(){ return DEPT_LIST.map(label=>({label,names:getDeptNames(label)})); }
 
 function renderSearchFilters(){
   // 파트별 인원 수 계산
@@ -3600,14 +3621,6 @@ function removeFromTeam(name,btnEl){
     btnEl.animate([{transform:'scale(1)'},{transform:'scale(.75)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
   }
 }
-// 파트별 고정 순서
-const DEPT_NAMES = {
-  '담임목사님': ['박지현'],
-  '교구': ['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수'],
-  '청년국': ['허남홍','서동빈','손우성'],
-  '교육국': ['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경'],
-  '행정/선교': ['김동권','최성은'],
-};
 
 let srchOpenPerson = null; // 현재 열린 사람 이름
 
@@ -3626,7 +3639,7 @@ function renderSearchResult(){
   if(srchDept==='team'){
     targetNames=myTeam.filter(n=>n);
   } else {
-    targetNames = DEPT_NAMES[srchDept] || [];
+    targetNames = getDeptNames(srchDept);
   }
 
   if(!targetNames.length){
@@ -4170,13 +4183,7 @@ function setFeedTab(tab){ renderFeedTab(); }
 
 // ★ 사역자 목록 (파트별)
 function renderMemberListHtml(){
-  const DEPT_SECTIONS=[
-    {label:'담임목사님', names:['박지현']},
-    {label:'교구', names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
-    {label:'청년국', names:['허남홍','서동빈','손우성']},
-    {label:'교육국', names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
-    {label:'행정/선교', names:['김동권','최성은']},
-  ];
+  const DEPT_SECTIONS=getDeptSections();
 
   let html='';
   DEPT_SECTIONS.forEach(sec=>{
@@ -4339,13 +4346,7 @@ function buildUserDmRow(u){
 function openNewDmPicker(){
   document.getElementById('new-dm-picker')?.remove();
 
-  const DEPT_SECTIONS=[
-    {label:'담임목사님',names:['박지현']},
-    {label:'교구',names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
-    {label:'청년국',names:['허남홍','서동빈','손우성']},
-    {label:'교육국',names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
-    {label:'행정/선교',names:['김동권','최성은']},
-  ];
+  const DEPT_SECTIONS=getDeptSections();
 
   // 이미 대화 중인 ID 제외, 관리자도 제외
   const alreadyIds = new Set(
@@ -5089,20 +5090,31 @@ function toggleUploadSetting(key){
 }
 function updatePendingBadge(){const cnt=(window._pending||[]).length;let b=$('btn-admin').querySelector('.nav-badge');if(cnt>0){if(!b){b=document.createElement('div');b.className='nav-badge';$('btn-admin').appendChild(b);}b.textContent=cnt;}else b?.remove();}
 function renderPending(){if(OFFLINE){$('pending-list').innerHTML='<p class="empty-state">오프라인 모드</p>';return;}const pending=window._pending||[];$('pending-badge').innerHTML=pending.length?`<span class="cnt-badge">${pending.length}</span>`:'';const el=$('pending-list');if(!pending.length){el.innerHTML='<p class="empty-state">대기 중인 신청이 없습니다.</p>';return;}el.innerHTML=pending.map(u=>{const inS=Object.values(allSchedules).some(ym=>Object.values(ym).some(d=>d[u.name]));return `<div class="member-row" onclick="openMemberModal(${u.id})"><div class="member-av">${u.name[0]}</div><div class="member-info"><div class="m-name">${u.name}${inS?` <span class="sched-match-tag">사역표 있음</span>`:''}</div><div class="m-sub">연락처: ${u.phone} · 생년월일: ${u.birth}</div></div><div class="m-actions" onclick="event.stopPropagation()"><button class="act-btn approve" onclick="approveUser(${u.id})">승인</button><button class="act-btn reject" onclick="rejectUser(${u.id})">거절</button></div></div>`;}).join('');}
+let adminDeptTab='all';
+function setAdminDeptTab(t){adminDeptTab=t;renderMembers();}
 function renderMembers(){
   const el=$('member-list');
   if(!allMembers.length){el.innerHTML='<p class="empty-state">승인된 회원이 없습니다.</p>';return;}
 
-  const DEPT_SECTIONS=[
-    {label:'담임목사님',names:['박지현']},
-    {label:'교구',names:['안종훈','안성구','한상권','정의혁','최성자','권혜성','이상복','김현수']},
-    {label:'청년국',names:['허남홍','서동빈','손우성']},
-    {label:'교육국',names:['김증인','김용경','이성은','김재은','장시현','박은혜','김선양','이인경']},
-    {label:'행정/선교',names:['김동권','최성은']},
-  ];
+  const DEPT_SECTIONS=getDeptSections();
+  const listedNames=DEPT_SECTIONS.flatMap(s=>s.names);
+  const others=allMembers.filter(u=>!listedNames.includes(u.name));
 
-  let html='';
+  // ★ 부서별 탭
+  const TABS=[['all','전체',allMembers.length],
+    ...['교구','청년국','교육국','행정/선교'].map(d=>[d,d,getDeptMembers(d).length]),
+    ['미지정','미지정',others.length]];
+  if(!TABS.some(t=>t[0]===adminDeptTab)) adminDeptTab='all';
+  let html=`<div style="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 12px;scrollbar-width:none">`+
+    TABS.map(([k,label,cnt])=>{
+      const on=adminDeptTab===k;
+      const m=DEPT_META[k]||{color:k==='미지정'?'#B45309':'#185FA5',bg:k==='미지정'?'#FEF3C7':'#E6F1FB'};
+      const warn=k==='미지정'&&cnt>0;
+      return `<button onclick="setAdminDeptTab('${k}')" style="flex-shrink:0;padding:6px 12px;border-radius:16px;font-size:12px;font-weight:${on?600:500};cursor:pointer;white-space:nowrap;border:1px solid ${on?m.color:'var(--color-border-tertiary)'};background:${on?m.bg:'var(--color-background-primary)'};color:${on?m.color:'var(--color-text-secondary)'}">${label} <span style="font-size:10px;${warn?'background:#EF4444;color:#fff;padding:0 5px;border-radius:8px':'opacity:.7'}">${cnt}</span></button>`;
+    }).join('')+`</div>`;
+
   DEPT_SECTIONS.forEach(sec=>{
+    if(adminDeptTab!=='all'&&adminDeptTab!==sec.label)return;
     const dMeta=DEPT_META[sec.label]||{color:'#888',bg:'#f0f0ea',border:'#e0e0e0'};
     const secMembers=sec.names.map(n=>allMembers.find(u=>u.name===n)).filter(Boolean);
     const pendingNames=sec.names.filter(n=>!allMembers.find(u=>u.name===n));
@@ -5137,10 +5149,11 @@ function renderMembers(){
     html+=`</div></div>`;
   });
 
-  const listedNames=DEPT_SECTIONS.flatMap(s=>s.names);
-  const others=allMembers.filter(u=>!listedNames.includes(u.name));
-  if(others.length){
-    html+=`<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:#888;padding:4px">기타</div>
+  if(adminDeptTab==='미지정'&&!others.length){
+    html+='<p class="empty-state">부서가 지정되지 않은 회원이 없습니다.</p>';
+  }
+  if(others.length&&(adminDeptTab==='all'||adminDeptTab==='미지정')){
+    html+=`<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:#B45309;padding:4px">미지정 · 회원을 눌러 부서를 지정하세요</div>
       <div style="background:var(--color-background-primary);border-radius:14px;overflow:hidden;border:1px solid var(--color-border-tertiary)">
         ${others.map((u,i)=>{
           const total=Object.values(allSchedules).reduce((s,ym)=>s+Object.values(ym).reduce((s2,d)=>s2+Object.keys(d[u.name]||{}).length,0),0);
@@ -5201,6 +5214,12 @@ function openMemberModal(id){
       <div class="detail-row"><span>연락처 뒷자리</span><span>${u.phone}</span></div>
       <div class="detail-row"><span>생년월일</span><span>${u.birth}</span></div>
       <div class="detail-row"><span>가입일</span><span>${fmtDate(u.created_at)}</span></div>
+      ${isAdmin()?`<div class="detail-row" style="align-items:flex-start"><span style="padding-top:4px">부서</span>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;max-width:72%">
+          ${[...DEPT_LIST,'미지정'].map(d=>{const on=(u.department||'미지정')===d;const m=DEPT_META[d]||{color:'#B45309',bg:'#FEF3C7'};
+            return `<button onclick="setMemberDept(${u.id},'${d}')" style="font-size:11px;padding:3px 8px;border-radius:10px;cursor:pointer;border:1px solid ${on?m.color:'#e5e5e5'};background:${on?m.bg:'#fff'};color:${on?m.color:'#999'};font-weight:${on?600:400}">${d}</button>`;}).join('')}
+        </div>
+      </div>`:''}
       ${isAdmin()?`<div class="detail-row"><span>직분</span>
         <div style="display:flex;align-items:center;gap:6px">
           <span id="title-display-${u.id}">${u.title||'미설정'}</span>
@@ -5234,6 +5253,19 @@ async function approveUser(id){if(!OFFLINE)await sb.from('app_users').update({st
 async function rejectUser(id){if(!OFFLINE)await sb.from('app_users').update({status:'rejected'}).eq('id',id);window._pending=(window._pending||[]).filter(u=>u.id!==id);renderPending();}
 async function changeRole(id,role){const u=allMembers.find(x=>x.id===id);if(!u)return;u.role=role;if(!OFFLINE)await sb.from('app_users').update({role}).eq('id',id);renderMembers();}
 
+async function setMemberDept(id,dept){
+  const u=allMembers.find(x=>x.id===id)||(window._pending||[]).find(x=>x.id===id); if(!u) return;
+  if((u.department||'미지정')===dept) return;
+  const prev=u.department;
+  u.department=dept;
+  if(!OFFLINE){
+    const{error}=await sb.from('app_users').update({department:dept}).eq('id',id);
+    if(error){u.department=prev;showToastMsg('부서 저장에 실패했습니다.');return;}
+  }
+  openMemberModal(id);
+  renderMembers();
+  showToastMsg(`${u.name} → ${dept}`);
+}
 async function editMemberTitle(id){
   const u=allMembers.find(x=>x.id===id); if(!u) return;
   const newTitle=prompt(`${u.name} 직분 수정:`, u.title||'');
